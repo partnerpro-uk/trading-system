@@ -87,11 +87,11 @@ export function NewsEventPanel({ event, allEventsAtTimestamp, pair, onClose, onN
     fetchHistorical();
   }, [event.eventType, event.timestamp, pair]);
 
-  // Use NY time if available (matches ForexFactory display), fallback to UTC timestamp
-  const formatDateTimeFromNY = (nyDatetime: string | undefined, timestamp: number) => {
-    if (nyDatetime) {
+  // Use London time if available (UK timezone), fallback to UTC timestamp
+  const formatDateTimeFromLondon = (londonDatetime: string | undefined, timestamp: number) => {
+    if (londonDatetime) {
       // Parse "2025-01-20 07:00:00" format
-      const [datePart, timePart] = nyDatetime.split(" ");
+      const [datePart, timePart] = londonDatetime.split(" ");
       const [year, month, day] = datePart.split("-").map(Number);
       const [hour, minute] = timePart.split(":").map(Number);
 
@@ -101,10 +101,10 @@ export function NewsEventPanel({ event, allEventsAtTimestamp, pair, onClose, onN
 
       return {
         dateStr: `${dayNames[d.getDay()]}, ${day} ${monthNames[month - 1]} ${year}`,
-        timeStr: `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")} ET`,
+        timeStr: `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")} UK`,
       };
     }
-    // Fallback to timestamp
+    // Fallback to timestamp (display in user's local time)
     const eventDate = new Date(timestamp);
     return {
       dateStr: eventDate.toLocaleDateString("en-GB", {
@@ -120,7 +120,7 @@ export function NewsEventPanel({ event, allEventsAtTimestamp, pair, onClose, onN
     };
   };
 
-  const { dateStr, timeStr } = formatDateTimeFromNY(event.datetimeNewYork, event.timestamp);
+  const { dateStr, timeStr } = formatDateTimeFromLondon(event.datetimeLondon, event.timestamp);
 
   const isFutureEvent = !event.actual;
 

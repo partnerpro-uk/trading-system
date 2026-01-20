@@ -1,15 +1,18 @@
 /**
- * OANDA Candle Sync Worker
+ * OANDA Candle Sync Worker + News Updater
  *
  * Fetches candles directly from OANDA's REST API for all pairs and timeframes.
  * Stores them in TimescaleDB for chart display.
  *
- * Also maintains a live price stream for real-time updates.
+ * Also:
+ * - Maintains a live price stream for real-time updates
+ * - Scrapes ForexFactory for economic event actual values
  */
 
 import { config } from "dotenv";
 import { Pool } from "pg";
 import { resolve } from "path";
+import { startNewsUpdater, stopNewsUpdater } from "./news-updater";
 
 // Load env from parent .env.local
 config({ path: resolve(process.cwd(), "../.env.local") });
@@ -374,6 +377,9 @@ async function main(): Promise<void> {
   // Start live price stream (runs in background)
   startPriceStream().catch(console.error);
 
+  // Start news updater (scrapes ForexFactory for economic event actuals)
+  startNewsUpdater(pool).catch(console.error);
+
   // Keep process alive
   console.log("\nWorker running. Press Ctrl+C to stop.\n");
 }
@@ -381,12 +387,14 @@ async function main(): Promise<void> {
 // Graceful shutdown
 process.on("SIGINT", async () => {
   console.log("\nShutting down...");
+  await stopNewsUpdater();
   await pool?.end();
   process.exit(0);
 });
 
 process.on("SIGTERM", async () => {
   console.log("\nTerminating...");
+  await stopNewsUpdater();
   await pool?.end();
   process.exit(0);
 });
