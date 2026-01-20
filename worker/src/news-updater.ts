@@ -512,9 +512,9 @@ export async function startNewsUpdater(pool: Pool): Promise<void> {
  */
 function scheduleNextDayRefresh(pool: Pool): void {
   const now = new Date();
-  const londonMidnight = new Date(
-    formatInTimeZone(now, "Europe/London", "yyyy-MM-dd") + "T00:00:00"
-  );
+  // Get today's date in London timezone, then convert midnight London to UTC
+  const londonDateStr = formatInTimeZone(now, "Europe/London", "yyyy-MM-dd");
+  const londonMidnight = fromZonedTime(`${londonDateStr}T00:00:00`, "Europe/London");
   // Add 1 day and 1 minute to get just after midnight tomorrow
   const nextMidnight = new Date(londonMidnight.getTime() + 24 * 60 * 60 * 1000 + 60 * 1000);
 

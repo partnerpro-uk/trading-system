@@ -92,9 +92,20 @@ async function main() {
       forecast VARCHAR(50),
       previous VARCHAR(50),
       description TEXT,
+      -- Timezone representations
+      datetime_utc VARCHAR(50),
+      datetime_new_york VARCHAR(50),
+      datetime_london VARCHAR(50),
+      source_tz VARCHAR(50),
+      -- Day/session info
+      day_of_week VARCHAR(5),
+      trading_session VARCHAR(30),
+      -- Status
+      status VARCHAR(20) DEFAULT 'scheduled',
+      -- Window config
       window_before_minutes INTEGER DEFAULT 15,
-      window_after_minutes INTEGER NOT NULL,
-      raw_source VARCHAR(20) DEFAULT 'jblanked',
+      window_after_minutes INTEGER DEFAULT 15,
+      raw_source VARCHAR(20) DEFAULT 'forexfactory',
       fetched_at TIMESTAMPTZ DEFAULT NOW(),
       created_at TIMESTAMPTZ DEFAULT NOW()
     )
@@ -106,6 +117,7 @@ async function main() {
     CREATE INDEX IF NOT EXISTS idx_news_type ON news_events (event_type);
     CREATE INDEX IF NOT EXISTS idx_news_currency ON news_events (currency);
     CREATE INDEX IF NOT EXISTS idx_news_impact ON news_events (impact);
+    CREATE INDEX IF NOT EXISTS idx_news_status ON news_events (status);
   `);
   console.log("  ✓ news_events indexes");
 
