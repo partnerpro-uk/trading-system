@@ -8,17 +8,7 @@
  * @module
  */
 
-import type * as candles from "../candles.js";
 import type * as crons from "../crons.js";
-import type * as massive from "../massive.js";
-import type * as newsEvents from "../newsEvents.js";
-import type * as newsEventsActions from "../newsEventsActions.js";
-import type * as newsQueries from "../newsQueries.js";
-import type * as newsReactions from "../newsReactions.js";
-import type * as newsStatistics from "../newsStatistics.js";
-import type * as oanda from "../oanda.js";
-import type * as sessions from "../sessions.js";
-import type * as yahoo from "../yahoo.js";
 
 import type {
   ApiFromModules,
@@ -27,17 +17,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
-  candles: typeof candles;
   crons: typeof crons;
-  massive: typeof massive;
-  newsEvents: typeof newsEvents;
-  newsEventsActions: typeof newsEventsActions;
-  newsQueries: typeof newsQueries;
-  newsReactions: typeof newsReactions;
-  newsStatistics: typeof newsStatistics;
-  oanda: typeof oanda;
-  sessions: typeof sessions;
-  yahoo: typeof yahoo;
 }>;
 
 /**

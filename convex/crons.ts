@@ -19,18 +19,9 @@ const crons = cronJobs();
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ═══════════════════════════════════════════════════════════════════════════
-// NEWS EVENTS - Economic Calendar
+// NEWS EVENTS - DISABLED
+// News events are now stored in TimescaleDB + ClickHouse
+// See: docs/trading-system-database-migration.md
 // ═══════════════════════════════════════════════════════════════════════════
-// News events are now fetched via external Python scraper + import script
-// Run manually: python scraper/ffs.py && npx tsx scripts/import-events-jsonl.ts
-
-// Process recently-released events - fetch candle windows for events that just happened
-// Runs every 15 minutes, looks back 2 hours for events needing windows
-crons.interval(
-  "process recent event windows",
-  { minutes: 15 },
-  internal.newsEventsActions.processRecentEventWindows,
-  {}
-);
 
 export default crons;
