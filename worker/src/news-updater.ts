@@ -78,6 +78,10 @@ async function scrapeCalendarPage(date: Date): Promise<NewsEventRecord[]> {
     // Set viewport and user agent
     await page.setViewport({ width: 1920, height: 1080 });
 
+    // Set timezone to America/New_York to ensure ForexFactory shows Eastern Time
+    // This is critical - FF auto-detects browser timezone
+    await page.emulateTimezone("America/New_York");
+
     // Block images and stylesheets for faster loading
     await page.setRequestInterception(true);
     page.on("request", (req) => {
@@ -92,7 +96,7 @@ async function scrapeCalendarPage(date: Date): Promise<NewsEventRecord[]> {
     // Navigate to calendar page
     const dateUrl = buildDateUrl(date);
     const url = `${FOREX_FACTORY_URL}/${dateUrl}`;
-    console.log(`[News] Fetching: ${url}`);
+    console.log(`[News] Fetching: ${url} (timezone: America/New_York)`);
 
     await page.goto(url, {
       waitUntil: "networkidle2",

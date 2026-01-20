@@ -27,6 +27,10 @@ RUN apt-get update && apt-get install -y \
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 
+# Set timezone to Eastern Time so ForexFactory displays times in ET
+# (ForexFactory auto-detects browser timezone)
+ENV TZ=America/New_York
+
 WORKDIR /app
 
 # Copy package files
