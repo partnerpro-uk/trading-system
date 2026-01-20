@@ -1,9 +1,5 @@
-"use client";
-
 import Link from "next/link";
-import { useQuery } from "convex/react";
-import { api } from "../../convex/_generated/api";
-import { TrendingUp, BarChart2 } from "lucide-react";
+import { BarChart2 } from "lucide-react";
 
 const PAIRS = [
   { id: "DXY", name: "DXY", description: "US Dollar Index" },
@@ -17,11 +13,6 @@ const PAIRS = [
 ];
 
 function PairCard({ pair }: { pair: (typeof PAIRS)[number] }) {
-  const candleCount = useQuery(api.candles.getCandleCount, {
-    pair: pair.id,
-    timeframe: "M15",
-  });
-
   return (
     <Link
       href={`/chart/${pair.id}`}
@@ -37,12 +28,6 @@ function PairCard({ pair }: { pair: (typeof PAIRS)[number] }) {
         <div className="p-2 bg-gray-800 rounded-lg group-hover:bg-gray-700 transition-colors">
           <BarChart2 className="w-5 h-5 text-blue-400" />
         </div>
-      </div>
-      <div className="mt-4 flex items-center gap-2 text-sm text-gray-400">
-        <TrendingUp className="w-4 h-4" />
-        <span>
-          {candleCount !== undefined ? `${candleCount} candles (M15)` : "Loading..."}
-        </span>
       </div>
     </Link>
   );

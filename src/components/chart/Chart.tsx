@@ -10,8 +10,7 @@ import {
   LineSeries,
   CrosshairMode,
 } from "lightweight-charts";
-import { useQuery, useConvex } from "convex/react";
-import { api } from "../../../convex/_generated/api";
+// Convex imports removed - data now lives in TimescaleDB/ClickHouse
 import type { LivePrice } from "@/hooks/useOandaStream";
 import { useCandles } from "@/hooks/useCandles";
 import { SessionLabelsPrimitive, SessionData } from "./SessionLabelsPrimitive";
@@ -137,38 +136,27 @@ export function Chart({ pair, timeframe, magnetMode, showSessionBgs, showSession
   const [candleCountdown, setCandleCountdown] = useState<string>("");
 
 
-  // Convex client for imperative queries
-  const convex = useConvex();
-
   // Cache for historical event data (fetched on hover)
   const [historicalCache, setHistoricalCache] = useState<Map<string, HistoricalEventHistory>>(
     () => new Map()
   );
 
   // Fetch historical events for tooltip (called on hover)
+  // TODO: Migrate to TimescaleDB API endpoint
   const fetchHistoricalEvents = useCallback(
     async (event: NewsEventData) => {
       // Skip if already cached
       if (historicalCache.has(event.eventId)) return;
 
-      try {
-        const result = await convex.query(api.newsQueries.getHistoricalEventsForTooltip, {
-          eventType: event.eventType,
-          pair,
-          beforeTimestamp: event.timestamp,
-          limit: 5,
-        });
-
-        setHistoricalCache((prev) => {
-          const next = new Map(prev);
-          next.set(event.eventId, result);
-          return next;
-        });
-      } catch (err) {
-        console.error("Failed to fetch historical events:", err);
-      }
+      // Historical events now in TimescaleDB - API endpoint to be implemented
+      // For now, return empty history
+      setHistoricalCache((prev) => {
+        const next = new Map(prev);
+        next.set(event.eventId, { hasForecastData: false, beatHistory: [], missHistory: [], rawHistory: [] });
+        return next;
+      });
     },
-    [convex, pair, historicalCache]
+    [pair, historicalCache]
   );
 
   // Fetch candles from dual-database (Timescale + ClickHouse) via API route
@@ -181,7 +169,27 @@ export function Chart({ pair, timeframe, magnetMode, showSessionBgs, showSession
   } = useCandles({ pair, timeframe });
 
   // Current session indicator (for badge display)
-  const currentSession = useQuery(api.sessions.getCurrentSession, {});
+  // Computed locally from current UTC hour - no DB dependency
+  const getActiveSessions = useCallback(() => {
+    const now = new Date();
+    const utcHour = now.getUTCHours();
+    const active: string[] = [];
+    for (const [name, times] of Object.entries(SESSION_TIMES)) {
+      if (utcHour >= times.start && utcHour < times.end) {
+        active.push(name);
+      }
+    }
+    return active;
+  }, []);
+  const [activeSessions, setActiveSessions] = useState<string[]>(() => getActiveSessions());
+
+  // Update active sessions every minute
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setActiveSessions(getActiveSessions());
+    }, 60000);
+    return () => clearInterval(interval);
+  }, [getActiveSessions]);
 
   // News events state (fetched from TimescaleDB API)
   const [newsEvents, setNewsEvents] = useState<NewsEventData[] | null>(null);
@@ -1119,9 +1127,9 @@ export function Chart({ pair, timeframe, magnetMode, showSessionBgs, showSession
       </div>
 
       {/* Current Session Indicator */}
-      {currentSession && currentSession.activeSessions.length > 0 && (
+      {activeSessions.length > 0 && (
         <div className="absolute top-2 left-1/2 -translate-x-1/2 z-10 flex items-center gap-2">
-          {currentSession.activeSessions.map((session) => (
+          {activeSessions.map((session) => (
             <span
               key={session}
               className="px-2 py-0.5 text-xs rounded"
