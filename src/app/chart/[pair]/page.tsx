@@ -8,6 +8,7 @@ import { ChartSidebar } from "@/components/chart/ChartSidebar";
 import { NewsEventPanel } from "@/components/chart/NewsEventPanel";
 import { NewsEventData } from "@/components/chart/NewsMarkersPrimitive";
 import { useOandaStream } from "@/hooks/useOandaStream";
+import { useCandleCache } from "@/hooks/useCandleCache";
 import Link from "next/link";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 
@@ -16,7 +17,18 @@ const TIMEFRAMES = ["M5", "M15", "M30", "H1", "H4", "D", "W", "M"] as const;
 export default function ChartPage() {
   const params = useParams();
   const pair = params.pair as string;
-  const [timeframe, setTimeframe] = useState<string>("M15");
+
+  // Candle cache with prefetching (adjacent timeframes load immediately, rest after 20s)
+  const {
+    candles,
+    isLoading: candlesLoading,
+    isLoadingMore,
+    hasMoreHistory,
+    loadMoreHistory,
+    switchTimeframe,
+    currentTimeframe: timeframe,
+    prefetchedTimeframes,
+  } = useCandleCache({ pair, initialTimeframe: "M15" });
 
   // Chart control states (lifted from Chart component)
   const [magnetMode, setMagnetMode] = useState<boolean>(false); // Off by default
@@ -106,12 +118,15 @@ export default function ChartPage() {
             {TIMEFRAMES.map((tf) => (
               <button
                 key={tf}
-                onClick={() => setTimeframe(tf)}
+                onClick={() => switchTimeframe(tf)}
                 className={`px-2.5 py-1 text-xs font-medium rounded transition-colors ${
                   timeframe === tf
                     ? "bg-blue-600 text-white"
+                    : prefetchedTimeframes.includes(tf)
+                    ? "text-gray-300 hover:text-gray-100 hover:bg-gray-800" // Cached - ready
                     : "text-gray-400 hover:text-gray-200 hover:bg-gray-800"
                 }`}
+                title={prefetchedTimeframes.includes(tf) ? "Cached" : "Will load on click"}
               >
                 {tf}
               </button>
@@ -146,6 +161,12 @@ export default function ChartPage() {
                 livePrice={livePrice}
                 onResetViewReady={handleResetViewReady}
                 onEventSelect={handleEventSelect}
+                // External candle management from cache
+                candles={candles}
+                candlesLoading={candlesLoading}
+                isLoadingMore={isLoadingMore}
+                hasMoreHistory={hasMoreHistory}
+                loadMoreHistory={loadMoreHistory}
               />
             </div>
           </Panel>

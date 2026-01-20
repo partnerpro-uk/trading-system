@@ -72,6 +72,19 @@ function generateSessionWindowsFromCandles(
   return liveSessions;
 }
 
+// Candle data interface (matches useCandleCache)
+interface CandleData {
+  time: string;
+  timestamp: number;
+  pair: string;
+  timeframe: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
 interface ChartProps {
   pair: string;
   timeframe: string;
@@ -83,6 +96,12 @@ interface ChartProps {
   livePrice?: LivePrice | null; // Passed from parent to avoid duplicate streams
   onResetViewReady?: (resetFn: () => void) => void; // Expose reset function to parent
   onEventSelect?: (event: NewsEventData | null, allEventsAtTimestamp?: NewsEventData[]) => void; // Callback when event is clicked
+  // External candle data management (from useCandleCache)
+  candles?: CandleData[] | null;
+  candlesLoading?: boolean;
+  isLoadingMore?: boolean;
+  hasMoreHistory?: boolean;
+  loadMoreHistory?: () => Promise<void>;
 }
 
 // Get candle duration in milliseconds based on timeframe (M5 is floor - no M1)
@@ -100,7 +119,24 @@ function getTimeframeDuration(timeframe: string): number {
   return durations[timeframe] || 15 * 60 * 1000;
 }
 
-export function Chart({ pair, timeframe, magnetMode, showSessionBgs, showSessionLines, showSessionLabels, showNews, livePrice, onResetViewReady, onEventSelect }: ChartProps) {
+export function Chart({
+  pair,
+  timeframe,
+  magnetMode,
+  showSessionBgs,
+  showSessionLines,
+  showSessionLabels,
+  showNews,
+  livePrice,
+  onResetViewReady,
+  onEventSelect,
+  // External candle management (optional - falls back to internal useCandles)
+  candles: externalCandles,
+  candlesLoading: externalLoading,
+  isLoadingMore: externalLoadingMore,
+  hasMoreHistory: externalHasMore,
+  loadMoreHistory: externalLoadMore,
+}: ChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -160,13 +196,15 @@ export function Chart({ pair, timeframe, magnetMode, showSessionBgs, showSession
   );
 
   // Fetch candles from dual-database (Timescale + ClickHouse) via API route
-  const {
-    candles,
-    isLoading: candlesLoading,
-    isLoadingMore,
-    hasMoreHistory,
-    loadMoreHistory
-  } = useCandles({ pair, timeframe });
+  // Use external candles if provided (from useCandleCache), otherwise use internal hook
+  const internalCandles = useCandles({ pair, timeframe });
+
+  // Resolve to external or internal data
+  const candles = externalCandles !== undefined ? externalCandles : internalCandles.candles;
+  const candlesLoading = externalLoading !== undefined ? externalLoading : internalCandles.isLoading;
+  const isLoadingMore = externalLoadingMore !== undefined ? externalLoadingMore : internalCandles.isLoadingMore;
+  const hasMoreHistory = externalHasMore !== undefined ? externalHasMore : internalCandles.hasMoreHistory;
+  const loadMoreHistory = externalLoadMore !== undefined ? externalLoadMore : internalCandles.loadMoreHistory;
 
   // Current session indicator (for badge display)
   // Computed locally from current UTC hour - no DB dependency
@@ -931,38 +969,60 @@ export function Chart({ pair, timeframe, magnetMode, showSessionBgs, showSession
     // Get the last candle from database
     const lastDbCandle = candles[candles.length - 1];
     const lastDbCandleTime = lastDbCandle.timestamp;
+    const lastDbCandleTimeSeconds = (lastDbCandleTime / 1000) as Time;
 
-    // Check if we're in a new candle period
-    if (currentCandleStart > lastDbCandleTime) {
-      // Create a new forming candle
-      const newCandle: CandlestickData<Time> = {
-        time: currentCandleTime,
-        open: livePrice.mid,
-        high: livePrice.mid,
-        low: livePrice.mid,
+    // Determine if DB candle is for the current period or a past period
+    const dbCandleIsCurrentPeriod = lastDbCandleTime >= currentCandleStart;
+
+    if (dbCandleIsCurrentPeriod) {
+      // DB has the current candle - update it with live high/low/close
+      // Preserve the tracked high/low if we have it
+      let effectiveHigh = lastDbCandle.high;
+      let effectiveLow = lastDbCandle.low;
+
+      // If we were tracking this candle, use the better of tracked vs DB values
+      if (lastCandleRef.current?.time === lastDbCandleTimeSeconds) {
+        effectiveHigh = Math.max(lastCandleRef.current.high, lastDbCandle.high);
+        effectiveLow = Math.min(lastCandleRef.current.low, lastDbCandle.low);
+      }
+
+      const updatedCandle: CandlestickData<Time> = {
+        time: lastDbCandleTimeSeconds,
+        open: lastDbCandle.open,
+        high: Math.max(effectiveHigh, livePrice.mid),
+        low: Math.min(effectiveLow, livePrice.mid),
         close: livePrice.mid,
       };
 
+      seriesRef.current.update(updatedCandle);
+      lastCandleRef.current = updatedCandle;
+    } else {
+      // DB doesn't have the current candle yet - create/update forming candle
+      let newCandle: CandlestickData<Time>;
+
       if (lastCandleRef.current?.time === currentCandleTime) {
-        // Update existing forming candle
-        newCandle.open = lastCandleRef.current.open;
-        newCandle.high = Math.max(lastCandleRef.current.high, livePrice.mid);
-        newCandle.low = Math.min(lastCandleRef.current.low, livePrice.mid);
-        newCandle.close = livePrice.mid;
+        // Update existing forming candle with new tick
+        newCandle = {
+          time: currentCandleTime,
+          open: lastCandleRef.current.open,
+          high: Math.max(lastCandleRef.current.high, livePrice.mid),
+          low: Math.min(lastCandleRef.current.low, livePrice.mid),
+          close: livePrice.mid,
+        };
+      } else {
+        // First tick of new candle - use last close as open for continuity
+        const openPrice = lastCandleRef.current?.close ?? lastDbCandle.close ?? livePrice.mid;
+        newCandle = {
+          time: currentCandleTime,
+          open: openPrice,
+          high: Math.max(openPrice, livePrice.mid),
+          low: Math.min(openPrice, livePrice.mid),
+          close: livePrice.mid,
+        };
       }
 
       seriesRef.current.update(newCandle);
       lastCandleRef.current = newCandle;
-    } else {
-      // Update the last database candle with live close
-      const updatedCandle: CandlestickData<Time> = {
-        time: (lastDbCandleTime / 1000) as Time,
-        open: lastDbCandle.open,
-        high: Math.max(lastDbCandle.high, livePrice.mid),
-        low: Math.min(lastDbCandle.low, livePrice.mid),
-        close: livePrice.mid,
-      };
-      seriesRef.current.update(updatedCandle);
     }
 
     // Update live price primitive (handles price line + countdown display)
