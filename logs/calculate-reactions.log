@@ -1,0 +1,810 @@
+[dotenv@17.2.3] injecting env (7) from .env.local -- tip: ⚙️  load multiple .env files with { path: ['.env.local', '.env'] }
+=== Calculate Price Reactions ===
+
+Limit: 100 events
+
+Processing events with candle windows...
+
+Processed 100 events
+
+ADP_Non_Farm_Employm_2024-03-06_15:15:
+  AUD_USD: spike_reversal (4.4 pips DOWN)
+  EUR_USD: spike_reversal (3.1 pips DOWN)
+  GBP_USD: spike_reversal (7.4 pips DOWN)
+  USD_CAD: spike_reversal (3 pips UP)
+  USD_CHF: continuation (2.4 pips DOWN)
+  USD_JPY: continuation (9 pips UP)
+
+ADP_Non_Farm_Employm_2024-05-01_15:15:
+  AUD_USD: spike_reversal (2 pips DOWN)
+  EUR_USD: fade (2.6 pips DOWN)
+  GBP_USD: fade (4.2 pips DOWN)
+  USD_CAD: spike_reversal (3.2 pips UP)
+  USD_CHF: fade (3.6 pips UP)
+  USD_JPY: spike_reversal (7.1 pips UP)
+
+BOC_Gov_Macklem_Spea_2024-05-01_23:15:
+  AUD_USD: fade (1.5 pips UP)
+  EUR_USD: spike_reversal (2 pips UP)
+  GBP_USD: spike_reversal (2.7 pips UP)
+  USD_CAD: fade (1.9 pips DOWN)
+  USD_CHF: fade (2 pips DOWN)
+  USD_JPY: fade (16.5 pips UP)
+
+BOC_Press_Conference_2024-03-06_17:30:
+  AUD_USD: range (2.8 pips DOWN)
+  EUR_USD: range (5.7 pips DOWN)
+  GBP_USD: range (6 pips DOWN)
+  USD_CAD: spike_reversal (4.4 pips UP)
+  USD_CHF: range (6.4 pips UP)
+  USD_JPY: range (6.8 pips UP)
+
+BOC_Rate_Statement_2024-03-06_16:45:
+  AUD_USD: spike_reversal (1.6 pips UP)
+  EUR_USD: spike_reversal (2.8 pips UP)
+  GBP_USD: spike_reversal (4.5 pips UP)
+  USD_CAD: fade (2.7 pips DOWN)
+  USD_CHF: spike_reversal (2.4 pips DOWN)
+  USD_JPY: range (4.6 pips DOWN)
+
+BOC_Summary_of_Delib_2024-03-20_20:30:
+  AUD_USD: continuation (2.4 pips UP)
+  EUR_USD: continuation (0.6 pips UP)
+  GBP_USD: continuation (1.6 pips UP)
+  USD_CAD: spike_reversal (2.2 pips DOWN)
+  USD_CHF: continuation (0.6 pips DOWN)
+  USD_JPY: continuation (5 pips DOWN)
+
+BOE_Gov_Bailey_Speak_2024-03-12_19:15:
+  AUD_USD: spike_reversal (0.8 pips DOWN)
+  EUR_USD: spike_reversal (1.4 pips DOWN)
+  GBP_USD: spike_reversal (1.8 pips DOWN)
+  USD_CAD: continuation (1.2 pips DOWN)
+  USD_CHF: continuation (1.2 pips DOWN)
+  USD_JPY: spike_reversal (2 pips UP)
+
+BOE_Inflation_Letter_2024-03-21_15:00:
+  AUD_USD: continuation (4.5 pips DOWN)
+  EUR_USD: continuation (8.6 pips DOWN)
+  GBP_USD: continuation (15.5 pips DOWN)
+  USD_CAD: continuation (6.2 pips UP)
+  USD_CHF: fade (5 pips UP)
+  USD_JPY: continuation (4.9 pips UP)
+
+BOE_Quarterly_Bullet_2024-03-11_16:00:
+  AUD_USD: spike_reversal (3.8 pips DOWN)
+  EUR_USD: fade (5.3 pips DOWN)
+  GBP_USD: spike_reversal (7.4 pips DOWN)
+  USD_CAD: spike_reversal (4.6 pips UP)
+  USD_CHF: fade (3.6 pips UP)
+  USD_JPY: fade (3.9 pips UP)
+
+BOJ_Core_CPI_y_y_2024-03-26_08:00:
+  AUD_USD: spike_reversal (2.7 pips DOWN)
+  EUR_USD: continuation (2.2 pips UP)
+  GBP_USD: spike_reversal (5.2 pips DOWN)
+  USD_CAD: continuation (4 pips DOWN)
+  USD_CHF: fade (6.8 pips UP)
+  USD_JPY: spike_reversal (2 pips UP)
+
+BOJ_Gov_Ueda_Speaks_2024-03-05_06:00:
+  AUD_USD: spike_reversal (1 pips UP)
+  EUR_USD: continuation (1.8 pips DOWN)
+  GBP_USD: spike_reversal (1.2 pips UP)
+  USD_CAD: spike_reversal (2.2 pips DOWN)
+  USD_CHF: continuation (1 pips UP)
+  USD_JPY: continuation (2.2 pips UP)
+
+BOJ_Policy_Rate_2024-03-19_06:36:
+  AUD_USD: fade (3.8 pips UP)
+  EUR_USD: fade (3.1 pips DOWN)
+  GBP_USD: continuation (3.3 pips DOWN)
+  USD_CAD: spike_reversal (3.4 pips UP)
+  USD_CHF: continuation (3 pips UP)
+  USD_JPY: fade (39.2 pips DOWN)
+
+BOJ_Press_Conference_2024-03-19_09:30:
+  AUD_USD: spike_reversal (1 pips DOWN)
+  EUR_USD: spike_reversal (1.9 pips UP)
+  GBP_USD: fade (3.2 pips UP)
+  USD_CAD: continuation (2.1 pips DOWN)
+  USD_CHF: fade (3.2 pips UP)
+  USD_JPY: continuation (6.4 pips UP)
+
+BRC_Retail_Sales_Mon_2024-03-05_02:01:
+  AUD_USD: continuation (3.5 pips DOWN)
+  EUR_USD: range (1.3 pips UP)
+  GBP_USD: continuation (3 pips DOWN)
+  USD_CAD: continuation (3.2 pips UP)
+  USD_CHF: spike_reversal (1.5 pips UP)
+  USD_JPY: fade (4.2 pips UP)
+
+CPI_m_m_2024-03-04_09:30:
+  AUD_USD: range (3.3 pips UP)
+  EUR_USD: continuation (3.6 pips UP)
+  GBP_USD: continuation (3.3 pips UP)
+  USD_CAD: range (3.4 pips DOWN)
+  USD_CHF: spike_reversal (2.6 pips DOWN)
+  USD_JPY: continuation (6.7 pips DOWN)
+
+CPI_m_m_2024-03-12_15:30:
+  AUD_USD: continuation (2.6 pips UP)
+  EUR_USD: continuation (4.4 pips UP)
+  GBP_USD: continuation (6.7 pips UP)
+  USD_CAD: range (9.1 pips DOWN)
+  USD_CHF: continuation (7.6 pips DOWN)
+  USD_JPY: continuation (4.8 pips DOWN)
+
+CPI_m_m_2024-03-19_15:30:
+  AUD_USD: fade (2 pips UP)
+  EUR_USD: continuation (1.3 pips UP)
+  GBP_USD: continuation (2.3 pips UP)
+  USD_CAD: continuation (3.2 pips DOWN)
+  USD_CHF: spike_reversal (1.6 pips UP)
+  USD_JPY: spike_reversal (3.9 pips UP)
+
+CPI_y_y_2024-03-12_15:30:
+  AUD_USD: continuation (2.6 pips UP)
+  EUR_USD: continuation (4.4 pips UP)
+  GBP_USD: continuation (6.7 pips UP)
+  USD_CAD: range (9.1 pips DOWN)
+  USD_CHF: continuation (7.6 pips DOWN)
+  USD_JPY: continuation (4.8 pips DOWN)
+
+CPI_y_y_2024-03-20_10:00:
+  AUD_USD: fade (2.9 pips UP)
+  EUR_USD: continuation (1.8 pips UP)
+  GBP_USD: continuation (3.2 pips UP)
+  USD_CAD: continuation (2.2 pips DOWN)
+  USD_CHF: continuation (3.7 pips UP)
+  USD_JPY: fade (4.6 pips DOWN)
+
+CPI_y_y_2024-03-27_03:30:
+  AUD_USD: spike_reversal (2.7 pips DOWN)
+  EUR_USD: continuation (1 pips DOWN)
+  GBP_USD: fade (1.8 pips UP)
+  USD_CAD: spike_reversal (2.2 pips UP)
+  USD_CHF: range (2 pips UP)
+  USD_JPY: fade (4.2 pips UP)
+
+Common_CPI_y_y_2024-03-19_15:30:
+  AUD_USD: fade (2 pips UP)
+  EUR_USD: continuation (1.3 pips UP)
+  GBP_USD: continuation (2.3 pips UP)
+  USD_CAD: continuation (3.2 pips DOWN)
+  USD_CHF: spike_reversal (1.6 pips UP)
+  USD_JPY: spike_reversal (3.9 pips UP)
+
+Consumer_Inflation_E_2024-03-15_12:30:
+  AUD_USD: spike_reversal (4.7 pips UP)
+  EUR_USD: spike_reversal (3.7 pips UP)
+  GBP_USD: continuation (6.3 pips DOWN)
+  USD_CAD: fade (2.6 pips DOWN)
+  USD_CHF: continuation (4 pips UP)
+  USD_JPY: spike_reversal (11.7 pips DOWN)
+
+Core_CPI_m_m_2024-03-12_15:30:
+  AUD_USD: continuation (2.6 pips UP)
+  EUR_USD: continuation (4.4 pips UP)
+  GBP_USD: continuation (6.7 pips UP)
+  USD_CAD: range (9.1 pips DOWN)
+  USD_CHF: continuation (7.6 pips DOWN)
+  USD_JPY: continuation (4.8 pips DOWN)
+
+Core_CPI_m_m_2024-03-19_15:32:
+  AUD_USD: fade (1.6 pips UP)
+  EUR_USD: continuation (1.6 pips UP)
+  GBP_USD: continuation (1.4 pips UP)
+  USD_CAD: continuation (4 pips DOWN)
+  USD_CHF: spike_reversal (3.1 pips UP)
+  USD_JPY: spike_reversal (5.6 pips UP)
+
+Core_CPI_y_y_2024-03-20_10:00:
+  AUD_USD: fade (2.9 pips UP)
+  EUR_USD: continuation (1.8 pips UP)
+  GBP_USD: continuation (3.2 pips UP)
+  USD_CAD: continuation (2.2 pips DOWN)
+  USD_CHF: continuation (3.7 pips UP)
+  USD_JPY: fade (4.6 pips DOWN)
+
+Core_PPI_m_m_2024-03-14_15:30:
+  AUD_USD: spike_reversal (2.2 pips DOWN)
+  EUR_USD: continuation (3.5 pips UP)
+  GBP_USD: continuation (2.8 pips UP)
+  USD_CAD: spike_reversal (3 pips UP)
+  USD_CHF: fade (2 pips DOWN)
+  USD_JPY: spike_reversal (5.6 pips UP)
+
+Core_Retail_Sales_m__2024-03-14_15:30:
+  AUD_USD: spike_reversal (2.2 pips DOWN)
+  EUR_USD: continuation (3.5 pips UP)
+  GBP_USD: continuation (2.8 pips UP)
+  USD_CAD: spike_reversal (3 pips UP)
+  USD_CHF: fade (2 pips DOWN)
+  USD_JPY: spike_reversal (5.6 pips UP)
+
+Core_Retail_Sales_m__2024-03-22_15:30:
+  AUD_USD: continuation (3.2 pips DOWN)
+  EUR_USD: continuation (4.2 pips DOWN)
+  GBP_USD: continuation (4.2 pips DOWN)
+  USD_CAD: fade (5.6 pips UP)
+  USD_CHF: continuation (6.6 pips UP)
+  USD_JPY: continuation (10.7 pips UP)
+
+ECB_Economic_Bulleti_2024-03-21_12:00:
+  AUD_USD: range (3.6 pips UP)
+  EUR_USD: continuation (3.2 pips UP)
+  GBP_USD: fade (22.4 pips DOWN)
+  USD_CAD: continuation (5.8 pips DOWN)
+  USD_CHF: spike_reversal (6.2 pips DOWN)
+  USD_JPY: spike_reversal (9.4 pips DOWN)
+
+ECB_President_Lagard_2024-03-20_11:45:
+  AUD_USD: fade (1.2 pips DOWN)
+  EUR_USD: spike_reversal (0.9 pips UP)
+  GBP_USD: spike_reversal (4.3 pips UP)
+  USD_CAD: spike_reversal (1.6 pips UP)
+  USD_CHF: continuation (2.1 pips DOWN)
+  USD_JPY: spike_reversal (4 pips DOWN)
+
+ECB_Press_Conference_2024-03-07_15:45:
+  AUD_USD: fade (1.4 pips UP)
+  EUR_USD: continuation (5.8 pips UP)
+  GBP_USD: fade (6.8 pips UP)
+  USD_CAD: spike_reversal (1.6 pips UP)
+  USD_CHF: continuation (3 pips UP)
+  USD_JPY: fade (8.6 pips DOWN)
+
+Employment_Change_2024-03-08_15:30:
+  AUD_USD: continuation (3.6 pips UP)
+  EUR_USD: continuation (2.8 pips UP)
+  GBP_USD: fade (2.9 pips DOWN)
+  USD_CAD: continuation (5 pips DOWN)
+  USD_CHF: fade (5.2 pips UP)
+  USD_JPY: continuation (7.7 pips DOWN)
+
+Employment_Change_2024-03-21_03:30:
+  AUD_USD: spike_reversal (2.2 pips UP)
+  EUR_USD: fade (1.1 pips DOWN)
+  GBP_USD: fade (1.9 pips DOWN)
+  USD_CAD: range (1.6 pips DOWN)
+  USD_CHF: continuation (0.9 pips UP)
+  USD_JPY: continuation (2.7 pips DOWN)
+
+FOMC_Economic_Projec_2024-03-20_21:00:
+  AUD_USD: ✗ Missing critical candles
+  EUR_USD: fade (2.7 pips DOWN)
+  GBP_USD: continuation (0.7 pips DOWN)
+  USD_CAD: ✗ Missing critical candles
+  USD_CHF: ✗ Missing critical candles
+  USD_JPY: spike_reversal (2.5 pips UP)
+
+FOMC_Member_Barr_Spe_2024-03-05_19:00:
+  AUD_USD: fade (2.8 pips DOWN)
+  EUR_USD: continuation (1.2 pips UP)
+  GBP_USD: fade (3 pips DOWN)
+  USD_CAD: fade (2.2 pips UP)
+  USD_CHF: spike_reversal (1.2 pips UP)
+  USD_JPY: spike_reversal (2.3 pips UP)
+
+FOMC_Member_Barr_Spe_2024-03-05_22:30:
+  AUD_USD: fade (1.2 pips UP)
+  EUR_USD: spike_reversal (0.7 pips DOWN)
+  GBP_USD: fade (1.5 pips UP)
+  USD_CAD: range (1.4 pips UP)
+  USD_CHF: continuation (1 pips DOWN)
+  USD_JPY: continuation (1.9 pips DOWN)
+
+FOMC_Member_Barr_Spe_2024-03-21_19:00:
+  AUD_USD: fade (2 pips UP)
+  EUR_USD: continuation (1.7 pips DOWN)
+  GBP_USD: continuation (1.7 pips DOWN)
+  USD_CAD: range (2.8 pips DOWN)
+  USD_CHF: spike_reversal (0.9 pips DOWN)
+  USD_JPY: continuation (1.8 pips UP)
+
+FOMC_Member_Barr_Spe_2024-03-22_19:15:
+  AUD_USD: spike_reversal (1.1 pips DOWN)
+  EUR_USD: spike_reversal (0.6 pips DOWN)
+  GBP_USD: spike_reversal (2.9 pips DOWN)
+  USD_CAD: continuation (0.8 pips DOWN)
+  USD_CHF: continuation (0.5 pips DOWN)
+  USD_JPY: spike_reversal (1.9 pips UP)
+
+FOMC_Member_Bostic_S_2024-03-25_15:25:
+  AUD_USD: fade (1.3 pips DOWN)
+  EUR_USD: spike_reversal (1 pips DOWN)
+  GBP_USD: fade (2.3 pips DOWN)
+  USD_CAD: range (4.2 pips UP)
+  USD_CHF: spike_reversal (0.7 pips DOWN)
+  USD_JPY: continuation (1.6 pips UP)
+
+FOMC_Member_Cook_Spe_2024-03-25_17:30:
+  AUD_USD: spike_reversal (0.7 pips DOWN)
+  EUR_USD: fade (1.1 pips UP)
+  GBP_USD: range (2.3 pips UP)
+  USD_CAD: spike_reversal (1.9 pips UP)
+  USD_CHF: continuation (1.1 pips DOWN)
+  USD_JPY: continuation (2.4 pips UP)
+
+FOMC_Member_Daly_Spe_2024-03-06_19:00:
+  AUD_USD: continuation (4.8 pips DOWN)
+  EUR_USD: continuation (6.1 pips DOWN)
+  GBP_USD: continuation (7.6 pips DOWN)
+  USD_CAD: continuation (1.9 pips UP)
+  USD_CHF: continuation (4.5 pips UP)
+  USD_JPY: continuation (10.8 pips UP)
+
+FOMC_Member_Mester_S_2024-03-07_18:30:
+  AUD_USD: spike_reversal (1.9 pips DOWN)
+  EUR_USD: continuation (1.6 pips UP)
+  GBP_USD: spike_reversal (2.5 pips DOWN)
+  USD_CAD: spike_reversal (2 pips UP)
+  USD_CHF: continuation (2.1 pips UP)
+  USD_JPY: continuation (2.6 pips UP)
+
+FOMC_Member_Williams_2024-03-08_14:00:
+  AUD_USD: fade (5 pips DOWN)
+  EUR_USD: spike_reversal (6.8 pips UP)
+  GBP_USD: fade (11.7 pips UP)
+  USD_CAD: spike_reversal (8.4 pips DOWN)
+  USD_CHF: spike_reversal (5.1 pips DOWN)
+  USD_JPY: range (9.4 pips DOWN)
+
+FOMC_Press_Conferenc_2024-03-20_21:30:
+  AUD_USD: continuation (1.4 pips DOWN)
+  EUR_USD: fade (0.7 pips UP)
+  GBP_USD: continuation (0.6 pips DOWN)
+  USD_CAD: ✗ Missing critical candles
+  USD_CHF: continuation (2 pips UP)
+  USD_JPY: continuation (1.5 pips DOWN)
+
+FOMC_Press_Conferenc_2024-05-01_21:30:
+  AUD_USD: spike_reversal (1.2 pips DOWN)
+  EUR_USD: spike_reversal (6.6 pips DOWN)
+  GBP_USD: continuation (5.7 pips UP)
+  USD_CAD: continuation (2.2 pips UP)
+  USD_CHF: continuation (6 pips UP)
+  USD_JPY: fade (9.2 pips UP)
+
+FOMC_Statement_2024-05-01_21:00:
+  AUD_USD: ✗ Missing critical candles
+  EUR_USD: spike_reversal (0.4 pips DOWN)
+  GBP_USD: continuation (7.2 pips DOWN)
+  USD_CAD: spike_reversal (3.9 pips DOWN)
+  USD_CHF: ✗ Missing critical candles
+  USD_JPY: range (37.2 pips UP)
+
+Fed_Chair_Powell_Spe_2024-03-22_16:00:
+  AUD_USD: spike_reversal (2 pips UP)
+  EUR_USD: spike_reversal (1.7 pips UP)
+  GBP_USD: spike_reversal (4.7 pips UP)
+  USD_CAD: continuation (4.4 pips UP)
+  USD_CHF: spike_reversal (3.3 pips DOWN)
+  USD_JPY: spike_reversal (2.8 pips DOWN)
+
+Federal_Funds_Rate_2024-03-20_21:00:
+  AUD_USD: ✗ Missing critical candles
+  EUR_USD: fade (2.7 pips DOWN)
+  GBP_USD: continuation (0.7 pips DOWN)
+  USD_CAD: ✗ Missing critical candles
+  USD_CHF: ✗ Missing critical candles
+  USD_JPY: spike_reversal (2.5 pips UP)
+
+Federal_Funds_Rate_2024-05-01_21:00:
+  AUD_USD: ✗ Missing critical candles
+  EUR_USD: spike_reversal (0.4 pips DOWN)
+  GBP_USD: continuation (7.2 pips DOWN)
+  USD_CAD: spike_reversal (3.9 pips DOWN)
+  USD_CHF: ✗ Missing critical candles
+  USD_JPY: range (37.2 pips UP)
+
+Final_CPI_y_y_2024-03-18_13:00:
+  AUD_USD: fade (1.8 pips DOWN)
+  EUR_USD: continuation (1.4 pips DOWN)
+  GBP_USD: spike_reversal (2.8 pips UP)
+  USD_CAD: fade (4.9 pips UP)
+  USD_CHF: continuation (4.4 pips UP)
+  USD_JPY: spike_reversal (2.2 pips DOWN)
+
+Final_Core_CPI_y_y_2024-03-18_13:00:
+  AUD_USD: fade (1.8 pips DOWN)
+  EUR_USD: continuation (1.4 pips DOWN)
+  GBP_USD: spike_reversal (2.8 pips UP)
+  USD_CAD: fade (4.9 pips UP)
+  USD_CHF: continuation (4.4 pips UP)
+  USD_JPY: spike_reversal (2.2 pips DOWN)
+
+Final_Employment_Cha_2024-03-08_12:00:
+  AUD_USD: continuation (2 pips DOWN)
+  EUR_USD: spike_reversal (2.2 pips UP)
+  GBP_USD: spike_reversal (3.3 pips DOWN)
+  USD_CAD: continuation (2.2 pips UP)
+  USD_CHF: continuation (1.4 pips UP)
+  USD_JPY: continuation (6 pips UP)
+
+Final_GDP_Price_Inde_2024-03-11_02:50:
+  AUD_USD: spike_reversal (1.7 pips DOWN)
+  EUR_USD: spike_reversal (1.5 pips DOWN)
+  GBP_USD: spike_reversal (0.8 pips DOWN)
+  USD_CAD: spike_reversal (3 pips UP)
+  USD_CHF: spike_reversal (1 pips UP)
+  USD_JPY: spike_reversal (5 pips UP)
+
+Final_GDP_q_q_2024-03-11_02:50:
+  AUD_USD: spike_reversal (1.7 pips DOWN)
+  EUR_USD: spike_reversal (1.5 pips DOWN)
+  GBP_USD: spike_reversal (0.8 pips DOWN)
+  USD_CAD: spike_reversal (3 pips UP)
+  USD_CHF: spike_reversal (1 pips UP)
+  USD_JPY: spike_reversal (5 pips UP)
+
+French_Final_CPI_m_m_2024-03-15_10:45:
+  AUD_USD: continuation (1.2 pips UP)
+  EUR_USD: continuation (1.3 pips DOWN)
+  GBP_USD: fade (2.2 pips UP)
+  USD_CAD: continuation (1 pips UP)
+  USD_CHF: spike_reversal (2.4 pips UP)
+  USD_JPY: continuation (4.2 pips UP)
+
+GDP_m_m_2024-03-13_10:00:
+  AUD_USD: spike_reversal (2.8 pips DOWN)
+  EUR_USD: continuation (3.4 pips UP)
+  GBP_USD: continuation (2.8 pips UP)
+  USD_CAD: spike_reversal (3 pips UP)
+  USD_CHF: continuation (2.7 pips DOWN)
+  USD_JPY: spike_reversal (4.2 pips UP)
+
+GDP_q_q_2024-03-06_02:30:
+  AUD_USD: spike_reversal (1.9 pips DOWN)
+  EUR_USD: spike_reversal (2.1 pips DOWN)
+  GBP_USD: spike_reversal (1.6 pips DOWN)
+  USD_CAD: continuation (1.7 pips DOWN)
+  USD_CHF: spike_reversal (1.6 pips UP)
+  USD_JPY: range (1.6 pips DOWN)
+
+GDP_q_q_2024-03-21_00:45:
+  AUD_USD: continuation (5.5 pips UP)
+  EUR_USD: continuation (3 pips UP)
+  GBP_USD: continuation (3.7 pips UP)
+  USD_CAD: continuation (2.8 pips DOWN)
+  USD_CHF: continuation (3.4 pips DOWN)
+  USD_JPY: continuation (13.5 pips DOWN)
+
+German_Final_CPI_m_m_2024-03-12_10:00:
+  AUD_USD: spike_reversal (3.4 pips DOWN)
+  EUR_USD: spike_reversal (2.7 pips DOWN)
+  GBP_USD: spike_reversal (5.3 pips DOWN)
+  USD_CAD: spike_reversal (3 pips UP)
+  USD_CHF: continuation (2.9 pips UP)
+  USD_JPY: spike_reversal (15.8 pips UP)
+
+German_PPI_m_m_2024-03-08_09:00:
+  AUD_USD: spike_reversal (2.4 pips DOWN)
+  EUR_USD: spike_reversal (2 pips UP)
+  GBP_USD: continuation (4.6 pips UP)
+  USD_CAD: fade (3.5 pips UP)
+  USD_CHF: range (3.2 pips DOWN)
+  USD_JPY: continuation (9.4 pips DOWN)
+
+German_PPI_m_m_2024-03-20_10:00:
+  AUD_USD: fade (2.9 pips UP)
+  EUR_USD: continuation (1.8 pips UP)
+  GBP_USD: continuation (3.2 pips UP)
+  USD_CAD: continuation (2.2 pips DOWN)
+  USD_CHF: continuation (3.7 pips UP)
+  USD_JPY: fade (4.6 pips DOWN)
+
+IPPI_m_m_2024-03-18_15:30:
+  AUD_USD: continuation (1 pips DOWN)
+  EUR_USD: continuation (3.6 pips DOWN)
+  GBP_USD: fade (3.8 pips DOWN)
+  USD_CAD: fade (2.4 pips UP)
+  USD_CHF: continuation (2.4 pips UP)
+  USD_JPY: continuation (4 pips DOWN)
+
+Italian_Quarterly_Un_2024-03-13_12:00:
+  AUD_USD: continuation (2 pips DOWN)
+  EUR_USD: continuation (2.7 pips DOWN)
+  GBP_USD: continuation (6.6 pips DOWN)
+  USD_CAD: continuation (1.2 pips UP)
+  USD_CHF: spike_reversal (4.6 pips UP)
+  USD_JPY: spike_reversal (5.3 pips UP)
+
+Italian_Retail_Sales_2024-03-15_13:00:
+  AUD_USD: spike_reversal (5.7 pips UP)
+  EUR_USD: spike_reversal (5 pips UP)
+  GBP_USD: spike_reversal (5.5 pips UP)
+  USD_CAD: fade (12 pips DOWN)
+  USD_CHF: spike_reversal (5.4 pips DOWN)
+  USD_JPY: spike_reversal (7.5 pips DOWN)
+
+MI_Inflation_Gauge_m_2024-03-04_02:02:
+  AUD_USD: spike_reversal (1.5 pips DOWN)
+  EUR_USD: spike_reversal (1.1 pips DOWN)
+  GBP_USD: spike_reversal (2.6 pips DOWN)
+  USD_CAD: spike_reversal (1.2 pips UP)
+  USD_CHF: spike_reversal (1.5 pips UP)
+  USD_JPY: fade (3.4 pips UP)
+
+Median_CPI_y_y_2024-03-19_15:30:
+  AUD_USD: fade (2 pips UP)
+  EUR_USD: continuation (1.3 pips UP)
+  GBP_USD: continuation (2.3 pips UP)
+  USD_CAD: continuation (3.2 pips DOWN)
+  USD_CHF: spike_reversal (1.6 pips UP)
+  USD_JPY: spike_reversal (3.9 pips UP)
+
+NIESR_GDP_Estimate_2024-03-13_14:50:
+  AUD_USD: fade (2.4 pips DOWN)
+  EUR_USD: continuation (3.5 pips UP)
+  GBP_USD: continuation (2.6 pips DOWN)
+  USD_CAD: spike_reversal (3.2 pips DOWN)
+  USD_CHF: range (2.4 pips DOWN)
+  USD_JPY: spike_reversal (5 pips UP)
+
+National_Core_CPI_y__2024-03-22_02:30:
+  AUD_USD: continuation (5.7 pips DOWN)
+  EUR_USD: continuation (3 pips DOWN)
+  GBP_USD: continuation (4.7 pips DOWN)
+  USD_CAD: continuation (2.6 pips UP)
+  USD_CHF: continuation (4.5 pips UP)
+  USD_JPY: range (9.6 pips UP)
+
+Non_Farm_Employment__2024-03-08_15:30:
+  AUD_USD: continuation (3.6 pips UP)
+  EUR_USD: continuation (2.8 pips UP)
+  GBP_USD: fade (2.9 pips DOWN)
+  USD_CAD: continuation (5 pips DOWN)
+  USD_CHF: fade (5.2 pips UP)
+  USD_JPY: continuation (7.7 pips DOWN)
+
+PPI_Input_m_m_2024-03-20_10:00:
+  AUD_USD: fade (2.9 pips UP)
+  EUR_USD: continuation (1.8 pips UP)
+  GBP_USD: continuation (3.2 pips UP)
+  USD_CAD: continuation (2.2 pips DOWN)
+  USD_CHF: continuation (3.7 pips UP)
+  USD_JPY: fade (4.6 pips DOWN)
+
+PPI_Output_m_m_2024-03-20_10:00:
+  AUD_USD: fade (2.9 pips UP)
+  EUR_USD: continuation (1.8 pips UP)
+  GBP_USD: continuation (3.2 pips UP)
+  USD_CAD: continuation (2.2 pips DOWN)
+  USD_CHF: continuation (3.7 pips UP)
+  USD_JPY: fade (4.6 pips DOWN)
+
+PPI_m_m_2024-03-05_12:00:
+  AUD_USD: continuation (2.8 pips DOWN)
+  EUR_USD: spike_reversal (1 pips UP)
+  GBP_USD: spike_reversal (3.2 pips DOWN)
+  USD_CAD: continuation (5.2 pips UP)
+  USD_CHF: range (3.1 pips UP)
+  USD_JPY: spike_reversal (2.6 pips UP)
+
+PPI_m_m_2024-03-14_10:30:
+  AUD_USD: continuation (0.9 pips DOWN)
+  EUR_USD: range (2.9 pips DOWN)
+  GBP_USD: continuation (4.3 pips DOWN)
+  USD_CAD: continuation (2 pips UP)
+  USD_CHF: spike_reversal (1.5 pips UP)
+  USD_JPY: continuation (4.8 pips DOWN)
+
+PPI_m_m_2024-03-14_15:30:
+  AUD_USD: spike_reversal (2.2 pips DOWN)
+  EUR_USD: continuation (3.5 pips UP)
+  GBP_USD: continuation (2.8 pips UP)
+  USD_CAD: spike_reversal (3 pips UP)
+  USD_CHF: fade (2 pips DOWN)
+  USD_JPY: spike_reversal (5.6 pips UP)
+
+PPI_y_y_2024-03-12_02:50:
+  AUD_USD: continuation (1.5 pips UP)
+  EUR_USD: spike_reversal (1.2 pips DOWN)
+  GBP_USD: range (1.2 pips DOWN)
+  USD_CAD: spike_reversal (1 pips UP)
+  USD_CHF: fade (2.1 pips UP)
+  USD_JPY: spike_reversal (5.5 pips UP)
+
+Prelim_UoM_Inflation_2024-03-15_17:00:
+  AUD_USD: spike_reversal (1 pips UP)
+  EUR_USD: continuation (1.4 pips DOWN)
+  GBP_USD: fade (3.2 pips DOWN)
+  USD_CAD: spike_reversal (2.7 pips DOWN)
+  USD_CHF: continuation (0.9 pips UP)
+  USD_JPY: fade (5.7 pips DOWN)
+
+RBA_Assist_Gov_Hunte_2024-03-12_01:30:
+  AUD_USD: spike_reversal (3 pips DOWN)
+  EUR_USD: continuation (1 pips UP)
+  GBP_USD: continuation (1.4 pips UP)
+  USD_CAD: spike_reversal (3 pips UP)
+  USD_CHF: range (1 pips DOWN)
+  USD_JPY: spike_reversal (2.1 pips DOWN)
+
+RBA_Financial_Stabil_2024-03-22_03:30:
+  AUD_USD: continuation (4.5 pips DOWN)
+  EUR_USD: fade (3.4 pips DOWN)
+  GBP_USD: continuation (4.8 pips UP)
+  USD_CAD: continuation (1.9 pips UP)
+  USD_CHF: spike_reversal (1 pips UP)
+  USD_JPY: fade (3.6 pips DOWN)
+
+RBA_Press_Conference_2024-03-19_07:30:
+  AUD_USD: continuation (1.7 pips DOWN)
+  EUR_USD: continuation (2.2 pips DOWN)
+  GBP_USD: continuation (2 pips DOWN)
+  USD_CAD: spike_reversal (3.4 pips DOWN)
+  USD_CHF: continuation (2 pips UP)
+  USD_JPY: continuation (10.6 pips UP)
+
+RBA_Rate_Statement_2024-03-19_06:30:
+  AUD_USD: continuation (2.2 pips DOWN)
+  EUR_USD: spike_reversal (1.6 pips UP)
+  GBP_USD: spike_reversal (2.6 pips UP)
+  USD_CAD: continuation (4.4 pips UP)
+  USD_CHF: continuation (2.1 pips UP)
+  USD_JPY: spike_reversal (15.7 pips UP)
+
+Retail_Sales_m_m_2024-03-06_12:00:
+  AUD_USD: continuation (4.5 pips UP)
+  EUR_USD: spike_reversal (1.6 pips UP)
+  GBP_USD: spike_reversal (2.7 pips UP)
+  USD_CAD: continuation (3.1 pips DOWN)
+  USD_CHF: continuation (1.3 pips DOWN)
+  USD_JPY: spike_reversal (3.1 pips UP)
+
+Retail_Sales_m_m_2024-03-14_15:30:
+  AUD_USD: spike_reversal (2.2 pips DOWN)
+  EUR_USD: continuation (3.5 pips UP)
+  GBP_USD: continuation (2.8 pips UP)
+  USD_CAD: spike_reversal (3 pips UP)
+  USD_CHF: fade (2 pips DOWN)
+  USD_JPY: spike_reversal (5.6 pips UP)
+
+Retail_Sales_m_m_2024-03-22_10:00:
+  AUD_USD: continuation (1.6 pips UP)
+  EUR_USD: spike_reversal (1.6 pips DOWN)
+  GBP_USD: continuation (5.8 pips DOWN)
+  USD_CAD: spike_reversal (1.6 pips DOWN)
+  USD_CHF: fade (4 pips UP)
+  USD_JPY: continuation (1.9 pips DOWN)
+
+Retail_Sales_m_m_2024-03-22_15:30:
+  AUD_USD: continuation (3.2 pips DOWN)
+  EUR_USD: continuation (4.2 pips DOWN)
+  GBP_USD: continuation (4.2 pips DOWN)
+  USD_CAD: fade (5.6 pips UP)
+  USD_CHF: continuation (6.6 pips UP)
+  USD_JPY: continuation (10.7 pips UP)
+
+Revised_GDP_q_q_2024-03-08_12:00:
+  AUD_USD: continuation (2 pips DOWN)
+  EUR_USD: spike_reversal (2.2 pips UP)
+  GBP_USD: spike_reversal (3.3 pips DOWN)
+  USD_CAD: continuation (2.2 pips UP)
+  USD_CHF: continuation (1.4 pips UP)
+  USD_JPY: continuation (6 pips UP)
+
+Revised_Nonfarm_Prod_2024-03-07_15:30:
+  AUD_USD: continuation (4.8 pips UP)
+  EUR_USD: continuation (8.9 pips UP)
+  GBP_USD: continuation (7.7 pips UP)
+  USD_CAD: continuation (7.2 pips DOWN)
+  USD_CHF: continuation (10.6 pips DOWN)
+  USD_JPY: continuation (9.7 pips DOWN)
+
+SNB_Monetary_Policy__2024-03-21_11:30:
+  AUD_USD: fade (1.4 pips UP)
+  EUR_USD: spike_reversal (3.6 pips DOWN)
+  GBP_USD: continuation (5.6 pips DOWN)
+  USD_CAD: continuation (2.6 pips UP)
+  USD_CHF: spike_reversal (6 pips DOWN)
+  USD_JPY: fade (5.8 pips UP)
+
+SNB_Policy_Rate_2024-03-21_11:30:
+  AUD_USD: fade (1.4 pips UP)
+  EUR_USD: spike_reversal (3.6 pips DOWN)
+  GBP_USD: continuation (5.6 pips DOWN)
+  USD_CAD: continuation (2.6 pips UP)
+  USD_CHF: spike_reversal (6 pips DOWN)
+  USD_JPY: fade (5.8 pips UP)
+
+SPPI_y_y_2024-03-26_02:50:
+  AUD_USD: continuation (4.2 pips DOWN)
+  EUR_USD: spike_reversal (0.6 pips UP)
+  GBP_USD: continuation (2.2 pips DOWN)
+  USD_CAD: continuation (3.3 pips UP)
+  USD_CHF: continuation (1.3 pips UP)
+  USD_JPY: continuation (3.6 pips UP)
+
+Spanish_Flash_CPI_y__2024-03-27_11:00:
+  AUD_USD: fade (2.6 pips DOWN)
+  EUR_USD: fade (3.6 pips DOWN)
+  GBP_USD: fade (3.9 pips DOWN)
+  USD_CAD: fade (5 pips UP)
+  USD_CHF: spike_reversal (1.6 pips DOWN)
+  USD_JPY: continuation (3.4 pips DOWN)
+
+Spanish_Unemployment_2024-03-04_10:00:
+  AUD_USD: range (1.5 pips DOWN)
+  EUR_USD: continuation (1.4 pips UP)
+  GBP_USD: spike_reversal (2.9 pips UP)
+  USD_CAD: fade (1.6 pips DOWN)
+  USD_CHF: continuation (4.4 pips UP)
+  USD_JPY: continuation (3.8 pips UP)
+
+Tokyo_Core_CPI_y_y_2024-03-05_01:30:
+  AUD_USD: fade (2.7 pips DOWN)
+  EUR_USD: continuation (2.4 pips DOWN)
+  GBP_USD: fade (2.6 pips DOWN)
+  USD_CAD: fade (2.9 pips UP)
+  USD_CHF: range (2.2 pips UP)
+  USD_JPY: continuation (4.4 pips UP)
+
+Trimmed_CPI_y_y_2024-03-19_15:30:
+  AUD_USD: fade (2 pips UP)
+  EUR_USD: continuation (1.3 pips UP)
+  GBP_USD: continuation (2.3 pips UP)
+  USD_CAD: continuation (3.2 pips DOWN)
+  USD_CHF: spike_reversal (1.6 pips UP)
+  USD_JPY: spike_reversal (3.9 pips UP)
+
+Unemployment_Claims_2024-03-07_15:30:
+  AUD_USD: continuation (4.8 pips UP)
+  EUR_USD: continuation (8.9 pips UP)
+  GBP_USD: continuation (7.7 pips UP)
+  USD_CAD: continuation (7.2 pips DOWN)
+  USD_CHF: continuation (10.6 pips DOWN)
+  USD_JPY: continuation (9.7 pips DOWN)
+
+Unemployment_Claims_2024-03-14_15:30:
+  AUD_USD: spike_reversal (2.2 pips DOWN)
+  EUR_USD: continuation (3.5 pips UP)
+  GBP_USD: continuation (2.8 pips UP)
+  USD_CAD: spike_reversal (3 pips UP)
+  USD_CHF: fade (2 pips DOWN)
+  USD_JPY: spike_reversal (5.6 pips UP)
+
+Unemployment_Claims_2024-03-21_15:30:
+  AUD_USD: continuation (5.2 pips UP)
+  EUR_USD: spike_reversal (3.7 pips UP)
+  GBP_USD: fade (8.2 pips UP)
+  USD_CAD: fade (6.6 pips DOWN)
+  USD_CHF: spike_reversal (5.2 pips DOWN)
+  USD_JPY: range (7 pips DOWN)
+
+Unemployment_Rate_2024-03-07_08:45:
+  AUD_USD: continuation (1.2 pips DOWN)
+  EUR_USD: fade (3.6 pips UP)
+  GBP_USD: fade (2.9 pips UP)
+  USD_CAD: fade (1.1 pips DOWN)
+  USD_CHF: continuation (1.2 pips UP)
+  USD_JPY: continuation (8.1 pips UP)
+
+Unemployment_Rate_2024-03-08_15:30:
+  AUD_USD: continuation (3.6 pips UP)
+  EUR_USD: continuation (2.8 pips UP)
+  GBP_USD: fade (2.9 pips DOWN)
+  USD_CAD: continuation (5 pips DOWN)
+  USD_CHF: fade (5.2 pips UP)
+  USD_JPY: continuation (7.7 pips DOWN)
+
+Unemployment_Rate_2024-03-12_10:00:
+  AUD_USD: spike_reversal (3.4 pips DOWN)
+  EUR_USD: spike_reversal (2.7 pips DOWN)
+  GBP_USD: spike_reversal (5.3 pips DOWN)
+  USD_CAD: spike_reversal (3 pips UP)
+  USD_CHF: continuation (2.9 pips UP)
+  USD_JPY: spike_reversal (15.8 pips UP)
+
+Unemployment_Rate_2024-03-21_03:30:
+  AUD_USD: spike_reversal (2.2 pips UP)
+  EUR_USD: fade (1.1 pips DOWN)
+  GBP_USD: fade (1.9 pips DOWN)
+  USD_CAD: range (1.6 pips DOWN)
+  USD_CHF: continuation (0.9 pips UP)
+  USD_JPY: continuation (2.7 pips DOWN)
+
+Done!

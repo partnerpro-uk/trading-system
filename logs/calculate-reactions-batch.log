@@ -1,0 +1,806 @@
+[dotenv@17.2.3] injecting env (7) from .env.local -- tip: ✅ audit secrets and track compliance: https://dotenvx.com/ops
+=== Calculate Price Reactions ===
+
+Limit: 200 events
+
+Processing events with candle windows...
+
+Processed 82 events
+
+Advance_GDP_Price_In_2024-04-25_15:30:
+  AUD_USD: spike_reversal (2 pips DOWN)
+  EUR_USD: spike_reversal (1.8 pips DOWN)
+  GBP_USD: continuation (3.4 pips DOWN)
+  USD_CAD: continuation (2.7 pips DOWN)
+  USD_CHF: spike_reversal (2.5 pips DOWN)
+  USD_JPY: fade (2.2 pips UP)
+
+Advance_GDP_q_q_2024-04-25_15:30:
+  AUD_USD: spike_reversal (2 pips DOWN)
+  EUR_USD: spike_reversal (1.8 pips DOWN)
+  GBP_USD: continuation (3.4 pips DOWN)
+  USD_CAD: continuation (2.7 pips DOWN)
+  USD_CHF: spike_reversal (2.5 pips DOWN)
+  USD_JPY: fade (2.2 pips UP)
+
+BOC_Gov_Macklem_Spea_2024-04-16_20:15:
+  AUD_USD: continuation (1.9 pips DOWN)
+  EUR_USD: continuation (1.9 pips DOWN)
+  GBP_USD: continuation (3 pips DOWN)
+  USD_CAD: continuation (3.8 pips UP)
+  USD_CHF: range (1.2 pips UP)
+  USD_JPY: continuation (0.5 pips UP)
+
+BOC_Summary_of_Delib_2024-04-24_20:30:
+  AUD_USD: continuation (0.4 pips DOWN)
+  EUR_USD: continuation (0.9 pips UP)
+  GBP_USD: continuation (0.7 pips DOWN)
+  USD_CAD: spike_reversal (1.4 pips UP)
+  USD_CHF: continuation (1.7 pips UP)
+  USD_JPY: spike_reversal (2.9 pips UP)
+
+BOE_Gov_Bailey_Speak_2024-04-16_20:00:
+  AUD_USD: spike_reversal (1.2 pips UP)
+  EUR_USD: spike_reversal (2.1 pips UP)
+  GBP_USD: spike_reversal (2.8 pips UP)
+  USD_CAD: continuation (2 pips UP)
+  USD_CHF: spike_reversal (1.2 pips DOWN)
+  USD_JPY: continuation (2.7 pips UP)
+
+BOE_Gov_Bailey_Speak_2024-04-17_19:00:
+  AUD_USD: range (3.3 pips DOWN)
+  EUR_USD: range (3.4 pips DOWN)
+  GBP_USD: range (4.2 pips DOWN)
+  USD_CAD: range (7.4 pips UP)
+  USD_CHF: continuation (2 pips UP)
+  USD_JPY: range (3.3 pips UP)
+
+BOE_Quarterly_Bullet_2024-04-17_14:00:
+  AUD_USD: continuation (8.2 pips DOWN)
+  EUR_USD: continuation (3.8 pips DOWN)
+  GBP_USD: fade (9 pips DOWN)
+  USD_CAD: fade (10.1 pips UP)
+  USD_CHF: continuation (6 pips UP)
+  USD_JPY: spike_reversal (4.7 pips UP)
+
+BOJ_Core_CPI_y_y_2024-04-23_08:00:
+  AUD_USD: fade (3.8 pips DOWN)
+  EUR_USD: fade (9.3 pips DOWN)
+  GBP_USD: spike_reversal (8.4 pips DOWN)
+  USD_CAD: fade (4.8 pips UP)
+  USD_CHF: continuation (3 pips UP)
+  USD_JPY: continuation (1.7 pips UP)
+
+BOJ_Outlook_Report_2024-04-26_06:22:
+  AUD_USD: fade (3.6 pips DOWN)
+  EUR_USD: fade (4.2 pips DOWN)
+  GBP_USD: fade (4.2 pips DOWN)
+  USD_CAD: fade (3.5 pips UP)
+  USD_CHF: fade (2.5 pips UP)
+  USD_JPY: continuation (3.7 pips UP)
+
+BOJ_Policy_Rate_2024-04-26_06:22:
+  AUD_USD: fade (3.6 pips DOWN)
+  EUR_USD: fade (4.2 pips DOWN)
+  GBP_USD: fade (4.2 pips DOWN)
+  USD_CAD: fade (3.5 pips UP)
+  USD_CHF: fade (2.5 pips UP)
+  USD_JPY: continuation (3.7 pips UP)
+
+BOJ_Press_Conference_2024-04-26_09:30:
+  AUD_USD: spike_reversal (1.6 pips UP)
+  EUR_USD: fade (2.9 pips DOWN)
+  GBP_USD: spike_reversal (3.6 pips DOWN)
+  USD_CAD: fade (1.7 pips UP)
+  USD_CHF: continuation (2 pips DOWN)
+  USD_JPY: spike_reversal (8.9 pips DOWN)
+
+CPI_Flash_Estimate_y_2024-04-30_12:00:
+  AUD_USD: fade (5.6 pips DOWN)
+  EUR_USD: fade (4.4 pips DOWN)
+  GBP_USD: fade (4.1 pips DOWN)
+  USD_CAD: fade (3.4 pips UP)
+  USD_CHF: fade (5.7 pips UP)
+  USD_JPY: continuation (15.6 pips UP)
+
+CPI_m_m_2024-04-16_15:30:
+  AUD_USD: fade (2.8 pips DOWN)
+  EUR_USD: fade (3.7 pips DOWN)
+  GBP_USD: fade (6.2 pips DOWN)
+  USD_CAD: range (4 pips UP)
+  USD_CHF: fade (2 pips UP)
+  USD_JPY: continuation (3.5 pips UP)
+
+CPI_q_q_2024-04-17_01:45:
+  AUD_USD: spike_reversal (3.8 pips DOWN)
+  EUR_USD: spike_reversal (1.4 pips DOWN)
+  GBP_USD: spike_reversal (2.2 pips DOWN)
+  USD_CAD: spike_reversal (2.1 pips UP)
+  USD_CHF: continuation (1.2 pips DOWN)
+  USD_JPY: range (2 pips UP)
+
+CPI_q_q_2024-04-24_04:30:
+  AUD_USD: fade (2.2 pips DOWN)
+  EUR_USD: continuation (1.1 pips DOWN)
+  GBP_USD: continuation (2 pips DOWN)
+  USD_CAD: continuation (1.1 pips UP)
+  USD_CHF: spike_reversal (0.8 pips DOWN)
+  USD_JPY: fade (0.8 pips UP)
+
+CPI_y_y_2024-04-17_09:00:
+  AUD_USD: fade (8.6 pips DOWN)
+  EUR_USD: spike_reversal (4.2 pips DOWN)
+  GBP_USD: fade (5.1 pips DOWN)
+  USD_CAD: spike_reversal (7.6 pips UP)
+  USD_CHF: continuation (5.9 pips UP)
+  USD_JPY: continuation (5.2 pips DOWN)
+
+CPI_y_y_2024-04-24_04:30:
+  AUD_USD: fade (2.2 pips DOWN)
+  EUR_USD: continuation (1.1 pips DOWN)
+  GBP_USD: continuation (2 pips DOWN)
+  USD_CAD: continuation (1.1 pips UP)
+  USD_CHF: spike_reversal (0.8 pips DOWN)
+  USD_JPY: fade (0.8 pips UP)
+
+Common_CPI_y_y_2024-04-16_15:30:
+  AUD_USD: fade (2.8 pips DOWN)
+  EUR_USD: fade (3.7 pips DOWN)
+  GBP_USD: fade (6.2 pips DOWN)
+  USD_CAD: range (4 pips UP)
+  USD_CHF: fade (2 pips UP)
+  USD_JPY: continuation (3.5 pips UP)
+
+Core_CPI_Flash_Estim_2024-04-30_12:00:
+  AUD_USD: fade (5.6 pips DOWN)
+  EUR_USD: fade (4.4 pips DOWN)
+  GBP_USD: fade (4.1 pips DOWN)
+  USD_CAD: fade (3.4 pips UP)
+  USD_CHF: fade (5.7 pips UP)
+  USD_JPY: continuation (15.6 pips UP)
+
+Core_CPI_m_m_2024-04-16_15:30:
+  AUD_USD: fade (2.8 pips DOWN)
+  EUR_USD: fade (3.7 pips DOWN)
+  GBP_USD: fade (6.2 pips DOWN)
+  USD_CAD: range (4 pips UP)
+  USD_CHF: fade (2 pips UP)
+  USD_JPY: continuation (3.5 pips UP)
+
+Core_CPI_y_y_2024-04-17_09:00:
+  AUD_USD: fade (8.6 pips DOWN)
+  EUR_USD: spike_reversal (4.2 pips DOWN)
+  GBP_USD: fade (5.1 pips DOWN)
+  USD_CAD: spike_reversal (7.6 pips UP)
+  USD_CHF: continuation (5.9 pips UP)
+  USD_JPY: continuation (5.2 pips DOWN)
+
+Core_Retail_Sales_m__2024-04-15_15:30:
+  AUD_USD: spike_reversal (2.5 pips DOWN)
+  EUR_USD: spike_reversal (2 pips DOWN)
+  GBP_USD: spike_reversal (2.4 pips DOWN)
+  USD_CAD: fade (2.2 pips UP)
+  USD_CHF: continuation (2.3 pips UP)
+  USD_JPY: spike_reversal (5 pips UP)
+
+Core_Retail_Sales_m__2024-04-24_15:30:
+  AUD_USD: spike_reversal (1.8 pips UP)
+  EUR_USD: spike_reversal (4.6 pips UP)
+  GBP_USD: fade (7.4 pips UP)
+  USD_CAD: fade (2 pips DOWN)
+  USD_CHF: continuation (0.7 pips UP)
+  USD_JPY: continuation (2.2 pips UP)
+
+ECB_Economic_Bulleti_2024-04-25_11:00:
+  AUD_USD: spike_reversal (1 pips DOWN)
+  EUR_USD: fade (2.5 pips DOWN)
+  GBP_USD: spike_reversal (4.6 pips DOWN)
+  USD_CAD: spike_reversal (2.6 pips UP)
+  USD_CHF: continuation (1.8 pips DOWN)
+  USD_JPY: range (3.9 pips DOWN)
+
+ECB_President_Lagard_2024-04-17_21:00:
+  AUD_USD: ✗ Missing critical candles
+  EUR_USD: continuation (0.6 pips DOWN)
+  GBP_USD: spike_reversal (2.8 pips UP)
+  USD_CAD: spike_reversal (2.4 pips UP)
+  USD_CHF: spike_reversal (2.2 pips DOWN)
+  USD_JPY: continuation (5.8 pips DOWN)
+
+ECB_President_Lagard_2024-04-22_18:30:
+  AUD_USD: continuation (0.9 pips DOWN)
+  EUR_USD: spike_reversal (1.8 pips UP)
+  GBP_USD: fade (1.8 pips DOWN)
+  USD_CAD: spike_reversal (3.5 pips DOWN)
+  USD_CHF: fade (1.5 pips UP)
+  USD_JPY: continuation (0.6 pips DOWN)
+
+Employment_Change_2024-04-18_04:30:
+  AUD_USD: continuation (3.3 pips DOWN)
+  EUR_USD: range (1.2 pips DOWN)
+  GBP_USD: fade (2 pips DOWN)
+  USD_CAD: continuation (1.6 pips UP)
+  USD_CHF: continuation (1.6 pips UP)
+  USD_JPY: fade (3.3 pips UP)
+
+Employment_Change_q__2024-05-01_01:45:
+  AUD_USD: fade (4.4 pips UP)
+  EUR_USD: spike_reversal (2.3 pips UP)
+  GBP_USD: fade (3.9 pips UP)
+  USD_CAD: fade (3.5 pips DOWN)
+  USD_CHF: spike_reversal (1 pips DOWN)
+  USD_JPY: continuation (5.5 pips UP)
+
+FOMC_Member_Barkin_S_2024-04-16_20:00:
+  AUD_USD: spike_reversal (1.2 pips UP)
+  EUR_USD: spike_reversal (2.1 pips UP)
+  GBP_USD: spike_reversal (2.8 pips UP)
+  USD_CAD: continuation (2 pips UP)
+  USD_CHF: spike_reversal (1.2 pips DOWN)
+  USD_JPY: continuation (2.7 pips UP)
+
+FOMC_Member_Bostic_S_2024-04-18_18:00:
+  AUD_USD: fade (2.5 pips DOWN)
+  EUR_USD: continuation (2.1 pips DOWN)
+  GBP_USD: continuation (5.2 pips DOWN)
+  USD_CAD: spike_reversal (2.6 pips UP)
+  USD_CHF: continuation (1.9 pips UP)
+  USD_JPY: spike_reversal (1.3 pips UP)
+
+FOMC_Member_Bostic_S_2024-04-19_00:45:
+  AUD_USD: continuation (1.1 pips DOWN)
+  EUR_USD: spike_reversal (2.3 pips UP)
+  GBP_USD: continuation (1.2 pips DOWN)
+  USD_CAD: continuation (2.4 pips DOWN)
+  USD_CHF: continuation (0.8 pips DOWN)
+  USD_JPY: spike_reversal (2.8 pips UP)
+
+FOMC_Member_Bowman_S_2024-04-18_01:30:
+  AUD_USD: spike_reversal (8.2 pips DOWN)
+  EUR_USD: spike_reversal (3.2 pips DOWN)
+  GBP_USD: spike_reversal (3.7 pips DOWN)
+  USD_CAD: spike_reversal (5.8 pips UP)
+  USD_CHF: range (4.3 pips UP)
+  USD_JPY: spike_reversal (3.9 pips UP)
+
+FOMC_Member_Bowman_S_2024-04-18_16:05:
+  AUD_USD: continuation (4.2 pips DOWN)
+  EUR_USD: continuation (4.8 pips DOWN)
+  GBP_USD: continuation (4.5 pips DOWN)
+  USD_CAD: continuation (5.4 pips UP)
+  USD_CHF: continuation (3.6 pips UP)
+  USD_JPY: fade (2.5 pips UP)
+
+FOMC_Member_Bowman_S_2024-04-18_16:15:
+  AUD_USD: continuation (1.6 pips DOWN)
+  EUR_USD: continuation (1.9 pips DOWN)
+  GBP_USD: continuation (2.9 pips DOWN)
+  USD_CAD: spike_reversal (3.1 pips DOWN)
+  USD_CHF: continuation (2 pips UP)
+  USD_JPY: spike_reversal (1.5 pips DOWN)
+
+FOMC_Member_Daly_Spe_2024-04-16_03:00:
+  AUD_USD: continuation (3.2 pips DOWN)
+  EUR_USD: spike_reversal (1 pips DOWN)
+  GBP_USD: continuation (1.4 pips UP)
+  USD_CAD: spike_reversal (2.1 pips UP)
+  USD_CHF: spike_reversal (1.8 pips UP)
+  USD_JPY: continuation (2.5 pips UP)
+
+FOMC_Member_Jefferso_2024-04-16_16:00:
+  AUD_USD: range (5 pips DOWN)
+  EUR_USD: range (6.5 pips DOWN)
+  GBP_USD: range (8.4 pips DOWN)
+  USD_CAD: fade (3.2 pips DOWN)
+  USD_CHF: fade (1.4 pips DOWN)
+  USD_JPY: spike_reversal (3.3 pips DOWN)
+
+FOMC_Member_Mester_S_2024-04-18_00:30:
+  AUD_USD: continuation (3 pips UP)
+  EUR_USD: continuation (2.3 pips UP)
+  GBP_USD: continuation (2.7 pips UP)
+  USD_CAD: continuation (3.5 pips DOWN)
+  USD_CHF: continuation (2 pips DOWN)
+  USD_JPY: continuation (1.4 pips DOWN)
+
+FOMC_Member_Williams_2024-04-15_15:30:
+  AUD_USD: spike_reversal (2.5 pips DOWN)
+  EUR_USD: spike_reversal (2 pips DOWN)
+  GBP_USD: spike_reversal (2.4 pips DOWN)
+  USD_CAD: fade (2.2 pips UP)
+  USD_CHF: continuation (2.3 pips UP)
+  USD_JPY: spike_reversal (5 pips UP)
+
+FOMC_Member_Williams_2024-04-16_19:30:
+  AUD_USD: continuation (9.9 pips DOWN)
+  EUR_USD: continuation (8.8 pips DOWN)
+  GBP_USD: fade (10.3 pips DOWN)
+  USD_CAD: fade (14.2 pips UP)
+  USD_CHF: continuation (5.1 pips UP)
+  USD_JPY: fade (2.2 pips UP)
+
+FOMC_Member_Williams_2024-04-18_16:15:
+  AUD_USD: continuation (1.6 pips DOWN)
+  EUR_USD: continuation (1.9 pips DOWN)
+  GBP_USD: continuation (2.9 pips DOWN)
+  USD_CAD: spike_reversal (3.1 pips DOWN)
+  USD_CHF: continuation (2 pips UP)
+  USD_JPY: spike_reversal (1.5 pips DOWN)
+
+Final_CPI_y_y_2024-04-17_12:00:
+  AUD_USD: spike_reversal (2.9 pips UP)
+  EUR_USD: fade (7.8 pips UP)
+  GBP_USD: spike_reversal (4.8 pips UP)
+  USD_CAD: fade (4.8 pips DOWN)
+  USD_CHF: spike_reversal (2.4 pips DOWN)
+  USD_JPY: range (2.4 pips UP)
+
+Final_Core_CPI_y_y_2024-04-17_12:00:
+  AUD_USD: spike_reversal (2.9 pips UP)
+  EUR_USD: fade (7.8 pips UP)
+  GBP_USD: spike_reversal (4.8 pips UP)
+  USD_CAD: fade (4.8 pips DOWN)
+  USD_CHF: spike_reversal (2.4 pips DOWN)
+  USD_JPY: range (2.4 pips UP)
+
+French_Flash_GDP_q_q_2024-04-30_08:30:
+  AUD_USD: continuation (2.2 pips UP)
+  EUR_USD: spike_reversal (0.9 pips DOWN)
+  GBP_USD: continuation (1.1 pips UP)
+  USD_CAD: fade (1.3 pips DOWN)
+  USD_CHF: continuation (6 pips DOWN)
+  USD_JPY: spike_reversal (4.6 pips DOWN)
+
+French_Prelim_CPI_m__2024-04-30_09:45:
+  AUD_USD: spike_reversal (2.2 pips UP)
+  EUR_USD: spike_reversal (1.7 pips UP)
+  GBP_USD: spike_reversal (3.8 pips UP)
+  USD_CAD: spike_reversal (3.7 pips DOWN)
+  USD_CHF: spike_reversal (2.4 pips DOWN)
+  USD_JPY: continuation (3.6 pips DOWN)
+
+GDP_m_m_2024-04-30_15:30:
+  AUD_USD: continuation (2.8 pips DOWN)
+  EUR_USD: continuation (4.9 pips DOWN)
+  GBP_USD: continuation (7.4 pips DOWN)
+  USD_CAD: continuation (4.1 pips UP)
+  USD_CHF: continuation (3.6 pips UP)
+  USD_JPY: continuation (6.1 pips UP)
+
+German_PPI_m_m_2024-04-19_09:00:
+  AUD_USD: continuation (3.4 pips UP)
+  EUR_USD: continuation (4.6 pips UP)
+  GBP_USD: continuation (6.6 pips UP)
+  USD_CAD: continuation (5.4 pips DOWN)
+  USD_CHF: spike_reversal (2.6 pips UP)
+  USD_JPY: continuation (6.8 pips UP)
+
+German_Prelim_CPI_m__2024-04-29_00:00:
+  AUD_USD: fade (1.6 pips UP)
+  EUR_USD: fade (2.8 pips UP)
+  GBP_USD: fade (3.4 pips UP)
+  USD_CAD: fade (3.1 pips DOWN)
+  USD_CHF: continuation (6.6 pips DOWN)
+  USD_JPY: range (12.8 pips DOWN)
+
+German_Prelim_GDP_q__2024-04-30_11:00:
+  AUD_USD: continuation (3.7 pips DOWN)
+  EUR_USD: continuation (5.7 pips DOWN)
+  GBP_USD: fade (5.6 pips DOWN)
+  USD_CAD: continuation (5.6 pips UP)
+  USD_CHF: continuation (3 pips UP)
+  USD_JPY: continuation (2.1 pips UP)
+
+German_Retail_Sales__2024-04-30_09:00:
+  AUD_USD: continuation (6.4 pips UP)
+  EUR_USD: continuation (15.6 pips UP)
+  GBP_USD: range (12 pips UP)
+  USD_CAD: continuation (10.3 pips DOWN)
+  USD_CHF: continuation (11.1 pips DOWN)
+  USD_JPY: range (5.8 pips DOWN)
+
+German_Unemployment__2024-04-30_10:55:
+  AUD_USD: continuation (2.8 pips DOWN)
+  EUR_USD: continuation (1.8 pips DOWN)
+  GBP_USD: fade (5.4 pips DOWN)
+  USD_CAD: continuation (3 pips UP)
+  USD_CHF: spike_reversal (1.6 pips DOWN)
+  USD_JPY: continuation (2.3 pips UP)
+
+IPPI_m_m_2024-04-22_15:30:
+  AUD_USD: continuation (2 pips UP)
+  EUR_USD: spike_reversal (2.5 pips DOWN)
+  GBP_USD: continuation (3.8 pips UP)
+  USD_CAD: continuation (4.4 pips DOWN)
+  USD_CHF: fade (5.4 pips UP)
+  USD_JPY: fade (2.4 pips UP)
+
+Italian_Prelim_CPI_m_2024-04-30_12:00:
+  AUD_USD: fade (5.6 pips DOWN)
+  EUR_USD: fade (4.4 pips DOWN)
+  GBP_USD: fade (4.1 pips DOWN)
+  USD_CAD: fade (3.4 pips UP)
+  USD_CHF: fade (5.7 pips UP)
+  USD_JPY: continuation (15.6 pips UP)
+
+Italian_Prelim_GDP_q_2024-04-30_11:00:
+  AUD_USD: continuation (3.7 pips DOWN)
+  EUR_USD: continuation (5.7 pips DOWN)
+  GBP_USD: fade (5.6 pips DOWN)
+  USD_CAD: continuation (5.6 pips UP)
+  USD_CHF: continuation (3 pips UP)
+  USD_JPY: continuation (2.1 pips UP)
+
+Median_CPI_y_y_2024-04-16_15:30:
+  AUD_USD: fade (2.8 pips DOWN)
+  EUR_USD: fade (3.7 pips DOWN)
+  GBP_USD: fade (6.2 pips DOWN)
+  USD_CAD: range (4 pips UP)
+  USD_CHF: fade (2 pips UP)
+  USD_JPY: continuation (3.5 pips UP)
+
+National_Core_CPI_y__2024-04-19_02:30:
+  AUD_USD: spike_reversal (3 pips DOWN)
+  EUR_USD: fade (3.4 pips UP)
+  GBP_USD: continuation (2.6 pips DOWN)
+  USD_CAD: continuation (5.9 pips DOWN)
+  USD_CHF: spike_reversal (5.2 pips DOWN)
+  USD_JPY: continuation (6.7 pips UP)
+
+PPI_Input_m_m_2024-04-17_09:00:
+  AUD_USD: fade (8.6 pips DOWN)
+  EUR_USD: spike_reversal (4.2 pips DOWN)
+  GBP_USD: fade (5.1 pips DOWN)
+  USD_CAD: spike_reversal (7.6 pips UP)
+  USD_CHF: continuation (5.9 pips UP)
+  USD_JPY: continuation (5.2 pips DOWN)
+
+PPI_Output_m_m_2024-04-17_09:00:
+  AUD_USD: fade (8.6 pips DOWN)
+  EUR_USD: spike_reversal (4.2 pips DOWN)
+  GBP_USD: fade (5.1 pips DOWN)
+  USD_CAD: spike_reversal (7.6 pips UP)
+  USD_CHF: continuation (5.9 pips UP)
+  USD_JPY: continuation (5.2 pips DOWN)
+
+PPI_m_m_2024-04-15_09:30:
+  AUD_USD: spike_reversal (0.7 pips DOWN)
+  EUR_USD: spike_reversal (2.1 pips UP)
+  GBP_USD: range (3.8 pips DOWN)
+  USD_CAD: fade (2 pips DOWN)
+  USD_CHF: fade (1.8 pips UP)
+  USD_JPY: continuation (2.2 pips UP)
+
+PPI_q_q_2024-04-26_04:30:
+  AUD_USD: continuation (2 pips UP)
+  EUR_USD: fade (0.8 pips UP)
+  GBP_USD: continuation (1 pips UP)
+  USD_CAD: continuation (1.3 pips DOWN)
+  USD_CHF: spike_reversal (1.5 pips UP)
+  USD_JPY: range (4.6 pips UP)
+
+Prelim_Flash_GDP_q_q_2024-04-30_12:00:
+  AUD_USD: fade (5.6 pips DOWN)
+  EUR_USD: fade (4.4 pips DOWN)
+  GBP_USD: fade (4.1 pips DOWN)
+  USD_CAD: fade (3.4 pips UP)
+  USD_CHF: fade (5.7 pips UP)
+  USD_JPY: continuation (15.6 pips UP)
+
+RBA_Bulletin_2024-04-18_04:30:
+  AUD_USD: continuation (3.3 pips DOWN)
+  EUR_USD: range (1.2 pips DOWN)
+  GBP_USD: fade (2 pips DOWN)
+  USD_CAD: continuation (1.6 pips UP)
+  USD_CHF: continuation (1.6 pips UP)
+  USD_JPY: fade (3.3 pips UP)
+
+RBNZ_Gov_Orr_Speaks_2024-05-01_04:00:
+  AUD_USD: continuation (0.4 pips UP)
+  EUR_USD: continuation (0.8 pips DOWN)
+  GBP_USD: spike_reversal (1.1 pips DOWN)
+  USD_CAD: spike_reversal (0.6 pips UP)
+  USD_CHF: continuation (0.8 pips UP)
+  USD_JPY: spike_reversal (1.5 pips UP)
+
+Retail_Sales_m_m_2024-04-15_15:30:
+  AUD_USD: spike_reversal (2.5 pips DOWN)
+  EUR_USD: spike_reversal (2 pips DOWN)
+  GBP_USD: spike_reversal (2.4 pips DOWN)
+  USD_CAD: fade (2.2 pips UP)
+  USD_CHF: continuation (2.3 pips UP)
+  USD_JPY: spike_reversal (5 pips UP)
+
+Retail_Sales_m_m_2024-04-19_09:00:
+  AUD_USD: continuation (3.4 pips UP)
+  EUR_USD: continuation (4.6 pips UP)
+  GBP_USD: continuation (6.6 pips UP)
+  USD_CAD: continuation (5.4 pips DOWN)
+  USD_CHF: spike_reversal (2.6 pips UP)
+  USD_JPY: continuation (6.8 pips UP)
+
+Retail_Sales_m_m_2024-04-24_15:30:
+  AUD_USD: spike_reversal (1.8 pips UP)
+  EUR_USD: spike_reversal (4.6 pips UP)
+  GBP_USD: fade (7.4 pips UP)
+  USD_CAD: fade (2 pips DOWN)
+  USD_CHF: continuation (0.7 pips UP)
+  USD_JPY: continuation (2.2 pips UP)
+
+Retail_Sales_m_m_2024-04-30_04:30:
+  AUD_USD: continuation (3 pips DOWN)
+  EUR_USD: fade (1.5 pips DOWN)
+  GBP_USD: fade (1.6 pips DOWN)
+  USD_CAD: continuation (1 pips DOWN)
+  USD_CHF: continuation (1 pips DOWN)
+  USD_JPY: continuation (5.6 pips DOWN)
+
+Retail_Sales_y_y_2024-04-30_02:50:
+  AUD_USD: spike_reversal (3 pips UP)
+  EUR_USD: spike_reversal (2.5 pips UP)
+  GBP_USD: spike_reversal (3.2 pips UP)
+  USD_CAD: spike_reversal (3.6 pips DOWN)
+  USD_CHF: continuation (1.8 pips UP)
+  USD_JPY: continuation (3.2 pips UP)
+
+Revised_UoM_Inflatio_2024-04-26_17:00:
+  AUD_USD: fade (2.5 pips UP)
+  EUR_USD: spike_reversal (3.1 pips UP)
+  GBP_USD: fade (4.6 pips UP)
+  USD_CAD: continuation (2.6 pips DOWN)
+  USD_CHF: spike_reversal (2.4 pips DOWN)
+  USD_JPY: spike_reversal (9.8 pips DOWN)
+
+SNB_Chairman_Jordan__2024-04-26_11:00:
+  AUD_USD: continuation (1.3 pips UP)
+  EUR_USD: fade (2 pips DOWN)
+  GBP_USD: range (3.5 pips UP)
+  USD_CAD: continuation (2 pips DOWN)
+  USD_CHF: spike_reversal (2.2 pips UP)
+  USD_JPY: spike_reversal (4.9 pips UP)
+
+SPPI_y_y_2024-04-24_02:50:
+  AUD_USD: continuation (2.8 pips DOWN)
+  EUR_USD: continuation (2.9 pips DOWN)
+  GBP_USD: continuation (3.5 pips DOWN)
+  USD_CAD: continuation (3 pips UP)
+  USD_CHF: continuation (0.8 pips UP)
+  USD_JPY: continuation (1.4 pips UP)
+
+Spanish_Flash_CPI_y__2024-04-29_10:00:
+  AUD_USD: fade (1.3 pips UP)
+  EUR_USD: spike_reversal (2.1 pips DOWN)
+  GBP_USD: continuation (1.7 pips DOWN)
+  USD_CAD: continuation (1.9 pips DOWN)
+  USD_CHF: spike_reversal (3.8 pips DOWN)
+  USD_JPY: continuation (12.7 pips UP)
+
+Spanish_Flash_GDP_q__2024-04-30_10:00:
+  AUD_USD: fade (2.3 pips DOWN)
+  EUR_USD: spike_reversal (4.6 pips DOWN)
+  GBP_USD: fade (3 pips DOWN)
+  USD_CAD: spike_reversal (3.3 pips UP)
+  USD_CHF: spike_reversal (3 pips DOWN)
+  USD_JPY: spike_reversal (9.7 pips DOWN)
+
+Spanish_Unemployment_2024-04-26_10:00:
+  AUD_USD: continuation (3.4 pips DOWN)
+  EUR_USD: continuation (3.4 pips DOWN)
+  GBP_USD: spike_reversal (3 pips UP)
+  USD_CAD: continuation (2.5 pips UP)
+  USD_CHF: continuation (1.7 pips UP)
+  USD_JPY: spike_reversal (5.2 pips DOWN)
+
+Tokyo_Core_CPI_y_y_2024-04-26_02:30:
+  AUD_USD: continuation (1.3 pips DOWN)
+  EUR_USD: spike_reversal (1.8 pips UP)
+  GBP_USD: spike_reversal (1.2 pips UP)
+  USD_CAD: fade (1.7 pips DOWN)
+  USD_CHF: continuation (0.8 pips UP)
+  USD_JPY: continuation (6.6 pips DOWN)
+
+Trimmed_CPI_y_y_2024-04-16_15:30:
+  AUD_USD: fade (2.8 pips DOWN)
+  EUR_USD: fade (3.7 pips DOWN)
+  GBP_USD: fade (6.2 pips DOWN)
+  USD_CAD: range (4 pips UP)
+  USD_CHF: fade (2 pips UP)
+  USD_JPY: continuation (3.5 pips UP)
+
+Trimmed_Mean_CPI_q_q_2024-04-24_04:30:
+  AUD_USD: fade (2.2 pips DOWN)
+  EUR_USD: continuation (1.1 pips DOWN)
+  GBP_USD: continuation (2 pips DOWN)
+  USD_CAD: continuation (1.1 pips UP)
+  USD_CHF: spike_reversal (0.8 pips DOWN)
+  USD_JPY: fade (0.8 pips UP)
+
+Unemployment_Claims_2024-04-18_15:30:
+  AUD_USD: continuation (2.8 pips DOWN)
+  EUR_USD: continuation (1.9 pips DOWN)
+  GBP_USD: fade (2.6 pips DOWN)
+  USD_CAD: continuation (5.2 pips UP)
+  USD_CHF: spike_reversal (4.8 pips DOWN)
+  USD_JPY: spike_reversal (2.9 pips DOWN)
+
+Unemployment_Claims_2024-04-25_15:30:
+  AUD_USD: spike_reversal (2 pips DOWN)
+  EUR_USD: spike_reversal (1.8 pips DOWN)
+  GBP_USD: continuation (3.4 pips DOWN)
+  USD_CAD: continuation (2.7 pips DOWN)
+  USD_CHF: spike_reversal (2.5 pips DOWN)
+  USD_JPY: fade (2.2 pips UP)
+
+Unemployment_Rate_2024-04-16_09:00:
+  AUD_USD: continuation (5.9 pips UP)
+  EUR_USD: continuation (10.9 pips UP)
+  GBP_USD: continuation (7.3 pips UP)
+  USD_CAD: fade (7.8 pips DOWN)
+  USD_CHF: fade (5.4 pips DOWN)
+  USD_JPY: fade (4.2 pips UP)
+
+Unemployment_Rate_2024-04-18_04:30:
+  AUD_USD: continuation (3.3 pips DOWN)
+  EUR_USD: range (1.2 pips DOWN)
+  GBP_USD: fade (2 pips DOWN)
+  USD_CAD: continuation (1.6 pips UP)
+  USD_CHF: continuation (1.6 pips UP)
+  USD_JPY: fade (3.3 pips UP)
+
+Unemployment_Rate_2024-04-30_02:30:
+  AUD_USD: fade (2 pips DOWN)
+  EUR_USD: range (2.3 pips UP)
+  GBP_USD: continuation (3.2 pips UP)
+  USD_CAD: fade (1.8 pips UP)
+  USD_CHF: fade (1.3 pips UP)
+  USD_JPY: fade (4.8 pips UP)
+
+Unemployment_Rate_2024-05-01_01:45:
+  AUD_USD: fade (4.4 pips UP)
+  EUR_USD: spike_reversal (2.3 pips UP)
+  GBP_USD: fade (3.9 pips UP)
+  USD_CAD: fade (3.5 pips DOWN)
+  USD_CHF: spike_reversal (1 pips DOWN)
+  USD_JPY: continuation (5.5 pips UP)
+
+Done!
+[dotenv@17.2.3] injecting env (7) from .env.local -- tip: 🗂️ backup and recover secrets: https://dotenvx.com/ops
+=== Calculate Price Reactions ===
+
+Limit: 200 events
+
+Processing events with candle windows...
+
+Processed 0 events
+
+Done!
+[dotenv@17.2.3] injecting env (7) from .env.local -- tip: 👥 sync secrets across teammates & machines: https://dotenvx.com/ops
+=== Calculate Price Reactions ===
+
+Limit: 200 events
+
+Processing events with candle windows...
+
+Processed 0 events
+
+Done!
+[dotenv@17.2.3] injecting env (7) from .env.local -- tip: 🔄 add secrets lifecycle management: https://dotenvx.com/ops
+=== Calculate Price Reactions ===
+
+Limit: 200 events
+
+Processing events with candle windows...
+
+Processed 0 events
+
+Done!
+[dotenv@17.2.3] injecting env (7) from .env.local -- tip: 🛠️  run anywhere with `dotenvx run -- yourcommand`
+=== Calculate Price Reactions ===
+
+Limit: 200 events
+
+Processing events with candle windows...
+
+Processed 0 events
+
+Done!
+[dotenv@17.2.3] injecting env (7) from .env.local -- tip: ✅ audit secrets and track compliance: https://dotenvx.com/ops
+=== Calculate Price Reactions ===
+
+Limit: 200 events
+
+Processing events with candle windows...
+
+Processed 0 events
+
+Done!
+[dotenv@17.2.3] injecting env (7) from .env.local -- tip: ⚙️  specify custom .env file path with { path: '/custom/path/.env' }
+=== Calculate Price Reactions ===
+
+Limit: 200 events
+
+Processing events with candle windows...
+
+Processed 0 events
+
+Done!
+[dotenv@17.2.3] injecting env (7) from .env.local -- tip: 🛠️  run anywhere with `dotenvx run -- yourcommand`
+=== Calculate Price Reactions ===
+
+Limit: 200 events
+
+Processing events with candle windows...
+
+Processed 0 events
+
+Done!
+[dotenv@17.2.3] injecting env (7) from .env.local -- tip: ✅ audit secrets and track compliance: https://dotenvx.com/ops
+=== Calculate Price Reactions ===
+
+Limit: 200 events
+
+Processing events with candle windows...
+
+Processed 0 events
+
+Done!
+[dotenv@17.2.3] injecting env (7) from .env.local -- tip: 🛠️  run anywhere with `dotenvx run -- yourcommand`
+=== Calculate Price Reactions ===
+
+Limit: 200 events
+
+Processing events with candle windows...
+
+Processed 0 events
+
+Done!
+[dotenv@17.2.3] injecting env (7) from .env.local -- tip: ⚙️  suppress all logs with { quiet: true }
+=== Calculate Price Reactions ===
+
+Limit: 200 events
+
+Processing events with candle windows...
+
+Processed 0 events
+
+Done!
+[dotenv@17.2.3] injecting env (7) from .env.local -- tip: ⚙️  write to custom object with { processEnv: myObject }
+=== Calculate Price Reactions ===
+
+Limit: 200 events
+
+Processing events with candle windows...
+
+Processed 0 events
+
+Done!
+[dotenv@17.2.3] injecting env (7) from .env.local -- tip: ⚙️  specify custom .env file path with { path: '/custom/path/.env' }
+=== Calculate Price Reactions ===
+
+Limit: 200 events
+
+Processing events with candle windows...
+
+Processed 0 events
+
+Done!
+[dotenv@17.2.3] injecting env (7) from .env.local -- tip: 🛠️  run anywhere with `dotenvx run -- yourcommand`
+=== Calculate Price Reactions ===
+
+Limit: 200 events
+
+Processing events with candle windows...
+
+Processed 0 events
+
+Done!
+[dotenv@17.2.3] injecting env (7) from .env.local -- tip: ⚙️  write to custom object with { processEnv: myObject }
+=== Calculate Price Reactions ===
+
+Limit: 200 events
+
+Processing events with candle windows...
+
+Processed 0 events
+
+Done!

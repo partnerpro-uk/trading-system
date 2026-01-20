@@ -1,0 +1,11 @@
+[dotenv@17.2.3] injecting env (7) from .env.local -- tip: ⚙️  specify custom .env file path with { path: '/custom/path/.env' }
+=== Regenerate All Statistics ===
+
+Regenerating statistics for all event type + pair combinations...
+
+Error: Error
+    at ConvexHttpClient.action (/Users/essamustapha/Documents/Cursor/trading-system/node_modules/convex/src/browser/http_client.ts:481:13)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async main (/Users/essamustapha/Documents/Cursor/trading-system/scripts/regenerate-statistics.ts:34:20)
+
+Done!

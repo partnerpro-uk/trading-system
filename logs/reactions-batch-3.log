@@ -1,0 +1,10 @@
+[dotenv@17.2.3] injecting env (7) from .env.local -- tip: ⚙️  enable debug logging with { debug: true }
+=== Calculate Price Reactions ===
+
+Limit: 500 events
+
+Processing events with candle windows...
+
+Processed 0 events
+
+Done!
