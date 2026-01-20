@@ -11,10 +11,10 @@ CREATE TABLE IF NOT EXISTS candles (
     time DateTime64(3) CODEC(DoubleDelta),
     pair LowCardinality(String),
     timeframe LowCardinality(String),
-    open Decimal(10, 5) CODEC(Gorilla),
-    high Decimal(10, 5) CODEC(Gorilla),
-    low Decimal(10, 5) CODEC(Gorilla),
-    close Decimal(10, 5) CODEC(Gorilla),
+    open Decimal(10, 5),
+    high Decimal(10, 5),
+    low Decimal(10, 5),
+    close Decimal(10, 5),
     volume UInt32 CODEC(T64),
 
     -- Velocity data

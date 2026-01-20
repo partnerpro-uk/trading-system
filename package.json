@@ -6,9 +6,18 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "setup:timescale": "NODE_TLS_REJECT_UNAUTHORIZED=0 npx tsx scripts/setup-timescale.ts",
+    "setup:clickhouse": "npx tsx scripts/setup-clickhouse.ts",
+    "migrate": "NODE_TLS_REJECT_UNAUTHORIZED=0 npx tsx scripts/migrate/run-migration.ts",
+    "migrate:candles-ch": "NODE_TLS_REJECT_UNAUTHORIZED=0 npx tsx scripts/migrate/export-candles-to-clickhouse.ts",
+    "migrate:candles-ts": "NODE_TLS_REJECT_UNAUTHORIZED=0 npx tsx scripts/migrate/export-recent-to-timescale.ts",
+    "migrate:news": "NODE_TLS_REJECT_UNAUTHORIZED=0 npx tsx scripts/migrate/export-news-to-databases.ts",
+    "verify-migration": "NODE_TLS_REJECT_UNAUTHORIZED=0 npx tsx scripts/migrate/verify-migration.ts"
   },
   "dependencies": {
+    "@clickhouse/client": "^1.16.0",
+    "@supabase/supabase-js": "^2.90.1",
     "clsx": "^2.1.1",
     "convex": "^1.31.5",
     "date-fns": "^4.1.0",
@@ -17,6 +26,7 @@
     "lightweight-charts": "^5.1.0",
     "lucide-react": "^0.562.0",
     "next": "16.1.3",
+    "pg": "^8.17.1",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-resizable-panels": "^4.4.1",
@@ -27,6 +37,7 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
+    "@types/pg": "^8.16.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
