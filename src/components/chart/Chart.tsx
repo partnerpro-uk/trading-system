@@ -13,6 +13,7 @@ import {
 import { useQuery, useConvex } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { LivePrice } from "@/hooks/useOandaStream";
+import { useCandles } from "@/hooks/useCandles";
 import { SessionLabelsPrimitive, SessionData } from "./SessionLabelsPrimitive";
 import { NewsMarkersPrimitive, NewsEventData, HistoricalEventHistory } from "./NewsMarkersPrimitive";
 import { LivePricePrimitive } from "./LivePricePrimitive";
@@ -76,11 +77,13 @@ interface ChartProps {
   pair: string;
   timeframe: string;
   magnetMode: boolean;
-  showSessions: boolean;
+  showSessionBgs: boolean;
+  showSessionLines: boolean;
+  showSessionLabels: boolean;
   showNews: boolean;
   livePrice?: LivePrice | null; // Passed from parent to avoid duplicate streams
   onResetViewReady?: (resetFn: () => void) => void; // Expose reset function to parent
-  onEventSelect?: (event: NewsEventData | null) => void; // Callback when event is clicked
+  onEventSelect?: (event: NewsEventData | null, allEventsAtTimestamp?: NewsEventData[]) => void; // Callback when event is clicked
 }
 
 // Get candle duration in milliseconds based on timeframe (M5 is floor - no M1)
@@ -98,7 +101,7 @@ function getTimeframeDuration(timeframe: string): number {
   return durations[timeframe] || 15 * 60 * 1000;
 }
 
-export function Chart({ pair, timeframe, magnetMode, showSessions, showNews, livePrice, onResetViewReady, onEventSelect }: ChartProps) {
+export function Chart({ pair, timeframe, magnetMode, showSessionBgs, showSessionLines, showSessionLabels, showNews, livePrice, onResetViewReady, onEventSelect }: ChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -113,6 +116,13 @@ export function Chart({ pair, timeframe, magnetMode, showSessions, showNews, liv
   const sessionLabelsPrimitiveRef = useRef<SessionLabelsPrimitive | null>(null);
   const newsMarkersPrimitiveRef = useRef<NewsMarkersPrimitive | null>(null);
   const livePricePrimitiveRef = useRef<LivePricePrimitive | null>(null);
+
+  // Scroll-back loading ref (prevents duplicate load calls)
+  const scrollLoadingRef = useRef(false);
+
+  // Track previous candle count for scroll position preservation
+  const prevCandleCountRef = useRef(0);
+  const prevOldestTimestampRef = useRef<number | null>(null);
 
   // OHLC display state
   const [hoveredCandle, setHoveredCandle] = useState<{
@@ -161,33 +171,112 @@ export function Chart({ pair, timeframe, magnetMode, showSessions, showNews, liv
     [convex, pair, historicalCache]
   );
 
-  // Subscribe to ALL candles from Convex (reactive - updates when DB changes)
-  const candles = useQuery(api.candles.getCandles, { pair, timeframe });
+  // Fetch candles from dual-database (Timescale + ClickHouse) via API route
+  const {
+    candles,
+    isLoading: candlesLoading,
+    isLoadingMore,
+    hasMoreHistory,
+    loadMoreHistory
+  } = useCandles({ pair, timeframe });
 
   // Current session indicator (for badge display)
   const currentSession = useQuery(api.sessions.getCurrentSession, {});
 
-  // Compute time range for news query - 14 days back + 2 weeks forward
-  // (Reduced from 60 days to avoid Convex 32k document read limit)
-  const newsTimeRange = candles && candles.length > 0
-    ? {
-        start: candles[candles.length - 1].timestamp - 14 * 24 * 60 * 60 * 1000, // 14 days back
-        end: candles[candles.length - 1].timestamp + 14 * 24 * 60 * 60 * 1000,   // 2 weeks forward
-      }
-    : null;
+  // News events state (fetched from TimescaleDB API)
+  const [newsEvents, setNewsEvents] = useState<NewsEventData[] | null>(null);
 
-  // Subscribe to news events in time range
-  const newsEvents = useQuery(
-    api.newsQueries.getEventsInTimeRange,
-    newsTimeRange && showNews
-      ? {
-          pair,
-          startTime: newsTimeRange.start,
-          endTime: newsTimeRange.end,
-          impactFilter: "high",
-        }
-      : "skip"
-  );
+  // Fetch news events from TimescaleDB when candles or showNews changes
+  useEffect(() => {
+    if (!candles || candles.length === 0 || !showNews) {
+      setNewsEvents(null);
+      return;
+    }
+
+    // Compute time range: 14 days back + 2 weeks forward
+    const startTime = candles[candles.length - 1].timestamp - 14 * 24 * 60 * 60 * 1000;
+    const endTime = candles[candles.length - 1].timestamp + 14 * 24 * 60 * 60 * 1000;
+
+    const fetchNewsEvents = async () => {
+      try {
+        // Fetch all events (no impact filter) - API now returns reactions and stats
+        const res = await fetch(
+          `/api/news/events?pair=${pair}&startTime=${startTime}&endTime=${endTime}`
+        );
+        if (!res.ok) throw new Error("Failed to fetch news events");
+        const data = await res.json();
+
+        // Map API response to NewsEventData format (now includes reaction, stats, and timezone)
+        const events: NewsEventData[] = data.events.map((e: {
+          eventId: string;
+          eventType: string;
+          name: string;
+          currency: string;
+          timestamp: number;
+          impact: string;
+          actual: string | null;
+          forecast: string | null;
+          previous: string | null;
+          datetimeUtc: string | null;
+          datetimeNewYork: string | null;
+          datetimeLondon: string | null;
+          tradingSession: string | null;
+          reaction: {
+            spikeDirection: "UP" | "DOWN" | "NEUTRAL" | null;
+            spikeMagnitudePips: number | null;
+            patternType: string | null;
+            didReverse: boolean | null;
+            reversalMagnitudePips: number | null;
+            finalMatchesSpike: boolean | null;
+            priceAtEvent: number | null;
+            spikeHigh: number | null;
+            spikeLow: number | null;
+          } | null;
+          stats: {
+            totalOccurrences: number;
+            avgSpikePips: number | null;
+            upCount: number;
+            downCount: number;
+            reversalRate: number | null;
+          } | null;
+        }) => ({
+          eventId: e.eventId,
+          name: e.name,
+          eventType: e.eventType,
+          currency: e.currency,
+          timestamp: e.timestamp,
+          impact: e.impact as "high" | "medium" | "low",
+          actual: e.actual ?? undefined,
+          forecast: e.forecast ?? undefined,
+          previous: e.previous ?? undefined,
+          datetimeUtc: e.datetimeUtc ?? undefined,
+          datetimeNewYork: e.datetimeNewYork ?? undefined,
+          datetimeLondon: e.datetimeLondon ?? undefined,
+          tradingSession: e.tradingSession ?? undefined,
+          reaction: e.reaction ? {
+            spikeDirection: e.reaction.spikeDirection,
+            spikeMagnitudePips: e.reaction.spikeMagnitudePips,
+            patternType: e.reaction.patternType,
+            didReverse: e.reaction.didReverse,
+          } : null,
+          stats: e.stats ? {
+            totalOccurrences: e.stats.totalOccurrences,
+            avgSpikePips: e.stats.avgSpikePips,
+            upCount: e.stats.upCount,
+            downCount: e.stats.downCount,
+            reversalRate: e.stats.reversalRate,
+          } : null,
+        }));
+
+        setNewsEvents(events);
+      } catch (error) {
+        console.error("Error fetching news events:", error);
+        setNewsEvents(null);
+      }
+    };
+
+    fetchNewsEvents();
+  }, [candles, showNews, pair]);
 
   // Initialize chart
   useEffect(() => {
@@ -437,6 +526,23 @@ export function Chart({ pair, timeframe, magnetMode, showSessions, showNews, liv
       candleDataRef.current.set(candle.time as number, candle);
     }
 
+    // Detect if older candles were prepended (scroll-back load)
+    const currentOldestTimestamp = candles[0].timestamp;
+    const prevCount = prevCandleCountRef.current;
+    const prevOldestTimestamp = prevOldestTimestampRef.current;
+    const isPrepend = prevOldestTimestamp !== null &&
+                      currentOldestTimestamp < prevOldestTimestamp &&
+                      candles.length > prevCount;
+
+    // Calculate number of candles prepended
+    const prependedCount = isPrepend ? (candles.length - prevCount) : 0;
+
+    // Get current visible range BEFORE updating data (for scroll preservation)
+    let currentVisibleRange = null;
+    if (chartRef.current && isPrepend) {
+      currentVisibleRange = chartRef.current.timeScale().getVisibleLogicalRange();
+    }
+
     seriesRef.current.setData(formattedData);
     lastCandleRef.current = formattedData[formattedData.length - 1];
 
@@ -468,19 +574,30 @@ export function Chart({ pair, timeframe, magnetMode, showSessions, showNews, liv
       futureSeriesRef.current.setData(futureData);
     }
 
-    // Set initial view - show recent candles
+    // Handle scroll position
     if (chartRef.current) {
-      // Show ~100 most recent candles instead of all data
-      const visibleBars = Math.min(100, formattedData.length);
-      // Calculate bars for ~5 days forward in visible range
-      const duration = getTimeframeDuration(timeframe);
-      const msPerDay = 24 * 60 * 60 * 1000;
-      const visibleFutureBars = Math.ceil((5 * msPerDay) / duration);
-      chartRef.current.timeScale().setVisibleLogicalRange({
-        from: formattedData.length - visibleBars,
-        to: formattedData.length + visibleFutureBars, // Show ~5 days into future initially
-      });
+      if (isPrepend && currentVisibleRange) {
+        // Preserve scroll position by shifting the range by the number of prepended candles
+        chartRef.current.timeScale().setVisibleLogicalRange({
+          from: currentVisibleRange.from + prependedCount,
+          to: currentVisibleRange.to + prependedCount,
+        });
+      } else if (prevCount === 0) {
+        // Initial load - show recent ~100 candles
+        const visibleBars = Math.min(100, formattedData.length);
+        const duration = getTimeframeDuration(timeframe);
+        const msPerDay = 24 * 60 * 60 * 1000;
+        const visibleFutureBars = Math.ceil((5 * msPerDay) / duration);
+        chartRef.current.timeScale().setVisibleLogicalRange({
+          from: formattedData.length - visibleBars,
+          to: formattedData.length + visibleFutureBars,
+        });
+      }
     }
+
+    // Update refs for next render
+    prevCandleCountRef.current = candles.length;
+    prevOldestTimestampRef.current = currentOldestTimestamp;
   }, [candles, timeframe]);
 
   // Session H/L stepping lines (like TradingView linebr style)
@@ -500,7 +617,7 @@ export function Chart({ pair, timeframe, magnetMode, showSessions, showNews, liv
     }
     sessionLineSeriesRef.current.clear();
 
-    if (!showSessions) return;
+    if (!showSessionLines) return;
 
     // Generate session windows from candle timestamps (LIVE)
     const liveSessions = generateSessionWindowsFromCandles(candles);
@@ -575,12 +692,12 @@ export function Chart({ pair, timeframe, magnetMode, showSessions, showNews, liv
       }
       sessionLineSeriesRef.current.clear();
     };
-  }, [candles, showSessions]);
+  }, [candles, showSessionLines]);
 
   // Draw session background colors (on background canvas)
   // LIVE - generates session windows from candle data, no DB dependency
   useEffect(() => {
-    if (!sessionBgCanvasRef.current || !chartRef.current || !containerRef.current || !showSessions || !candles || candles.length === 0) {
+    if (!sessionBgCanvasRef.current || !chartRef.current || !containerRef.current || !showSessionBgs || !candles || candles.length === 0) {
       // Clear canvas if sessions disabled or no candles
       if (sessionBgCanvasRef.current) {
         const ctx = sessionBgCanvasRef.current.getContext("2d");
@@ -642,14 +759,14 @@ export function Chart({ pair, timeframe, magnetMode, showSessions, showNews, liv
       timeScale.unsubscribeVisibleLogicalRangeChange(drawBackgrounds);
       window.removeEventListener("resize", handleResize);
     };
-  }, [candles, showSessions]);
+  }, [candles, showSessionBgs]);
 
   // Update session labels primitive with session data
   // LIVE - generates session H/L from candle data, no DB dependency
   useEffect(() => {
     if (!sessionLabelsPrimitiveRef.current) return;
 
-    if (!showSessions || !candles || candles.length === 0) {
+    if (!showSessionLabels || !candles || candles.length === 0) {
       sessionLabelsPrimitiveRef.current.updateSessions([]);
       return;
     }
@@ -686,7 +803,7 @@ export function Chart({ pair, timeframe, magnetMode, showSessions, showNews, liv
     }
 
     sessionLabelsPrimitiveRef.current.updateSessions(sessionData);
-  }, [candles, showSessions]);
+  }, [candles, showSessionLabels]);
 
   // Update news markers primitive with news events
   useEffect(() => {
@@ -697,7 +814,7 @@ export function Chart({ pair, timeframe, magnetMode, showSessions, showNews, liv
       return;
     }
 
-    // Convert to NewsEventData format
+    // Convert to NewsEventData format (including timezone fields)
     const eventData: NewsEventData[] = newsEvents.map((e) => ({
       eventId: e.eventId,
       name: e.name,
@@ -709,6 +826,10 @@ export function Chart({ pair, timeframe, magnetMode, showSessions, showNews, liv
       forecast: e.forecast ?? undefined,
       previous: e.previous ?? undefined,
       surpriseZScore: e.surpriseZScore ?? undefined,
+      datetimeUtc: e.datetimeUtc ?? undefined,
+      datetimeNewYork: e.datetimeNewYork ?? undefined,
+      datetimeLondon: e.datetimeLondon ?? undefined,
+      tradingSession: e.tradingSession ?? undefined,
       reaction: e.reaction ?? null,
       stats: e.stats ?? null,
     }));
@@ -755,13 +876,13 @@ export function Chart({ pair, timeframe, magnetMode, showSessions, showNews, liv
       // Check if click is in the bottom area where flags are drawn (flags at 18px from bottom)
       const chartHeight = rect.height;
       if (y > chartHeight - 50) {
-        const event = newsMarkersPrimitiveRef.current.getEventAtCoordinate(x);
-        if (event) {
+        const allEvents = newsMarkersPrimitiveRef.current.getAllEventsAtCoordinate(x);
+        if (allEvents.length > 0) {
           // Prevent chart from handling this click
           e.stopPropagation();
-          // Call the callback to open the panel instead of toggling tooltip
+          // Call the callback to open the panel with the first event and all events at timestamp
           if (onEventSelect) {
-            onEventSelect(event);
+            onEventSelect(allEvents[0], allEvents);
           }
         }
       } else {
@@ -867,10 +988,44 @@ export function Chart({ pair, timeframe, magnetMode, showSessions, showNews, liv
     }
   }, [onResetViewReady, resetView]);
 
+  // Scroll-back detection: load more history when user scrolls to the left edge
+  useEffect(() => {
+    if (!chartRef.current || !candles || candles.length === 0) return;
+
+    const chart = chartRef.current;
+    const timeScale = chart.timeScale();
+
+    const handleVisibleRangeChange = () => {
+      // Skip if already loading or no more history
+      if (scrollLoadingRef.current || isLoadingMore || !hasMoreHistory) return;
+
+      const visibleRange = timeScale.getVisibleLogicalRange();
+      if (!visibleRange) return;
+
+      // Trigger load when user is viewing candles near the left edge (within 50 bars)
+      const threshold = 50;
+      if (visibleRange.from < threshold) {
+        scrollLoadingRef.current = true;
+        loadMoreHistory().finally(() => {
+          scrollLoadingRef.current = false;
+        });
+      }
+    };
+
+    timeScale.subscribeVisibleLogicalRangeChange(handleVisibleRangeChange);
+
+    return () => {
+      timeScale.unsubscribeVisibleLogicalRangeChange(handleVisibleRangeChange);
+    };
+  }, [candles, isLoadingMore, hasMoreHistory, loadMoreHistory]);
+
   useEffect(() => {
     lastCandleRef.current = null;
     // Clear candle data ref for new timeframe
     candleDataRef.current.clear();
+    // Reset scroll-back tracking refs
+    prevCandleCountRef.current = 0;
+    prevOldestTimestampRef.current = null;
   }, [pair, timeframe]);
 
   // Countdown timer - updates every second showing time until candle close
@@ -998,14 +1153,21 @@ export function Chart({ pair, timeframe, magnetMode, showSessions, showNews, liv
 
       {/* Live price line + countdown are rendered by LivePricePrimitive directly on the chart canvas */}
 
-      {!candles && (
+      {candlesLoading && (
         <div className="absolute inset-0 flex items-center justify-center bg-gray-950/50">
           <div className="text-gray-400">Loading chart data...</div>
         </div>
       )}
-      {candles && candles.length === 0 && (
+      {!candlesLoading && candles && candles.length === 0 && (
         <div className="absolute inset-0 flex items-center justify-center bg-gray-950/50">
-          <div className="text-gray-400">No candle data available. Fetch data first.</div>
+          <div className="text-gray-400">No candle data available for {pair} {timeframe}.</div>
+        </div>
+      )}
+
+      {/* Loading more history indicator */}
+      {isLoadingMore && (
+        <div className="absolute top-2 right-2 z-10 px-2 py-1 text-xs bg-gray-800/80 rounded text-gray-300">
+          Loading history...
         </div>
       )}
     </div>

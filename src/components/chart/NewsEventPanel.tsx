@@ -1,7 +1,6 @@
 "use client";
 
-import { useQuery } from "convex/react";
-import { api } from "../../../convex/_generated/api";
+import { useState, useEffect } from "react";
 import { NewsEventData, HistoricalEventReaction } from "./NewsMarkersPrimitive";
 
 // Lower-is-better events for classification
@@ -27,32 +26,101 @@ function classifyOutcome(
   return actual > forecast ? "beat" : "miss";
 }
 
-interface NewsEventPanelProps {
-  event: NewsEventData;
-  pair: string;
-  onClose: () => void;
+interface HistoricalData {
+  beatHistory: HistoricalEventReaction[];
+  missHistory: HistoricalEventReaction[];
+  rawHistory: HistoricalEventReaction[];
+  hasForecastData: boolean;
 }
 
-export function NewsEventPanel({ event, pair, onClose }: NewsEventPanelProps) {
-  // Fetch historical events for this event type (excluding current event)
-  const historicalData = useQuery(api.newsQueries.getHistoricalEventsForTooltip, {
-    eventType: event.eventType,
-    pair,
-    beforeTimestamp: event.timestamp,
-    limit: 10,
-  });
+interface NewsEventPanelProps {
+  event: NewsEventData;
+  allEventsAtTimestamp: NewsEventData[];
+  pair: string;
+  onClose: () => void;
+  onNavigate: (event: NewsEventData) => void;
+}
 
-  const eventDate = new Date(event.timestamp);
-  const dateStr = eventDate.toLocaleDateString("en-GB", {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
-  const timeStr = eventDate.toLocaleTimeString("en-GB", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+export function NewsEventPanel({ event, allEventsAtTimestamp, pair, onClose, onNavigate }: NewsEventPanelProps) {
+  // Multi-event navigation
+  const currentIndex = allEventsAtTimestamp.findIndex(e => e.eventId === event.eventId);
+  const hasMultipleEvents = allEventsAtTimestamp.length > 1;
+  const canGoPrev = currentIndex > 0;
+  const canGoNext = currentIndex < allEventsAtTimestamp.length - 1;
+
+  const handlePrev = () => {
+    if (canGoPrev) {
+      onNavigate(allEventsAtTimestamp[currentIndex - 1]);
+    }
+  };
+
+  const handleNext = () => {
+    if (canGoNext) {
+      onNavigate(allEventsAtTimestamp[currentIndex + 1]);
+    }
+  };
+  // Fetch historical events from ClickHouse via API
+  const [historicalData, setHistoricalData] = useState<HistoricalData | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchHistorical = async () => {
+      setIsLoading(true);
+      try {
+        const res = await fetch(
+          `/api/news/historical?eventType=${encodeURIComponent(event.eventType)}&pair=${pair}&beforeTimestamp=${event.timestamp}&limit=10`
+        );
+        if (res.ok) {
+          const data = await res.json();
+          setHistoricalData(data);
+        } else {
+          setHistoricalData({ beatHistory: [], missHistory: [], rawHistory: [], hasForecastData: false });
+        }
+      } catch (error) {
+        console.error("Error fetching historical data:", error);
+        setHistoricalData({ beatHistory: [], missHistory: [], rawHistory: [], hasForecastData: false });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchHistorical();
+  }, [event.eventType, event.timestamp, pair]);
+
+  // Use NY time if available (matches ForexFactory display), fallback to UTC timestamp
+  const formatDateTimeFromNY = (nyDatetime: string | undefined, timestamp: number) => {
+    if (nyDatetime) {
+      // Parse "2025-01-20 07:00:00" format
+      const [datePart, timePart] = nyDatetime.split(" ");
+      const [year, month, day] = datePart.split("-").map(Number);
+      const [hour, minute] = timePart.split(":").map(Number);
+
+      const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+      const d = new Date(year, month - 1, day);
+
+      return {
+        dateStr: `${dayNames[d.getDay()]}, ${day} ${monthNames[month - 1]} ${year}`,
+        timeStr: `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")} ET`,
+      };
+    }
+    // Fallback to timestamp
+    const eventDate = new Date(timestamp);
+    return {
+      dateStr: eventDate.toLocaleDateString("en-GB", {
+        weekday: "short",
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      }),
+      timeStr: eventDate.toLocaleTimeString("en-GB", {
+        hour: "2-digit",
+        minute: "2-digit",
+      }) + " UTC",
+    };
+  };
+
+  const { dateStr, timeStr } = formatDateTimeFromNY(event.datetimeNewYork, event.timestamp);
 
   const isFutureEvent = !event.actual;
 
@@ -68,6 +136,37 @@ export function NewsEventPanel({ event, pair, onClose }: NewsEventPanelProps) {
 
   return (
     <div className="h-full bg-gray-900 border-l border-gray-800 flex flex-col overflow-hidden">
+      {/* Multi-event navigation */}
+      {hasMultipleEvents && (
+        <div className="flex items-center justify-between px-4 py-2 border-b border-gray-800 bg-gray-800/50">
+          <button
+            onClick={handlePrev}
+            disabled={!canGoPrev}
+            className={`p-1 rounded transition-colors ${
+              canGoPrev ? "text-gray-300 hover:text-white hover:bg-gray-700" : "text-gray-600 cursor-not-allowed"
+            }`}
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
+          <span className="text-sm text-gray-400">
+            {currentIndex + 1} of {allEventsAtTimestamp.length} events
+          </span>
+          <button
+            onClick={handleNext}
+            disabled={!canGoNext}
+            className={`p-1 rounded transition-colors ${
+              canGoNext ? "text-gray-300 hover:text-white hover:bg-gray-700" : "text-gray-600 cursor-not-allowed"
+            }`}
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </button>
+        </div>
+      )}
+
       {/* Header */}
       <div className="p-4 border-b border-gray-800 flex items-start justify-between">
         <div>
@@ -161,9 +260,9 @@ export function NewsEventPanel({ event, pair, onClose }: NewsEventPanelProps) {
           Historical Reactions
         </h3>
 
-        {!historicalData ? (
+        {isLoading ? (
           <div className="text-gray-500 text-sm">Loading...</div>
-        ) : historicalData.rawHistory.length === 0 ? (
+        ) : !historicalData || historicalData.rawHistory.length === 0 ? (
           <div className="text-gray-500 text-sm">No historical data available</div>
         ) : (
           <div className="space-y-3">
@@ -302,29 +401,44 @@ function HistoricalEventCard({ event, pair = "EUR_USD" }: { event: HistoricalEve
   // Handle potentially missing settlement prices gracefully
   const spikePips = event.spikeDirection === "UP" ? event.spikeMagnitudePips : -event.spikeMagnitudePips;
 
+  // Use T-15 baseline pips if available (more accurate), otherwise calculate from T+0
+  const usePipsFromBaseline = event.pipsFromBaseline !== undefined;
+  const baseline = event.priceAtMinus15m ?? event.priceAtEvent;
+
   // Helper to safely calculate pips (returns null if data is missing)
   const calcPips = (price: number | undefined): number | null => {
-    if (price === undefined || price === null || event.priceAtEvent === undefined) return null;
-    const pips = (price - event.priceAtEvent) / pipValue;
+    if (price === undefined || price === null || baseline === undefined) return null;
+    const pips = (price - baseline) / pipValue;
     return isNaN(pips) ? null : pips;
   };
 
-  const pipsAt15m = calcPips(event.priceAtPlus15m);
-  const pipsAt30m = calcPips(event.priceAtPlus30m);
-  const pipsAt1hr = calcPips(event.priceAtPlus1hr);
-  const pipsAt3hr = calcPips(event.priceAtPlus3hr);
+  // Use pre-calculated pips from baseline if available
+  const pipsAt15m = usePipsFromBaseline ? event.pipsFromBaseline?.at15m ?? null : calcPips(event.priceAtPlus15m);
+  const pipsAt30m = usePipsFromBaseline ? event.pipsFromBaseline?.at30m ?? null : calcPips(event.priceAtPlus30m);
+  const pipsAt60m = usePipsFromBaseline ? event.pipsFromBaseline?.at60m ?? null : calcPips(event.priceAtPlus60m ?? event.priceAtPlus1hr);
+  const pipsAt90m = usePipsFromBaseline ? event.pipsFromBaseline?.at90m ?? null : calcPips(event.priceAtPlus90m);
 
   // Check if we have settlement data to show
-  const hasSettlementData = pipsAt15m !== null || pipsAt30m !== null || pipsAt1hr !== null;
+  const hasSettlementData = pipsAt15m !== null || pipsAt30m !== null || pipsAt60m !== null;
 
   // Max for bar scaling (use largest absolute value across all timepoints)
-  const allPips = [spikePips, pipsAt15m, pipsAt30m, pipsAt1hr, pipsAt3hr].filter((p): p is number => p !== null && !isNaN(p));
+  const allPips = [spikePips, pipsAt15m, pipsAt30m, pipsAt60m, pipsAt90m].filter((p): p is number => p !== null && !isNaN(p));
   const maxPips = Math.max(...allPips.map(Math.abs), 10);
+
+  // Window type indicator
+  const windowLabel = event.windowMinutes === 105 ? "Extended" : event.windowMinutes === 75 ? "High Impact" : "";
 
   return (
     <div className="rounded bg-gray-800/50 p-2.5">
-      {/* Date */}
-      <div className="text-xs font-medium text-gray-300 mb-2">{dateStr}</div>
+      {/* Date and window type */}
+      <div className="flex items-center justify-between mb-2">
+        <div className="text-xs font-medium text-gray-300">{dateStr}</div>
+        {windowLabel && (
+          <div className="text-[10px] text-gray-500 px-1.5 py-0.5 bg-gray-700/50 rounded">
+            {windowLabel}
+          </div>
+        )}
+      </div>
 
       {/* Spike info */}
       <div className="flex items-center gap-2 mb-1">
@@ -354,17 +468,17 @@ function HistoricalEventCard({ event, pair = "EUR_USD" }: { event: HistoricalEve
         )}
       </div>
 
-      {/* Mini diverging bar chart - full settlement timeline */}
+      {/* Mini diverging bar chart - full settlement timeline from T-15 baseline */}
       {hasSettlementData ? (
         <div className="border-t border-gray-700/50 pt-2 mt-1">
           <div className="text-xs text-gray-600 mb-1 text-center">
-            ◄ DOWN │ UP ►
+            ◄ DOWN │ UP ► {usePipsFromBaseline && <span className="text-gray-700">(from T-15)</span>}
           </div>
           <SettlementBar label="Spike" pips={spikePips} maxPips={maxPips} />
           {pipsAt15m !== null && <SettlementBar label="+15m" pips={pipsAt15m} maxPips={maxPips} />}
           {pipsAt30m !== null && <SettlementBar label="+30m" pips={pipsAt30m} maxPips={maxPips} />}
-          {pipsAt1hr !== null && <SettlementBar label="+1hr" pips={pipsAt1hr} maxPips={maxPips} />}
-          {pipsAt3hr !== null && <SettlementBar label="+3hr" pips={pipsAt3hr} maxPips={maxPips} />}
+          {pipsAt60m !== null && <SettlementBar label="+60m" pips={pipsAt60m} maxPips={maxPips} />}
+          {pipsAt90m !== null && <SettlementBar label="+90m" pips={pipsAt90m} maxPips={maxPips} />}
         </div>
       ) : (
         <div className="border-t border-gray-700/50 pt-2 mt-1 text-xs text-gray-600 text-center">

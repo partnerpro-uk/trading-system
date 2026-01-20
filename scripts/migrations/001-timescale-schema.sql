@@ -1,17 +1,16 @@
 -- ═══════════════════════════════════════════════════════════════════════════════
--- TIMESCALE SCHEMA - Trading System Migration
+-- SUPABASE SCHEMA - Trading System (No TimescaleDB)
 -- ═══════════════════════════════════════════════════════════════════════════════
--- Execute in Supabase SQL Editor
--- Prerequisite: CREATE EXTENSION IF NOT EXISTS timescaledb;
+-- Works with standard PostgreSQL on Supabase
 
 -- ═══════════════════════════════════════════════════════════════════════════════
--- CANDLES (Hot Data - Last 30 Days, M1 base for aggregates)
+-- CANDLES (Hot Data - Last 30 Days)
 -- ═══════════════════════════════════════════════════════════════════════════════
 
 CREATE TABLE IF NOT EXISTS candles (
     time TIMESTAMPTZ NOT NULL,
     pair VARCHAR(10) NOT NULL,
-    timeframe VARCHAR(5) NOT NULL,  -- 'M1', 'M5', 'M15', 'H1', 'H4', 'D'
+    timeframe VARCHAR(5) NOT NULL,
     open DECIMAL(10, 5) NOT NULL,
     high DECIMAL(10, 5) NOT NULL,
     low DECIMAL(10, 5) NOT NULL,
@@ -19,34 +18,12 @@ CREATE TABLE IF NOT EXISTS candles (
     volume INTEGER DEFAULT 0,
     complete BOOLEAN DEFAULT true,
 
-    -- Velocity data (calculated on close)
-    time_to_high_ms INTEGER,
-    time_to_low_ms INTEGER,
-    high_formed_first BOOLEAN,
-    body_percent DECIMAL(5, 2),
-    range_pips DECIMAL(8, 2),
-    is_displacement BOOLEAN DEFAULT false,
-    displacement_score DECIMAL(5, 2),
-
     PRIMARY KEY (time, pair, timeframe)
 );
 
--- Convert to hypertable (automatic time partitioning)
-SELECT create_hypertable('candles', 'time', if_not_exists => TRUE);
-
--- Indexes for common queries
-CREATE INDEX IF NOT EXISTS idx_candles_pair_tf ON candles (pair, timeframe, time DESC);
-CREATE INDEX IF NOT EXISTS idx_candles_displacement ON candles (pair, timeframe, is_displacement) WHERE is_displacement = true;
-
--- Enable compression for data older than 7 days
-ALTER TABLE candles SET (
-    timescaledb.compress,
-    timescaledb.compress_segmentby = 'pair, timeframe'
-);
-SELECT add_compression_policy('candles', INTERVAL '7 days', if_not_exists => TRUE);
-
--- Retention policy: Keep only last 30 days (older data goes to ClickHouse)
-SELECT add_retention_policy('candles', INTERVAL '30 days', if_not_exists => TRUE);
+-- Optimized indexes for chart queries
+CREATE INDEX IF NOT EXISTS idx_candles_pair_tf_time ON candles (pair, timeframe, time DESC);
+CREATE INDEX IF NOT EXISTS idx_candles_recent ON candles (time DESC) WHERE time > NOW() - INTERVAL '30 days';
 
 -- ═══════════════════════════════════════════════════════════════════════════════
 -- NEWS EVENTS
@@ -63,23 +40,19 @@ CREATE TABLE IF NOT EXISTS news_events (
 
     timestamp TIMESTAMPTZ NOT NULL,
 
-    impact VARCHAR(10) NOT NULL,  -- 'high', 'medium', 'low'
+    impact VARCHAR(10) NOT NULL,
 
     actual VARCHAR(50),
     forecast VARCHAR(50),
     previous VARCHAR(50),
-    surprise_factor DECIMAL(10, 4),
 
     description TEXT,
 
-    -- Window configuration
     window_before_minutes INTEGER DEFAULT 15,
-    window_after_minutes INTEGER NOT NULL,  -- 15, 60, or 90 based on tier
+    window_after_minutes INTEGER NOT NULL,
 
-    -- Metadata
     raw_source VARCHAR(20) DEFAULT 'jblanked',
     fetched_at TIMESTAMPTZ DEFAULT NOW(),
-    data_version INTEGER DEFAULT 1,
 
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -90,7 +63,7 @@ CREATE INDEX IF NOT EXISTS idx_news_currency ON news_events (currency);
 CREATE INDEX IF NOT EXISTS idx_news_impact ON news_events (impact);
 
 -- ═══════════════════════════════════════════════════════════════════════════════
--- PRICE REACTIONS (Calculated from windows)
+-- PRICE REACTIONS
 -- ═══════════════════════════════════════════════════════════════════════════════
 
 CREATE TABLE IF NOT EXISTS event_price_reactions (
@@ -98,49 +71,35 @@ CREATE TABLE IF NOT EXISTS event_price_reactions (
     event_id VARCHAR(100) NOT NULL REFERENCES news_events(event_id),
     pair VARCHAR(10) NOT NULL,
 
-    -- Pre-event prices
     price_at_minus_15m DECIMAL(10, 5),
     price_at_minus_5m DECIMAL(10, 5),
     price_at_event DECIMAL(10, 5) NOT NULL,
 
-    -- Spike data (first 5 minutes)
     spike_high DECIMAL(10, 5) NOT NULL,
     spike_low DECIMAL(10, 5) NOT NULL,
-    spike_direction VARCHAR(10) NOT NULL,  -- 'UP', 'DOWN'
+    spike_direction VARCHAR(10) NOT NULL,
     spike_magnitude_pips DECIMAL(8, 2) NOT NULL,
     time_to_spike_seconds INTEGER,
-    spike_velocity_pips_per_sec DECIMAL(8, 4),
 
-    -- Settlement prices
     price_at_plus_5m DECIMAL(10, 5),
     price_at_plus_15m DECIMAL(10, 5),
     price_at_plus_30m DECIMAL(10, 5),
     price_at_plus_60m DECIMAL(10, 5),
-    price_at_plus_90m DECIMAL(10, 5),
 
-    -- Pattern classification
     pattern_type VARCHAR(50) NOT NULL,
-
     did_reverse BOOLEAN NOT NULL,
     reversal_magnitude_pips DECIMAL(8, 2),
-    reversal_time_minutes INTEGER,
-    final_direction VARCHAR(10),
     final_matches_spike BOOLEAN NOT NULL,
-
-    -- Metadata
-    calculation_version INTEGER DEFAULT 1,
-    calculated_at TIMESTAMPTZ DEFAULT NOW(),
 
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_epr_event ON event_price_reactions (event_id);
 CREATE INDEX IF NOT EXISTS idx_epr_pair ON event_price_reactions (pair);
-CREATE INDEX IF NOT EXISTS idx_epr_pattern ON event_price_reactions (pattern_type);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_epr_event_pair ON event_price_reactions (event_id, pair);
 
 -- ═══════════════════════════════════════════════════════════════════════════════
--- SESSION LEVELS (Daily)
+-- SESSION LEVELS
 -- ═══════════════════════════════════════════════════════════════════════════════
 
 CREATE TABLE IF NOT EXISTS session_levels (
@@ -148,203 +107,64 @@ CREATE TABLE IF NOT EXISTS session_levels (
     pair VARCHAR(10) NOT NULL,
     date DATE NOT NULL,
 
-    -- Asia (00:00 - 08:00 UTC)
     asia_high DECIMAL(10, 5),
     asia_low DECIMAL(10, 5),
     asia_open DECIMAL(10, 5),
     asia_close DECIMAL(10, 5),
-    asia_range_pips DECIMAL(8, 2),
-    asia_time_of_high TIME,
-    asia_time_of_low TIME,
 
-    -- London (08:00 - 16:00 UTC)
     london_high DECIMAL(10, 5),
     london_low DECIMAL(10, 5),
     london_open DECIMAL(10, 5),
     london_close DECIMAL(10, 5),
-    london_range_pips DECIMAL(8, 2),
-    london_swept_asia_high BOOLEAN,
-    london_swept_asia_low BOOLEAN,
-    london_time_of_high TIME,
-    london_time_of_low TIME,
 
-    -- New York (13:00 - 21:00 UTC)
     ny_high DECIMAL(10, 5),
     ny_low DECIMAL(10, 5),
     ny_open DECIMAL(10, 5),
     ny_close DECIMAL(10, 5),
-    ny_range_pips DECIMAL(8, 2),
-    ny_swept_london_high BOOLEAN,
-    ny_swept_london_low BOOLEAN,
-    ny_swept_asia_high BOOLEAN,
-    ny_swept_asia_low BOOLEAN,
-    ny_time_of_high TIME,
-    ny_time_of_low TIME,
 
-    -- Daily
     daily_high DECIMAL(10, 5),
     daily_low DECIMAL(10, 5),
     daily_open DECIMAL(10, 5),
     daily_close DECIMAL(10, 5),
-    daily_range_pips DECIMAL(8, 2),
-    high_before_low BOOLEAN,
-
-    -- Previous day reference
-    previous_day_high DECIMAL(10, 5),
-    previous_day_low DECIMAL(10, 5),
-    swept_pdh BOOLEAN,
-    swept_pdl BOOLEAN,
 
     created_at TIMESTAMPTZ DEFAULT NOW(),
 
     UNIQUE(pair, date)
 );
 
-CREATE INDEX IF NOT EXISTS idx_session_pair ON session_levels (pair, date DESC);
+CREATE INDEX IF NOT EXISTS idx_session_pair_date ON session_levels (pair, date DESC);
 
 -- ═══════════════════════════════════════════════════════════════════════════════
--- HTF LEVELS (Weekly/Monthly/Quarterly/Yearly)
+-- FUNCTIONS
 -- ═══════════════════════════════════════════════════════════════════════════════
 
-CREATE TABLE IF NOT EXISTS htf_levels (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    pair VARCHAR(10) NOT NULL,
-    date DATE NOT NULL,
+-- Get candles for chart
+CREATE OR REPLACE FUNCTION get_candles(
+    p_pair VARCHAR,
+    p_timeframe VARCHAR,
+    p_start TIMESTAMPTZ,
+    p_end TIMESTAMPTZ DEFAULT NOW()
+)
+RETURNS TABLE (
+    time TIMESTAMPTZ,
+    open DECIMAL,
+    high DECIMAL,
+    low DECIMAL,
+    close DECIMAL,
+    volume INTEGER
+) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT c.time, c.open, c.high, c.low, c.close, c.volume
+    FROM candles c
+    WHERE c.pair = p_pair
+    AND c.timeframe = p_timeframe
+    AND c.time BETWEEN p_start AND p_end
+    ORDER BY c.time ASC;
+END;
+$$ LANGUAGE plpgsql;
 
-    -- Weekly
-    weekly_high DECIMAL(10, 5),
-    weekly_low DECIMAL(10, 5),
-    weekly_open DECIMAL(10, 5),
-    previous_week_high DECIMAL(10, 5),
-    previous_week_low DECIMAL(10, 5),
-
-    -- Monthly
-    monthly_high DECIMAL(10, 5),
-    monthly_low DECIMAL(10, 5),
-    monthly_open DECIMAL(10, 5),
-    previous_month_high DECIMAL(10, 5),
-    previous_month_low DECIMAL(10, 5),
-
-    -- Quarterly
-    quarterly_high DECIMAL(10, 5),
-    quarterly_low DECIMAL(10, 5),
-    quarterly_open DECIMAL(10, 5),
-    previous_quarter_high DECIMAL(10, 5),
-    previous_quarter_low DECIMAL(10, 5),
-
-    -- Yearly
-    yearly_high DECIMAL(10, 5),
-    yearly_low DECIMAL(10, 5),
-    yearly_open DECIMAL(10, 5),
-    previous_year_high DECIMAL(10, 5),
-    previous_year_low DECIMAL(10, 5),
-
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-
-    UNIQUE(pair, date)
-);
-
-CREATE INDEX IF NOT EXISTS idx_htf_pair ON htf_levels (pair, date DESC);
-
--- ═══════════════════════════════════════════════════════════════════════════════
--- FVGs (Fair Value Gaps)
--- ═══════════════════════════════════════════════════════════════════════════════
-
-CREATE TABLE IF NOT EXISTS fvgs (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    pair VARCHAR(10) NOT NULL,
-    timeframe VARCHAR(5) NOT NULL,
-    timestamp TIMESTAMPTZ NOT NULL,
-
-    direction VARCHAR(10) NOT NULL,  -- 'bullish', 'bearish'
-
-    gap_high DECIMAL(10, 5) NOT NULL,
-    gap_low DECIMAL(10, 5) NOT NULL,
-    gap_size_pips DECIMAL(8, 2) NOT NULL,
-    gap_midpoint DECIMAL(10, 5) NOT NULL,
-
-    displacement_velocity DECIMAL(10, 4),
-    displacement_body_percent DECIMAL(5, 2),
-
-    session_formed VARCHAR(20),  -- 'asia', 'london', 'new_york'
-    near_htf_level BOOLEAN DEFAULT false,
-    htf_level_name VARCHAR(50),
-
-    status VARCHAR(20) NOT NULL DEFAULT 'unfilled',  -- 'unfilled', 'partial', 'filled'
-    fill_percentage DECIMAL(5, 2) DEFAULT 0,
-    time_to_fill_minutes INTEGER,
-    candles_to_fill INTEGER,
-
-    traded BOOLEAN DEFAULT false,
-    trade_result VARCHAR(20),
-
-    created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-SELECT create_hypertable('fvgs', 'timestamp', if_not_exists => TRUE);
-CREATE INDEX IF NOT EXISTS idx_fvgs_pair_tf ON fvgs (pair, timeframe, timestamp DESC);
-CREATE INDEX IF NOT EXISTS idx_fvgs_status ON fvgs (status) WHERE status = 'unfilled';
-
--- ═══════════════════════════════════════════════════════════════════════════════
--- SWEEPS (Liquidity Sweeps)
--- ═══════════════════════════════════════════════════════════════════════════════
-
-CREATE TABLE IF NOT EXISTS sweeps (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    pair VARCHAR(10) NOT NULL,
-    timestamp TIMESTAMPTZ NOT NULL,
-
-    level_swept VARCHAR(50) NOT NULL,  -- 'asia_high', 'pdl', 'pwh', 'equal_lows'
-    level_price DECIMAL(10, 5) NOT NULL,
-    direction VARCHAR(10) NOT NULL,  -- 'above', 'below'
-
-    exceeded_by_pips DECIMAL(8, 2) NOT NULL,
-    time_beyond_level_seconds INTEGER,
-    candles_beyond_level INTEGER,
-    sweep_velocity DECIMAL(10, 4),
-
-    immediate_reversal BOOLEAN,
-    reversal_followed BOOLEAN,
-    reversal_size_pips DECIMAL(8, 2),
-    reversal_duration_candles INTEGER,
-
-    traded BOOLEAN DEFAULT false,
-    trade_result VARCHAR(20),
-
-    created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-SELECT create_hypertable('sweeps', 'timestamp', if_not_exists => TRUE);
-CREATE INDEX IF NOT EXISTS idx_sweeps_pair ON sweeps (pair, timestamp DESC);
-CREATE INDEX IF NOT EXISTS idx_sweeps_level ON sweeps (level_swept);
-
--- ═══════════════════════════════════════════════════════════════════════════════
--- VIEWS FOR COMMON QUERIES
--- ═══════════════════════════════════════════════════════════════════════════════
-
--- Latest session levels per pair
-CREATE OR REPLACE VIEW latest_session_levels AS
-SELECT DISTINCT ON (pair) *
-FROM session_levels
-ORDER BY pair, date DESC;
-
--- Unfilled FVGs (last 7 days)
-CREATE OR REPLACE VIEW active_fvgs AS
-SELECT * FROM fvgs
-WHERE status = 'unfilled'
-AND timestamp > NOW() - INTERVAL '7 days';
-
--- Recent sweeps (last 24 hours)
-CREATE OR REPLACE VIEW recent_sweeps AS
-SELECT * FROM sweeps
-WHERE timestamp > NOW() - INTERVAL '24 hours'
-ORDER BY timestamp DESC;
-
--- ═══════════════════════════════════════════════════════════════════════════════
--- FUNCTIONS FOR COMMON OPERATIONS
--- ═══════════════════════════════════════════════════════════════════════════════
-
--- Get news events near a timestamp
+-- Get nearby news events
 CREATE OR REPLACE FUNCTION get_nearby_news(
     p_timestamp TIMESTAMPTZ,
     p_window_hours INTEGER DEFAULT 4
@@ -372,5 +192,410 @@ BEGIN
     WHERE n.timestamp BETWEEN p_timestamp - (p_window_hours || ' hours')::INTERVAL
                           AND p_timestamp + (p_window_hours || ' hours')::INTERVAL
     ORDER BY ABS(EXTRACT(EPOCH FROM (n.timestamp - p_timestamp)));
+END;
+$$ LANGUAGE plpgsql;
+
+-- Upsert candle (for streaming)
+CREATE OR REPLACE FUNCTION upsert_candle(
+    p_time TIMESTAMPTZ,
+    p_pair VARCHAR,
+    p_timeframe VARCHAR,
+    p_open DECIMAL,
+    p_high DECIMAL,
+    p_low DECIMAL,
+    p_close DECIMAL,
+    p_volume INTEGER DEFAULT 0,
+    p_complete BOOLEAN DEFAULT true
+)
+RETURNS VOID AS $$
+BEGIN
+    INSERT INTO candles (time, pair, timeframe, open, high, low, close, volume, complete)
+    VALUES (p_time, p_pair, p_timeframe, p_open, p_high, p_low, p_close, p_volume, p_complete)
+    ON CONFLICT (time, pair, timeframe)
+    DO UPDATE SET
+        high = GREATEST(candles.high, EXCLUDED.high),
+        low = LEAST(candles.low, EXCLUDED.low),
+        close = EXCLUDED.close,
+        volume = candles.volume + EXCLUDED.volume,
+        complete = EXCLUDED.complete;
+END;
+$$ LANGUAGE plpgsql;
+
+-- ═══════════════════════════════════════════════════════════════════════════════
+-- ENABLE ROW LEVEL SECURITY (optional, for future auth)
+-- ═══════════════════════════════════════════════════════════════════════════════
+
+-- ALTER TABLE candles ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE news_events ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE event_price_reactions ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE session_levels ENABLE ROW LEVEL SECURITY;
+
+-- ═══════════════════════════════════════════════════════════════════════════════
+-- EVENT DEFINITIONS (Reference data - synced from JSON)
+-- ═══════════════════════════════════════════════════════════════════════════════
+
+CREATE TABLE IF NOT EXISTS event_definitions (
+    event_name VARCHAR(255) PRIMARY KEY,
+    aliases TEXT[] DEFAULT '{}',
+    category VARCHAR(50),
+    short_description TEXT,
+    detailed_description TEXT,
+    measures TEXT,
+    release_frequency VARCHAR(50),
+    typical_release_time VARCHAR(100),
+    source_authority VARCHAR(255),
+    country VARCHAR(10),
+    primary_currency VARCHAR(5),
+    secondary_currencies TEXT[] DEFAULT '{}',
+    typical_impact VARCHAR(20),
+    beat_interpretation JSONB,
+    miss_interpretation JSONB,
+    global_spillover VARCHAR(20),
+    spillover_description TEXT,
+    revision_tendency TEXT,
+    related_events TEXT[] DEFAULT '{}',
+    historical_context TEXT,
+    trading_notes TEXT,
+
+    synced_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_event_def_category ON event_definitions (category);
+CREATE INDEX IF NOT EXISTS idx_event_def_currency ON event_definitions (primary_currency);
+CREATE INDEX IF NOT EXISTS idx_event_def_impact ON event_definitions (typical_impact);
+
+-- ═══════════════════════════════════════════════════════════════════════════════
+-- SPEAKER DEFINITIONS (Reference data - synced from JSON)
+-- ═══════════════════════════════════════════════════════════════════════════════
+
+CREATE TABLE IF NOT EXISTS speaker_definitions (
+    event_name VARCHAR(255) PRIMARY KEY,
+    category VARCHAR(50),
+    speaker JSONB NOT NULL,
+    typical_impact VARCHAR(20),
+    what_to_watch TEXT,
+    market_sensitivity TEXT,
+    regime_change_potential VARCHAR(20),
+    regime_change_examples TEXT,
+    primary_currency VARCHAR(5),
+    related_events TEXT[] DEFAULT '{}',
+
+    synced_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_speaker_def_category ON speaker_definitions (category);
+CREATE INDEX IF NOT EXISTS idx_speaker_def_currency ON speaker_definitions (primary_currency);
+CREATE INDEX IF NOT EXISTS idx_speaker_def_impact ON speaker_definitions (typical_impact);
+
+-- ═══════════════════════════════════════════════════════════════════════════════
+-- HELPER FUNCTION: Get event definition with news event
+-- ═══════════════════════════════════════════════════════════════════════════════
+
+CREATE OR REPLACE FUNCTION get_upcoming_news_with_definitions(
+    p_hours_ahead INTEGER DEFAULT 24
+)
+RETURNS TABLE (
+    event_id VARCHAR,
+    event_type VARCHAR,
+    name VARCHAR,
+    currency VARCHAR,
+    impact VARCHAR,
+    timestamp TIMESTAMPTZ,
+    -- From event_definitions
+    short_description TEXT,
+    beat_interpretation JSONB,
+    miss_interpretation JSONB,
+    global_spillover VARCHAR
+) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT
+        n.event_id,
+        n.event_type,
+        n.name,
+        n.currency,
+        n.impact,
+        n.timestamp,
+        ed.short_description,
+        ed.beat_interpretation,
+        ed.miss_interpretation,
+        ed.global_spillover
+    FROM news_events n
+    LEFT JOIN event_definitions ed ON n.name = ed.event_name
+    WHERE n.timestamp BETWEEN NOW() AND NOW() + (p_hours_ahead || ' hours')::INTERVAL
+    ORDER BY n.timestamp ASC;
+END;
+$$ LANGUAGE plpgsql;
+
+-- ═══════════════════════════════════════════════════════════════════════════════
+-- GEOPOLITICAL EVENTS (Reference data - synced from JSON)
+-- Duration-based events like wars, pandemics, crises
+-- ═══════════════════════════════════════════════════════════════════════════════
+
+CREATE TABLE IF NOT EXISTS geopolitical_events (
+    event_id VARCHAR(100) PRIMARY KEY,
+    event_name VARCHAR(255) NOT NULL,
+    aliases TEXT[] DEFAULT '{}',
+    category VARCHAR(50) NOT NULL,
+
+    -- Status and dates
+    status VARCHAR(20) NOT NULL,  -- active/completed/structural/dormant
+    start_date DATE NOT NULL,
+    end_date DATE,
+    peak_crisis_date DATE,
+
+    -- Complex nested data as JSONB
+    dates JSONB,
+    rumor_period JSONB,
+    phases JSONB NOT NULL,
+    pair_impacts JSONB NOT NULL,
+    macro_backdrop JSONB,
+    lessons_learned JSONB,
+
+    -- Text fields
+    short_description TEXT,
+    detailed_description TEXT,
+    trading_notes TEXT,
+    global_spillover VARCHAR(20),
+
+    synced_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_geo_status ON geopolitical_events (status);
+CREATE INDEX IF NOT EXISTS idx_geo_category ON geopolitical_events (category);
+CREATE INDEX IF NOT EXISTS idx_geo_dates ON geopolitical_events (start_date, end_date);
+CREATE INDEX IF NOT EXISTS idx_geo_spillover ON geopolitical_events (global_spillover);
+
+-- ═══════════════════════════════════════════════════════════════════════════════
+-- GPR INDEX (Geopolitical Risk Index - Monthly data from Caldara-Iacoviello)
+-- Source: https://www.matteoiacoviello.com/gpr.htm
+-- This is the only truly unique macro indicator not captured elsewhere
+-- ═══════════════════════════════════════════════════════════════════════════════
+
+CREATE TABLE IF NOT EXISTS gpr_index (
+    month DATE PRIMARY KEY,  -- First of month
+    gpr_global DECIMAL(8, 2) NOT NULL,  -- Global GPR Index
+    gpr_us DECIMAL(8, 2),               -- US-specific GPR
+    gpr_threats DECIMAL(8, 2),          -- GPR Threats component
+    gpr_acts DECIMAL(8, 2),             -- GPR Acts component
+    synced_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_gpr_month ON gpr_index (month DESC);
+
+-- ═══════════════════════════════════════════════════════════════════════════════
+-- GEOPOLITICAL NEWS DRAFTS (Claude-discovered events pending human approval)
+-- When Claude finds a new event via web search, it stages here for review
+-- ═══════════════════════════════════════════════════════════════════════════════
+
+CREATE TABLE IF NOT EXISTS geopolitical_news_drafts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+    -- Discovery context
+    discovered_at TIMESTAMPTZ DEFAULT NOW(),
+    discovery_trigger VARCHAR(100),        -- 'price_anomaly', 'scheduled_check', 'user_query'
+    trigger_pair VARCHAR(10),              -- Which pair triggered discovery (if price anomaly)
+    trigger_description TEXT,              -- "XAU_USD spiked $50 with no scheduled news"
+
+    -- News details
+    headline TEXT NOT NULL,
+    source_url TEXT,
+    source_name VARCHAR(100),
+    event_date DATE NOT NULL,
+
+    -- Claude's analysis
+    affected_pairs TEXT[],                 -- ['XAU_USD', 'USD_CNH', 'OIL']
+    estimated_impact VARCHAR(20),          -- 'high', 'medium', 'low'
+    category VARCHAR(50),                  -- 'geopolitical_conflict', 'sanctions', etc.
+    claude_summary TEXT,                   -- Claude's interpretation
+
+    -- Status
+    status VARCHAR(20) DEFAULT 'pending',  -- 'pending', 'approved', 'rejected', 'merged'
+    reviewed_at TIMESTAMPTZ,
+    merged_to_event_id VARCHAR(100),       -- If merged into existing geopolitical_events entry
+
+    -- Raw search results for reference
+    search_results JSONB
+);
+
+CREATE INDEX IF NOT EXISTS idx_geo_drafts_status ON geopolitical_news_drafts (status);
+CREATE INDEX IF NOT EXISTS idx_geo_drafts_date ON geopolitical_news_drafts (event_date DESC);
+CREATE INDEX IF NOT EXISTS idx_geo_drafts_pairs ON geopolitical_news_drafts USING GIN (affected_pairs);
+
+-- ═══════════════════════════════════════════════════════════════════════════════
+-- LIVE NEWS HEADLINES (GDELT/News API feed for real-time awareness)
+-- Background worker populates; Claude queries for recent context
+-- ═══════════════════════════════════════════════════════════════════════════════
+
+CREATE TABLE IF NOT EXISTS news_headlines (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+    -- Source info
+    source VARCHAR(50) NOT NULL,           -- 'gdelt', 'finnhub', 'newsapi'
+    headline TEXT NOT NULL,
+    url TEXT,
+    published_at TIMESTAMPTZ NOT NULL,
+
+    -- Classification
+    countries TEXT[] DEFAULT '{}',         -- ['US', 'VE', 'CN']
+    themes TEXT[] DEFAULT '{}',            -- ['military', 'oil', 'sanctions']
+    currencies TEXT[] DEFAULT '{}',        -- ['USD', 'XAU', 'CNH']
+
+    -- Sentiment/importance
+    sentiment_score DECIMAL(4, 2),         -- -1 to 1
+    goldstein_scale DECIMAL(4, 2),         -- GDELT conflict scale (-10 to 10)
+    importance_score INTEGER,              -- 1-10 computed score
+
+    -- Metadata
+    fetched_at TIMESTAMPTZ DEFAULT NOW(),
+
+    -- Dedup
+    UNIQUE(source, url)
+);
+
+CREATE INDEX IF NOT EXISTS idx_headlines_published ON news_headlines (published_at DESC);
+CREATE INDEX IF NOT EXISTS idx_headlines_currencies ON news_headlines USING GIN (currencies);
+CREATE INDEX IF NOT EXISTS idx_headlines_themes ON news_headlines USING GIN (themes);
+CREATE INDEX IF NOT EXISTS idx_headlines_importance ON news_headlines (importance_score DESC)
+    WHERE importance_score >= 7;
+
+-- ═══════════════════════════════════════════════════════════════════════════════
+-- HELPER: Get recent high-importance headlines for a currency
+-- ═══════════════════════════════════════════════════════════════════════════════
+
+CREATE OR REPLACE FUNCTION get_recent_headlines(
+    p_currency VARCHAR DEFAULT NULL,
+    p_hours INTEGER DEFAULT 24,
+    p_min_importance INTEGER DEFAULT 5
+)
+RETURNS TABLE (
+    headline TEXT,
+    source VARCHAR,
+    published_at TIMESTAMPTZ,
+    countries TEXT[],
+    themes TEXT[],
+    importance_score INTEGER,
+    url TEXT
+) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT
+        h.headline,
+        h.source,
+        h.published_at,
+        h.countries,
+        h.themes,
+        h.importance_score,
+        h.url
+    FROM news_headlines h
+    WHERE h.published_at > NOW() - (p_hours || ' hours')::INTERVAL
+    AND h.importance_score >= p_min_importance
+    AND (p_currency IS NULL OR p_currency = ANY(h.currencies))
+    ORDER BY h.importance_score DESC, h.published_at DESC
+    LIMIT 20;
+END;
+$$ LANGUAGE plpgsql;
+
+-- ═══════════════════════════════════════════════════════════════════════════════
+-- HELPER FUNCTION: Get active geopolitical events affecting a pair
+-- ═══════════════════════════════════════════════════════════════════════════════
+
+CREATE OR REPLACE FUNCTION get_active_geopolitical_events(
+    p_pair VARCHAR DEFAULT NULL
+)
+RETURNS TABLE (
+    event_id VARCHAR,
+    event_name VARCHAR,
+    category VARCHAR,
+    status VARCHAR,
+    start_date DATE,
+    short_description TEXT,
+    trading_notes TEXT,
+    pair_impact JSONB,
+    global_spillover VARCHAR
+) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT
+        g.event_id,
+        g.event_name,
+        g.category,
+        g.status,
+        g.start_date,
+        g.short_description,
+        g.trading_notes,
+        CASE
+            WHEN p_pair IS NOT NULL THEN g.pair_impacts->REPLACE(p_pair, '/', '_')
+            ELSE NULL::JSONB
+        END as pair_impact,
+        g.global_spillover
+    FROM geopolitical_events g
+    WHERE g.status IN ('active', 'structural', 'dormant')
+    ORDER BY
+        CASE g.status
+            WHEN 'active' THEN 1
+            WHEN 'structural' THEN 2
+            WHEN 'dormant' THEN 3
+        END,
+        g.start_date DESC;
+END;
+$$ LANGUAGE plpgsql;
+
+-- ═══════════════════════════════════════════════════════════════════════════════
+-- HELPER FUNCTION: Get relevant geopolitical context for a pair and timeframe
+-- Returns events with relevance score above threshold for given timeframe
+-- ═══════════════════════════════════════════════════════════════════════════════
+
+CREATE OR REPLACE FUNCTION get_geopolitical_context(
+    p_pair VARCHAR,
+    p_timeframe VARCHAR DEFAULT 'daily'  -- '15m', '1h', '4h', 'daily', 'weekly'
+)
+RETURNS TABLE (
+    event_id VARCHAR,
+    event_name VARCHAR,
+    status VARCHAR,
+    short_description TEXT,
+    trading_notes TEXT,
+    relevance_score INTEGER,
+    pair_impact JSONB
+) AS $$
+DECLARE
+    v_threshold INTEGER;
+    v_score_key TEXT;
+BEGIN
+    -- Map timeframe to relevance score key and threshold
+    v_score_key := CASE p_timeframe
+        WHEN '15m' THEN 'intraday_15m'
+        WHEN '1h' THEN 'short_term_1h_4h'
+        WHEN '4h' THEN 'short_term_1h_4h'
+        WHEN 'daily' THEN 'swing_daily'
+        WHEN 'weekly' THEN 'position_weekly'
+        ELSE 'swing_daily'
+    END;
+
+    -- Set threshold based on timeframe (shorter = higher threshold)
+    v_threshold := CASE p_timeframe
+        WHEN '15m' THEN 7
+        WHEN '1h' THEN 6
+        WHEN '4h' THEN 5
+        WHEN 'daily' THEN 5
+        WHEN 'weekly' THEN 3
+        ELSE 5
+    END;
+
+    RETURN QUERY
+    SELECT
+        g.event_id,
+        g.event_name,
+        g.status,
+        g.short_description,
+        g.trading_notes,
+        (g.pair_impacts->REPLACE(p_pair, '/', '_')->'relevance_score'->>v_score_key)::INTEGER as relevance_score,
+        g.pair_impacts->REPLACE(p_pair, '/', '_') as pair_impact
+    FROM geopolitical_events g
+    WHERE g.status IN ('active', 'structural', 'dormant')
+    AND g.pair_impacts ? REPLACE(p_pair, '/', '_')
+    AND (g.pair_impacts->REPLACE(p_pair, '/', '_')->'relevance_score'->>v_score_key)::INTEGER >= v_threshold
+    ORDER BY relevance_score DESC;
 END;
 $$ LANGUAGE plpgsql;

@@ -1,0 +1,12 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/sync-to-clickhouse",
+      "schedule": "30 0 * * *"
+    },
+    {
+      "path": "/api/cron/gdelt-headlines",
+      "schedule": "0 */6 * * *"
+    }
+  ]
+}

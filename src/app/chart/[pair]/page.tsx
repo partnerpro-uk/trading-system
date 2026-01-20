@@ -9,7 +9,9 @@ import { NewsEventPanel } from "@/components/chart/NewsEventPanel";
 import { NewsEventData } from "@/components/chart/NewsMarkersPrimitive";
 import { useOandaStream } from "@/hooks/useOandaStream";
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, ArrowRight } from "lucide-react";
+
+const TIMEFRAMES = ["M5", "M15", "M30", "H1", "H4", "D", "W", "M"] as const;
 
 export default function ChartPage() {
   const params = useParams();
@@ -18,11 +20,14 @@ export default function ChartPage() {
 
   // Chart control states (lifted from Chart component)
   const [magnetMode, setMagnetMode] = useState<boolean>(false); // Off by default
-  const [showSessions, setShowSessions] = useState<boolean>(true);
+  const [showSessionBgs, setShowSessionBgs] = useState<boolean>(true);
+  const [showSessionLines, setShowSessionLines] = useState<boolean>(true);
+  const [showSessionLabels, setShowSessionLabels] = useState<boolean>(false); // Off by default (less clutter)
   const [showNews, setShowNews] = useState<boolean>(true);
 
   // Selected event for sidebar panel
   const [selectedEvent, setSelectedEvent] = useState<NewsEventData | null>(null);
+  const [allEventsAtTimestamp, setAllEventsAtTimestamp] = useState<NewsEventData[]>([]);
 
   // Reset view function from Chart component
   const [resetViewFn, setResetViewFn] = useState<(() => void) | null>(null);
@@ -30,12 +35,18 @@ export default function ChartPage() {
     setResetViewFn(() => fn);
   }, []);
 
-  const handleEventSelect = useCallback((event: NewsEventData | null) => {
+  const handleEventSelect = useCallback((event: NewsEventData | null, allEvents?: NewsEventData[]) => {
     setSelectedEvent(event);
+    setAllEventsAtTimestamp(allEvents || (event ? [event] : []));
   }, []);
 
   const handleCloseEventPanel = useCallback(() => {
     setSelectedEvent(null);
+    setAllEventsAtTimestamp([]);
+  }, []);
+
+  const handleNavigateEvent = useCallback((event: NewsEventData) => {
+    setSelectedEvent(event);
   }, []);
 
   const { status, currentSession, nextOpen, livePrice } = useOandaStream(pair);
@@ -46,7 +57,7 @@ export default function ChartPage() {
   return (
     <div className="h-screen bg-gray-950 text-gray-100 flex flex-col">
       {/* Header */}
-      <header className="border-b border-gray-800 px-4 py-3 flex-shrink-0">
+      <header className="border-b border-gray-800 px-4 py-2 flex-shrink-0">
         <div className="flex items-center gap-4">
           <Link
             href="/"
@@ -86,6 +97,35 @@ export default function ChartPage() {
               </span>
             )}
           </div>
+
+          {/* Spacer */}
+          <div className="flex-1" />
+
+          {/* Timeframe buttons */}
+          <div className="flex items-center gap-1">
+            {TIMEFRAMES.map((tf) => (
+              <button
+                key={tf}
+                onClick={() => setTimeframe(tf)}
+                className={`px-2.5 py-1 text-xs font-medium rounded transition-colors ${
+                  timeframe === tf
+                    ? "bg-blue-600 text-white"
+                    : "text-gray-400 hover:text-gray-200 hover:bg-gray-800"
+                }`}
+              >
+                {tf}
+              </button>
+            ))}
+          </div>
+
+          {/* Go to present button */}
+          <button
+            onClick={() => resetViewFn?.()}
+            className="p-1.5 rounded text-gray-400 hover:text-gray-200 hover:bg-gray-800 transition-colors"
+            title="Go to present"
+          >
+            <ArrowRight className="w-4 h-4" />
+          </button>
         </div>
       </header>
 
@@ -99,7 +139,9 @@ export default function ChartPage() {
                 pair={pair}
                 timeframe={timeframe}
                 magnetMode={magnetMode}
-                showSessions={showSessions}
+                showSessionBgs={showSessionBgs}
+                showSessionLines={showSessionLines}
+                showSessionLabels={showSessionLabels}
                 showNews={showNews}
                 livePrice={livePrice}
                 onResetViewReady={handleResetViewReady}
@@ -117,21 +159,24 @@ export default function ChartPage() {
               {selectedEvent ? (
                 <NewsEventPanel
                   event={selectedEvent}
+                  allEventsAtTimestamp={allEventsAtTimestamp}
                   pair={pair}
                   onClose={handleCloseEventPanel}
+                  onNavigate={handleNavigateEvent}
                 />
               ) : (
                 <ChartSidebar
                   currentPair={pair}
-                  timeframe={timeframe}
-                  onTimeframeChange={setTimeframe}
                   magnetMode={magnetMode}
                   onMagnetModeChange={setMagnetMode}
-                  showSessions={showSessions}
-                  onShowSessionsChange={setShowSessions}
+                  showSessionBgs={showSessionBgs}
+                  onShowSessionBgsChange={setShowSessionBgs}
+                  showSessionLines={showSessionLines}
+                  onShowSessionLinesChange={setShowSessionLines}
+                  showSessionLabels={showSessionLabels}
+                  onShowSessionLabelsChange={setShowSessionLabels}
                   showNews={showNews}
                   onShowNewsChange={setShowNews}
-                  onResetView={resetViewFn || undefined}
                 />
               )}
             </div>

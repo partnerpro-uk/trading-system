@@ -437,6 +437,47 @@ export const runM5Cleanup = action({
   },
 });
 
+// Optimized paginated query for migration - uses index range instead of filter
+// This avoids the 32K document read limit
+export const getCandlesForExport = query({
+  args: {
+    pair: v.string(),
+    timeframe: v.string(),
+    afterTimestamp: v.optional(v.number()), // Exclusive - get candles AFTER this timestamp
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const limit = Math.min(args.limit ?? 1000, 5000);
+
+    if (args.afterTimestamp !== undefined) {
+      // Use index range query (gt in index) to avoid reading all documents
+      const candles = await ctx.db
+        .query("candles")
+        .withIndex("by_pair_tf_time", (q) =>
+          q
+            .eq("pair", args.pair)
+            .eq("timeframe", args.timeframe)
+            .gt("timestamp", args.afterTimestamp!)
+        )
+        .order("asc")
+        .take(limit);
+
+      return candles;
+    }
+
+    // No cursor - get oldest candles first
+    const candles = await ctx.db
+      .query("candles")
+      .withIndex("by_pair_tf_time", (q) =>
+        q.eq("pair", args.pair).eq("timeframe", args.timeframe)
+      )
+      .order("asc")
+      .take(limit);
+
+    return candles;
+  },
+});
+
 // Public action for uploading candles from external scripts (e.g., Dukascopy backfill)
 export const uploadCandles = action({
   args: {

@@ -1,0 +1,34 @@
+name: Sync Event Definitions to Timescale
+
+# Syncs economic_events.json, speakers.json, and geopolitical_events.json
+# Source of truth: data/event_definitions/*.json
+# Target: Timescale (event_definitions, speaker_definitions, geopolitical_events tables)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'data/event_definitions/**'
+      - 'scripts/sync-event-definitions.ts'
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Sync to Timescale
+        env:
+          TIMESCALE_URL: ${{ secrets.TIMESCALE_URL }}
+        run: npx tsx scripts/sync-event-definitions.ts

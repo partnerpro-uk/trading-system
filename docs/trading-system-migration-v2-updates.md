@@ -773,6 +773,36 @@ SUPABASE_SERVICE_KEY=your_service_key
 
 ---
 
-*Addendum Version: 2.0*
+---
+
+## Implementation Status (January 2026)
+
+All items from this v2 update have been implemented:
+
+| Item | Status | Notes |
+|------|--------|-------|
+| Event windows in ClickHouse | ✅ Complete | 580K+ windows migrated |
+| Continuous aggregates | ✅ Complete | M1→M5→M15→H1→H4→D1 |
+| Version tracking columns | ✅ Complete | Added to news tables |
+| Boundary deduplication | ✅ Complete | In query routing logic |
+| OANDA streaming worker | ✅ Complete | Running on Railway |
+| T+60/T+90 extraction | ✅ Complete | 80K T+60, 1K T+90 rows |
+| T-15 baseline pips | ✅ Complete | All calculations updated |
+
+### Additional Work Completed
+
+- Created `lib/db/clickhouse-news.ts` for historical queries
+- Created `/api/news/historical` endpoint (queries ClickHouse)
+- Created `/api/news/statistics` endpoint
+- Updated `NewsEventPanel.tsx` with T-15 baseline and extended windows
+- Added multi-event navigation when events stack at same timestamp
+- Created verification script: `scripts/verify-data-architecture.ts`
+- Created cleanup script: `scripts/cleanup-timescale-historical.ts`
+- Created comprehensive documentation: `docs/data-architecture.md`, `docs/api-reference.md`
+
+---
+
+*Addendum Version: 2.1*
 *Created: January 2026*
-*Applies to: Main Migration Document v1.0*
+*Updated: January 2026 (Implementation Complete)*
+*Applies to: Main Migration Document v2.0*

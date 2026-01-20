@@ -13,11 +13,15 @@
     "migrate:candles-ch": "NODE_TLS_REJECT_UNAUTHORIZED=0 npx tsx scripts/migrate/export-candles-to-clickhouse.ts",
     "migrate:candles-ts": "NODE_TLS_REJECT_UNAUTHORIZED=0 npx tsx scripts/migrate/export-recent-to-timescale.ts",
     "migrate:news": "NODE_TLS_REJECT_UNAUTHORIZED=0 npx tsx scripts/migrate/export-news-to-databases.ts",
-    "verify-migration": "NODE_TLS_REJECT_UNAUTHORIZED=0 npx tsx scripts/migrate/verify-migration.ts"
+    "verify-migration": "NODE_TLS_REJECT_UNAUTHORIZED=0 npx tsx scripts/migrate/verify-migration.ts",
+    "backfill:oanda": "NODE_TLS_REJECT_UNAUTHORIZED=0 npx tsx scripts/migrate/backfill-candles-from-oanda.ts",
+    "migrate:sessions": "NODE_TLS_REJECT_UNAUTHORIZED=0 npx tsx scripts/migrate/export-sessions-to-timescale.ts",
+    "worker:start": "cd worker && npm start",
+    "worker:test": "cd worker && NODE_TLS_REJECT_UNAUTHORIZED=0 npx tsx src/test-connection.ts"
   },
   "dependencies": {
     "@clickhouse/client": "^1.16.0",
-    "@supabase/supabase-js": "^2.90.1",
+    "@clickhouse/client-web": "^1.16.0",
     "clsx": "^2.1.1",
     "convex": "^1.31.5",
     "date-fns": "^4.1.0",

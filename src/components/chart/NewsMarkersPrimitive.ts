@@ -76,16 +76,38 @@ export interface HistoricalEventReaction {
   spikeDirection: string;
   didReverse: boolean;
   reversalMagnitudePips?: number;
+
   // Price data for educational display
   priceAtEvent: number;
   spikeHigh: number;
   spikeLow: number;
+
   // Settlement prices for timeline (optional - older reactions may not have these)
   priceAtPlus5m?: number;
   priceAtPlus15m?: number;
   priceAtPlus30m?: number;
-  priceAtPlus1hr?: number;
-  priceAtPlus3hr?: number;
+  priceAtPlus1hr?: number;  // Legacy field, same as priceAtPlus60m
+  priceAtPlus3hr?: number;  // Legacy field (rarely populated)
+
+  // NEW: T-15 baseline for proper pip calculations
+  priceAtMinus15m?: number;
+
+  // NEW: Extended windows (only for high impact/FOMC events)
+  priceAtPlus60m?: number;
+  priceAtPlus90m?: number;
+
+  // NEW: Pips calculated from T-15 baseline (more accurate)
+  pipsFromBaseline?: {
+    atEvent: number;
+    at5m: number | null;
+    at15m: number | null;
+    at30m: number | null;
+    at60m: number | null;
+    at90m: number | null;
+  };
+
+  // NEW: Window type (30=standard, 75=high impact, 105=FOMC/ECB)
+  windowMinutes?: number;
 }
 
 // Grouped historical events by outcome
@@ -131,6 +153,11 @@ export interface NewsEventData {
   forecast?: string;
   previous?: string;
   surpriseZScore?: number;
+  // Timezone data
+  datetimeUtc?: string;
+  datetimeNewYork?: string;
+  datetimeLondon?: string;
+  tradingSession?: string;
   reaction?: {
     spikeDirection: string;
     spikeMagnitudePips: number;
@@ -646,6 +673,21 @@ export class NewsMarkersPrimitive implements ISeriesPrimitive<Time> {
       }
     }
     return null;
+  }
+
+  getAllEventsAtCoordinate(x: number): NewsEventData[] {
+    if (!this._chart) return [];
+
+    const timeScale = this._chart.timeScale();
+    const tolerance = 15;
+
+    for (const marker of this._groupedMarkers) {
+      const markerX = timeScale.timeToCoordinate((marker.timestamp / 1000) as Time);
+      if (markerX !== null && Math.abs(markerX - x) < tolerance) {
+        return marker.events;
+      }
+    }
+    return [];
   }
 
   // Group events by timestamp (within 5 minutes)

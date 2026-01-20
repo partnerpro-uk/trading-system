@@ -1,45 +1,83 @@
 #!/usr/bin/env npx tsx
 /**
- * Setup script for Supabase (TimescaleDB) and ClickHouse
+ * Setup script for Timescale Cloud and ClickHouse
  * Executes schema migrations on both databases
  */
 
 import { config } from "dotenv";
-import { createClient } from "@supabase/supabase-js";
+import { Client } from "pg";
 import { createClient as createClickHouseClient } from "@clickhouse/client";
 import { readFileSync } from "fs";
 import { join } from "path";
 
 config({ path: ".env.local" });
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY!;
+const TIMESCALE_URL = process.env.TIMESCALE_URL!;
 const CLICKHOUSE_HOST = process.env.CLICKHOUSE_HOST!;
 const CLICKHOUSE_USER = process.env.CLICKHOUSE_USER!;
 const CLICKHOUSE_PASSWORD = process.env.CLICKHOUSE_PASSWORD!;
 
-async function setupSupabase() {
+async function setupTimescale() {
   console.log("═══════════════════════════════════════════════════════");
-  console.log("Setting up Supabase (TimescaleDB)...");
+  console.log("Setting up Timescale Cloud...");
   console.log("═══════════════════════════════════════════════════════\n");
 
-  const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
+  const client = new Client({
+    connectionString: TIMESCALE_URL,
+    ssl: { rejectUnauthorized: false },
+  });
 
-  // Test connection
-  const { data, error } = await supabase.from("_test_connection").select("*").limit(1);
-  if (error && !error.message.includes("does not exist")) {
-    console.log("✓ Connected to Supabase");
-  } else {
-    console.log("✓ Connected to Supabase");
+  try {
+    await client.connect();
+
+    // Test connection
+    const result = await client.query("SELECT version()");
+    console.log(`✓ Connected to Timescale Cloud (PostgreSQL ${result.rows[0].version.split(" ")[1]})`);
+
+    // Check TimescaleDB extension
+    const extResult = await client.query(
+      "SELECT installed_version FROM pg_available_extensions WHERE name = 'timescaledb'"
+    );
+    if (extResult.rows.length > 0 && extResult.rows[0].installed_version) {
+      console.log(`✓ TimescaleDB extension v${extResult.rows[0].installed_version}`);
+    } else {
+      console.log("⚠️  TimescaleDB extension not installed. Run:");
+      console.log("   CREATE EXTENSION IF NOT EXISTS timescaledb;");
+    }
+
+    // Read and execute Timescale schema
+    const schemaPath = join(__dirname, "migrations/001-timescale-schema.sql");
+    if (require("fs").existsSync(schemaPath)) {
+      console.log("\nExecuting Timescale schema...");
+      const schema = readFileSync(schemaPath, "utf-8");
+
+      // Execute the schema
+      try {
+        await client.query(schema);
+        console.log("✓ Timescale schema executed successfully");
+      } catch (err: any) {
+        if (err.message.includes("already exists")) {
+          console.log("✓ Tables already exist");
+        } else {
+          console.error("⚠️  Schema error:", err.message);
+        }
+      }
+    }
+
+    // Verify tables
+    const tablesResult = await client.query(`
+      SELECT table_name FROM information_schema.tables
+      WHERE table_schema = 'public'
+      ORDER BY table_name
+    `);
+    console.log(`\n✓ Timescale tables: ${tablesResult.rows.map(r => r.table_name).join(", ")}`);
+
+  } catch (err) {
+    console.error("✗ Failed to connect to Timescale:", err);
+    return false;
+  } finally {
+    await client.end();
   }
-
-  // Note: Schema execution needs to be done via Supabase SQL Editor
-  // or using the postgres direct connection
-  console.log("\n⚠️  To execute schemas, use Supabase SQL Editor:");
-  console.log("   1. Go to: https://supabase.com/dashboard/project/vukhgajukzmwtrdwuots/sql");
-  console.log("   2. First run: CREATE EXTENSION IF NOT EXISTS timescaledb;");
-  console.log("   3. Then paste contents of: scripts/migrations/001-timescale-schema.sql");
-  console.log("   4. Then paste contents of: scripts/migrations/002-timescale-aggregates.sql");
 
   return true;
 }
@@ -127,8 +165,8 @@ async function main() {
   console.log("\n🚀 Database Setup Script\n");
 
   // Check env vars
-  if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) {
-    console.error("✗ Missing Supabase environment variables");
+  if (!TIMESCALE_URL) {
+    console.error("✗ Missing TIMESCALE_URL environment variable");
     process.exit(1);
   }
 
@@ -137,7 +175,7 @@ async function main() {
     process.exit(1);
   }
 
-  await setupSupabase();
+  await setupTimescale();
   await setupClickHouse();
 
   console.log("\n═══════════════════════════════════════════════════════");

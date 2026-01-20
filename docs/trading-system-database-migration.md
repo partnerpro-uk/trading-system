@@ -1739,6 +1739,74 @@ These are acceptable because:
 
 ---
 
-*Document Version: 1.0*
+---
+
+## Post-Migration Reality (January 2026)
+
+This section documents the actual state after completing the migration.
+
+### What Was Migrated
+
+| Data | Source | Destination | Status |
+|------|--------|-------------|--------|
+| Historical candles | Convex | ClickHouse | ✅ 23M+ rows |
+| Recent candles | Convex | TimescaleDB | ✅ 30-day rolling |
+| News events (historical) | TimescaleDB | ClickHouse | ✅ 91,605 rows |
+| News events (upcoming) | - | TimescaleDB | ✅ 30-day window |
+| Event price reactions | TimescaleDB | ClickHouse | ✅ 578,777 rows |
+| Event candle windows | - | ClickHouse | ✅ 580K+ rows |
+
+### Key Architecture Decisions Made
+
+1. **TimescaleDB for Hot Data**: 30-day rolling window for chart display and upcoming events
+2. **ClickHouse for Cold Analytics**: All historical data, event reactions, and candle windows
+3. **Query Routing**: APIs route to correct database based on time range
+
+### API Endpoints and Their Databases
+
+| Endpoint | Database | Purpose |
+|----------|----------|---------|
+| `/api/candles` | ClickHouse + TimescaleDB | Chart data (routes by time) |
+| `/api/news/events` | TimescaleDB | Chart markers (30-day window) |
+| `/api/news/historical` | ClickHouse | Historical event reactions |
+| `/api/news/statistics` | ClickHouse | Aggregated event stats |
+| `/api/news/upcoming` | TimescaleDB | Calendar events |
+
+### Settlement Price Windows
+
+| Window Type | Duration | Events | T+60 | T+90 |
+|-------------|----------|--------|------|------|
+| Standard | 30 min | Low/Medium impact | No | No |
+| High Impact | 75 min | High impact events | ✅ | No |
+| Extended (FOMC/ECB) | 105 min | Central bank decisions | ✅ | ✅ |
+
+T+60/T+90 prices extracted from `event_candle_windows` candle arrays.
+
+### Pip Calculation Baseline
+
+All pip calculations now use **T-15 baseline** (price 15 minutes before event), not T+0. This provides more accurate measurement of event impact.
+
+### Verification Checklist
+
+Run `npx tsx scripts/verify-data-architecture.ts` to verify:
+- [x] ClickHouse connections working
+- [x] TimescaleDB connections working
+- [x] Historical news events in ClickHouse
+- [x] Historical reactions in ClickHouse
+- [x] T+60 prices populated (80,966 rows)
+- [x] T+90 prices populated (1,071 FOMC/ECB events)
+- [x] Event candle windows available
+
+### Cleanup
+
+After verification, run `npx tsx scripts/cleanup-timescale-historical.ts` to:
+1. Delete historical news_events (>30 days) from TimescaleDB
+2. Delete all event_price_reactions from TimescaleDB
+3. Run VACUUM to reclaim disk space
+
+---
+
+*Document Version: 2.0*
 *Created: January 2026*
+*Updated: January 2026 (Post-Migration Reality)*
 *For: AI Trading System Migration*

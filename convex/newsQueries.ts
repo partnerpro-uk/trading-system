@@ -851,15 +851,13 @@ export const getEventsInTimeRange = query({
         .withIndex("by_currency_timestamp", (q) =>
           q.eq("currency", base).gte("timestamp", adjustedStart).lte("timestamp", adjustedEnd)
         )
-        .take(250)
-        .collect(),
+        .take(250),
       ctx.db
         .query("economicEvents")
         .withIndex("by_currency_timestamp", (q) =>
           q.eq("currency", quote).gte("timestamp", adjustedStart).lte("timestamp", adjustedEnd)
         )
-        .take(250)
-        .collect(),
+        .take(250),
     ]);
 
     // Combine and dedupe (in case base === quote, though unlikely for forex)
