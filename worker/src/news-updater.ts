@@ -32,6 +32,7 @@ const MARKET_HOURS_END = 18; // 6pm UK time
 
 // Browser instance (reused to avoid cold starts)
 let browserInstance: Awaited<ReturnType<typeof puppeteer.launch>> | null = null;
+let timezoneConfigured = false;
 
 /**
  * Get or create browser instance.
@@ -52,8 +53,56 @@ async function getBrowser() {
       ],
     });
     console.log("[News] Browser launched");
+    timezoneConfigured = false; // Reset on new browser
   }
   return browserInstance;
+}
+
+/**
+ * Configure ForexFactory to use Eastern Time.
+ * FF stores timezone preference in cookies, so we need to set it explicitly.
+ * Without this, FF uses whatever timezone was last set (could be anything).
+ */
+async function configureForexFactoryTimezone(page: Awaited<ReturnType<Awaited<ReturnType<typeof puppeteer.launch>>["newPage"]>>): Promise<void> {
+  if (timezoneConfigured) {
+    return; // Already configured this session
+  }
+
+  console.log("[News] Configuring ForexFactory timezone to Eastern Time...");
+
+  try {
+    // Emulate Eastern Time in the browser
+    await page.emulateTimezone("America/New_York");
+
+    // Navigate to FF timezone settings
+    await page.goto("https://www.forexfactory.com/timezone.php", {
+      waitUntil: "networkidle2",
+      timeout: 30000,
+    });
+
+    // Click "Match Device Time" button to sync FF to browser's ET timezone
+    const clicked = await page.evaluate(() => {
+      const buttons = Array.from(document.querySelectorAll("a, button, span"));
+      const matchBtn = buttons.find(b => b.textContent?.includes("Match Device Time"));
+      if (matchBtn) {
+        (matchBtn as HTMLElement).click();
+        return true;
+      }
+      return false;
+    });
+
+    if (clicked) {
+      // Wait for the setting to save
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      console.log("[News] ForexFactory timezone set to Eastern Time");
+      timezoneConfigured = true;
+    } else {
+      console.warn("[News] Could not find 'Match Device Time' button, timezone may be incorrect");
+    }
+  } catch (error) {
+    console.error("[News] Error configuring timezone:", error);
+    // Continue anyway - scraping may still work
+  }
 }
 
 /**
@@ -79,8 +128,11 @@ async function scrapeCalendarPage(date: Date): Promise<NewsEventRecord[]> {
     await page.setViewport({ width: 1920, height: 1080 });
 
     // Set timezone to America/New_York to ensure ForexFactory shows Eastern Time
-    // This is critical - FF auto-detects browser timezone
     await page.emulateTimezone("America/New_York");
+
+    // CRITICAL: Configure ForexFactory's timezone setting (stored in cookies)
+    // Without this, FF uses its own stored timezone which could be anything
+    await configureForexFactoryTimezone(page);
 
     // Block images and stylesheets for faster loading
     await page.setRequestInterception(true);
