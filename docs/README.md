@@ -11,7 +11,7 @@
 | [User Stories](plans/user-stories.md) | Who uses what, why, and current status |
 | [Vision](trading-system-vision.md) | Core idea and why this matters |
 | [Technical Overview](trading-system-technical.md) | Architecture and implementation details |
-| [Database Architecture](trading-system-database-migration.md) | Triple database design |
+| [Triple DB ADR](decisions/001-triple-database-architecture.md) | Why we use 3 databases (quick reference) |
 
 ---
 
@@ -20,6 +20,8 @@
 ```
 docs/
 ├── README.md                          # This file - documentation index
+├── decisions/
+│   └── 001-triple-database-architecture.md  # Why 3 databases (ADR)
 ├── plans/
 │   └── user-stories.md               # User stories with acceptance criteria
 ├── trading-system-vision.md          # Product vision and goals
@@ -75,6 +77,8 @@ docs/
 ## Key Concepts
 
 ### Triple Database Architecture
+
+> See [ADR-001](decisions/001-triple-database-architecture.md) for the full decision record.
 
 - **Convex**: Real-time app state (users, trades, strategies, Claude conversations)
 - **TimescaleDB**: Hot data (30-day candles, upcoming events, session levels)
