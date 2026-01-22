@@ -43,4 +43,15 @@ next-env.d.ts
 
 # data files (large JSONL for backfill)
 /data/
+
+# scraper temp files
+scraper/*.csv
+scraper/*.log
+scraper/*.jsonl
+
+# worker progress/temp files
+worker/src/**/*-progress*.json
+worker/src/**/progress-*.json
+
+# env files
 .env*.local

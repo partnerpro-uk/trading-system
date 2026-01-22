@@ -382,7 +382,7 @@ export function parseDateString(
 }
 
 /**
- * Build date URL for ForexFactory calendar.
+ * Build date URL for ForexFactory calendar (single day).
  * Format: "jan20.2026" (month lowercase, day without leading zero)
  */
 export function buildDateUrl(date: Date): string {
@@ -391,6 +391,19 @@ export function buildDateUrl(date: Date): string {
   const day = date.getDate();
   const year = date.getFullYear();
   return `calendar?day=${month}${day}.${year}`;
+}
+
+/**
+ * Build week URL for ForexFactory calendar (full week view).
+ * Format: "jan20.2026" - FF will show the week containing this date
+ * Much more efficient than day-by-day scraping (7x fewer requests)
+ */
+export function buildWeekUrl(date: Date): string {
+  const months = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+  const month = months[date.getMonth()];
+  const day = date.getDate();
+  const year = date.getFullYear();
+  return `calendar?week=${month}${day}.${year}`;
 }
 
 /**
