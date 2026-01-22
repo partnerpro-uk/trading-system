@@ -85,6 +85,9 @@ export function useCandleCache({
   const loadingRef = useRef<Set<string>>(new Set());
   const loadingMoreRef = useRef(false);
   const backgroundFetchScheduled = useRef(false);
+  // Use a ref to check cache without triggering callback recreation
+  const cacheRef = useRef(cache);
+  cacheRef.current = cache;
 
   // Fetch candles for a specific timeframe
   const fetchCandles = useCallback(async (tf: string, beforeTimestamp?: number): Promise<CandleData[]> => {
@@ -108,10 +111,10 @@ export function useCandleCache({
   }, [pair, limit]);
 
   // Load a timeframe into cache
-  const loadTimeframe = useCallback(async (tf: string, isBackground = false) => {
-    // Skip if already loading or cached
-    if (loadingRef.current.has(tf)) return;
-    if (cache.has(tf)) return;
+  const loadTimeframe = useCallback(async (tf: string, isBackground = false): Promise<boolean> => {
+    // Skip if already loading or cached - use ref to avoid dependency on cache
+    if (loadingRef.current.has(tf)) return false;
+    if (cacheRef.current.has(tf)) return false;
 
     loadingRef.current.add(tf);
 
@@ -131,19 +134,31 @@ export function useCandleCache({
       if (!isBackground) {
         setPrefetchedTimeframes(prev => [...prev, tf]);
       }
+      return true; // Actually loaded
     } catch (err) {
       console.error(`Failed to load ${tf}:`, err);
+      return false;
     } finally {
       loadingRef.current.delete(tf);
     }
-  }, [cache, fetchCandles, limit]);
+  }, [fetchCandles, limit]); // Removed cache dependency - use cacheRef instead
 
   // Load current timeframe on mount/change
   useEffect(() => {
+    // If already cached, no loading needed
+    if (cacheRef.current.has(timeframe)) {
+      setIsLoading(false);
+      return;
+    }
+
     setIsLoading(true);
 
-    loadTimeframe(timeframe).finally(() => {
-      setIsLoading(false);
+    loadTimeframe(timeframe).then((didLoad) => {
+      // Only clear loading state if we actually loaded (not skipped due to race)
+      // or if the data is now in cache (loaded by another call)
+      if (didLoad || cacheRef.current.has(timeframe)) {
+        setIsLoading(false);
+      }
     });
   }, [timeframe, loadTimeframe]);
 
@@ -171,7 +186,8 @@ export function useCandleCache({
       remaining.forEach((tf, i) => {
         // Stagger requests to avoid overwhelming the server
         setTimeout(() => {
-          if (!cache.has(tf)) {
+          // Use cacheRef for fresh value inside setTimeout
+          if (!cacheRef.current.has(tf)) {
             loadTimeframe(tf, true);
           }
         }, i * 500); // 500ms between each request
