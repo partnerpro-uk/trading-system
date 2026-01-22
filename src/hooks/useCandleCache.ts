@@ -73,7 +73,7 @@ interface UseCandleCacheResult {
 export function useCandleCache({
   pair,
   initialTimeframe,
-  limit = 500,
+  limit = 10000,
 }: UseCandleCacheOptions): UseCandleCacheResult {
   const [timeframe, setTimeframe] = useState(initialTimeframe);
   const [cache, setCache] = useState<Map<string, CandleCacheEntry>>(new Map());
