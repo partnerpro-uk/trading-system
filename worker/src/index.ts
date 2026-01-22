@@ -1,18 +1,18 @@
 /**
- * OANDA Candle Sync Worker + News Updater
+ * OANDA Candle Sync Worker + JBlanked News Updater
  *
  * Fetches candles directly from OANDA's REST API for all pairs and timeframes.
  * Stores them in TimescaleDB for chart display.
  *
  * Also:
  * - Maintains a live price stream for real-time updates
- * - Scrapes ForexFactory for economic event actual values
+ * - Fetches economic calendar from JBlanked API (hourly)
  */
 
 import { config } from "dotenv";
 import { Pool } from "pg";
 import { resolve } from "path";
-import { startNewsUpdater, stopNewsUpdater } from "./news-updater";
+import { forwardFill } from "./jblanked-news";
 
 // Load env from parent .env.local
 config({ path: resolve(process.cwd(), "../.env.local") });
@@ -377,24 +377,48 @@ async function main(): Promise<void> {
   // Start live price stream (runs in background)
   startPriceStream().catch(console.error);
 
-  // Start news updater (scrapes ForexFactory for economic event actuals)
-  startNewsUpdater(pool).catch(console.error);
+  // Start JBlanked news updater (runs every hour)
+  startNewsUpdater();
 
   // Keep process alive
   console.log("\nWorker running. Press Ctrl+C to stop.\n");
 }
 
+/**
+ * Start JBlanked news updater on hourly schedule
+ */
+function startNewsUpdater(): void {
+  const NEWS_UPDATE_INTERVAL = 60 * 60 * 1000; // 1 hour
+
+  // Run immediately on startup
+  console.log("\n[News] Running initial news update...");
+  forwardFill().catch((err) => {
+    console.error("[News] Initial update failed:", err);
+  });
+
+  // Then run every hour
+  setInterval(async () => {
+    console.log("\n[News] Running hourly news update...");
+    try {
+      await forwardFill();
+      console.log("[News] Update complete");
+    } catch (err) {
+      console.error("[News] Update failed:", err);
+    }
+  }, NEWS_UPDATE_INTERVAL);
+
+  console.log(`[News] Scheduled hourly updates (every ${NEWS_UPDATE_INTERVAL / 60000} minutes)`);
+}
+
 // Graceful shutdown
 process.on("SIGINT", async () => {
   console.log("\nShutting down...");
-  await stopNewsUpdater();
   await pool?.end();
   process.exit(0);
 });
 
 process.on("SIGTERM", async () => {
   console.log("\nTerminating...");
-  await stopNewsUpdater();
   await pool?.end();
   process.exit(0);
 });

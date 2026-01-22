@@ -418,10 +418,10 @@ eventTypeStatistics: defineTable({
 ### Backfill Requirements
 
 **News Events:**
-- Source: Custom Python ForexFactory scraper (outputs JSONL)
-- Scope: All impact levels (high, medium, low, non_economic) — filter at query time
-- Depth: 10+ years = ~19,000+ events
-- Import script: `scripts/import-events-jsonl.ts`
+- Source: JBlanked API (`/forex-factory/calendar/`)
+- Scope: All impact levels (high, medium, low, none) — filter at query time
+- Depth: Data from 2023-01-01 onwards (~27,000 events)
+- Ingestion: Railway worker (hourly) writes to TimescaleDB + ClickHouse
 
 **1-Minute Candles (Event Windows):**
 - Source: OANDA historical data (we have access)
@@ -657,10 +657,10 @@ This avoids N×5×2 extra DB reads for every event on the chart.
 
 ### Phase 1: Event Metadata
 
-1. Run custom Python ForexFactory scraper to generate JSONL
-2. Import via `npx tsx scripts/import-events-jsonl.ts path/to/events.jsonl`
-3. Smart upsert: only updates if `scrapedAt` is newer than existing
-4. Includes: impact, status, trading session, outcome, deviation
+1. JBlanked API fetches economic calendar data (EET timezone, converted to UTC)
+2. Railway worker runs hourly forward-fill to both TimescaleDB and ClickHouse
+3. Historical backfill: `npx tsx worker/src/jblanked-news.ts backfill 2023-01-01`
+4. Includes: impact, trading session (DST-aware), actual/forecast/previous values
 
 ### Phase 2: 1-Minute Windows
 
@@ -725,38 +725,50 @@ This is **preparation and informed prediction** — knowing how markets have his
 
 ---
 
-## Scraper Output Format
+## JBlanked API Data Format
 
-The custom Python ForexFactory scraper outputs JSONL with the following fields:
+The JBlanked API (`/forex-factory/calendar/`) returns economic calendar data in EET timezone.
+
+### API Response Example
 
 ```json
 {
-  "event_id": "CPI_m_m_USD_2024-01-15_14:30",
-  "status": "released",
-  "timestamp_utc": 1705329000000,
-  "scraped_at": 1705400000000,
-  "datetime_utc": "2024-01-15T14:30:00Z",
-  "day_of_week": "Mon",
-  "trading_session": "new_york",
-  "currency": "USD",
-  "impact": "high",
-  "event": "CPI m/m",
-  "actual": "0.3%",
-  "forecast": "0.2%",
-  "previous": "0.1%",
-  "deviation": 0.1,
-  "deviation_pct": 50.0,
-  "outcome": "beat"
+  "Event_ID": 12345,
+  "Name": "CPI m/m",
+  "Currency": "USD",
+  "Date": "2024-01-15",
+  "Time": "16:30",
+  "Impact": "High",
+  "Actual": "0.3%",
+  "Forecast": "0.2%",
+  "Previous": "0.1%"
 }
 ```
 
-**Key fields:**
-- `event_id`: Unique identifier format `{name}_{currency}_{date}_{time}`
-- `status`: "scheduled" (upcoming) or "released" (data available)
-- `trading_session`: asian | london | new_york | london_ny_overlap | off_hours
-- `outcome`: beat | miss | met | null (pre-computed by scraper)
-- `deviation`: actual - forecast (numeric)
-- `scraped_at`: Used for smart upsert (only update if newer)
+### Transformed Schema (Stored)
+
+```json
+{
+  "event_id": "jb_forex-factory_12345",
+  "name": "CPI m/m",
+  "currency": "USD",
+  "timestamp": "2024-01-15T14:30:00Z",
+  "impact": "High",
+  "actual": "0.3%",
+  "forecast": "0.2%",
+  "previous": "0.1%",
+  "trading_session": "New York",
+  "source_tz": "EET",
+  "raw_source": "jb_forex-factory"
+}
+```
+
+**Key transformations:**
+
+- `timestamp`: Converted from EET (UTC+2/+3) to UTC
+- `trading_session`: DST-aware calculation (London/NY shift with daylight saving)
+- `event_id`: Prefixed with `jb_` to identify JBlanked source
+- `currency`: Extracted from `CURRENCY_XXX` format if needed
 
 ---
 

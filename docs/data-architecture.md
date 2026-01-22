@@ -84,10 +84,15 @@ OANDA Stream → Railway Worker → TimescaleDB candles → Chart
 ### 2. News Events
 
 ```
-ForexFactory Scraper → TimescaleDB (upcoming)
-                     ↓ (after 30 days)
-              ClickHouse (archive)
+JBlanked API → Railway Worker (hourly) → TimescaleDB (90-day window)
+                                       → ClickHouse (all historical)
 ```
+
+**Source**: JBlanked API (`/forex-factory/calendar/`)
+- API returns times in EET (UTC+2), converted to UTC for storage
+- Includes: Impact levels, actual/forecast/previous values
+- Historical data from 2023-01-01 onwards
+- DST-aware trading session calculation
 
 ### 3. Historical Analysis
 
@@ -158,11 +163,24 @@ This gives a more accurate picture of total price movement around the event.
 
 ## Cron Jobs and Workers
 
+### Vercel Cron Jobs
+
 | Job | Schedule | Database | Purpose |
 |-----|----------|----------|---------|
-| `sync-to-clickhouse` | Daily 4am | Both | Move candles to ClickHouse |
-| `gdelt-headlines` | Every 15min | TimescaleDB | Fetch news headlines |
-| `railway-candle-worker` | Continuous | TimescaleDB | Stream live candles |
+| `sync-to-clickhouse` | Daily 00:30 UTC | Both | Move candles to ClickHouse |
+| `gdelt-headlines` | Every 6 hours | TimescaleDB | Fetch GDELT news headlines |
+
+### Railway Workers
+
+| Worker | Schedule | Database | Purpose |
+|--------|----------|----------|---------|
+| `candle-sync` | Continuous | TimescaleDB | Stream OANDA live candles |
+| `jblanked-news` | Hourly | Both | Fetch JBlanked economic calendar |
+
+The Railway worker runs continuously and handles:
+
+- Live candle streaming from OANDA (all pairs, all timeframes)
+- Hourly JBlanked news updates (forward-fill to TimescaleDB + ClickHouse)
 
 ## Environment Variables
 
