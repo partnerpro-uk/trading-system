@@ -13,6 +13,7 @@ import { config } from "dotenv";
 import { Pool } from "pg";
 import { resolve } from "path";
 import { forwardFill } from "./jblanked-news";
+import { runCaretaker } from "./gap-caretaker";
 
 // Load env from parent .env.local
 config({ path: resolve(process.cwd(), "../.env.local") });
@@ -380,6 +381,9 @@ async function main(): Promise<void> {
   // Start JBlanked news updater (runs every hour)
   startNewsUpdater();
 
+  // Start gap caretaker (runs every 6 hours)
+  startGapCaretaker();
+
   // Keep process alive
   console.log("\nWorker running. Press Ctrl+C to stop.\n");
 }
@@ -408,6 +412,35 @@ function startNewsUpdater(): void {
   }, NEWS_UPDATE_INTERVAL);
 
   console.log(`[News] Scheduled hourly updates (every ${NEWS_UPDATE_INTERVAL / 60000} minutes)`);
+}
+
+/**
+ * Start gap caretaker on 6-hour schedule
+ * Detects and fills missing candle data across all pairs/timeframes
+ */
+function startGapCaretaker(): void {
+  const CARETAKER_INTERVAL = 6 * 60 * 60 * 1000; // 6 hours
+
+  // Run after 5 minutes (let other syncs complete first)
+  setTimeout(() => {
+    console.log("\n[Caretaker] Running initial gap scan...");
+    runCaretaker().catch((err) => {
+      console.error("[Caretaker] Initial scan failed:", err);
+    });
+  }, 5 * 60 * 1000);
+
+  // Then run every 6 hours
+  setInterval(async () => {
+    console.log("\n[Caretaker] Running scheduled gap scan...");
+    try {
+      await runCaretaker();
+      console.log("[Caretaker] Scan complete");
+    } catch (err) {
+      console.error("[Caretaker] Scan failed:", err);
+    }
+  }, CARETAKER_INTERVAL);
+
+  console.log(`[Caretaker] Scheduled gap scans (every ${CARETAKER_INTERVAL / (60 * 60 * 1000)} hours, first run in 5 minutes)`);
 }
 
 // Graceful shutdown
