@@ -33,6 +33,71 @@ interface HistoricalData {
   hasForecastData: boolean;
 }
 
+// Event definition types
+interface BeatMissInterpretation {
+  direction: string;
+  description: string;
+  currency_impact: string;
+}
+
+interface NotableMoment {
+  date: string;
+  description: string;
+}
+
+interface SpeakerProfile {
+  fullName: string;
+  institution: string;
+  institutionFull?: string;
+  role: string;
+  tenureStart?: string;
+  tenureEnd?: string | null;
+  votingMember: boolean;
+  votingYears?: string;
+  stance: string;
+  stanceDescription: string;
+  notableMoments?: NotableMoment[];
+  wikipediaUrl?: string;
+}
+
+interface EconomicDefinition {
+  eventName: string;
+  shortDescription: string;
+  detailedDescription?: string;
+  measures?: string;
+  typicalImpact: string;
+  beatInterpretation?: BeatMissInterpretation;
+  missInterpretation?: BeatMissInterpretation;
+  tradingNotes?: string;
+  historicalContext?: string;
+  relatedEvents?: string[];
+}
+
+interface SpeakerDefinition {
+  eventName: string;
+  typicalImpact: string;
+  whatToWatch?: string;
+  marketSensitivity?: string;
+  regimeChangePotential?: string;
+  regimeChangeExamples?: string;
+  speaker: SpeakerProfile;
+}
+
+interface EventDefinition {
+  found: boolean;
+  type: "economic" | "speaker" | null;
+  definition: EconomicDefinition | SpeakerDefinition | null;
+}
+
+interface EventStatistics {
+  totalOccurrences: number;
+  avgSpikePips: number | null;
+  upCount: number;
+  downCount: number;
+  reversalRate: number | null;
+  upBias: number | null;
+}
+
 interface NewsEventPanelProps {
   event: NewsEventData;
   allEventsAtTimestamp: NewsEventData[];
@@ -59,33 +124,64 @@ export function NewsEventPanel({ event, allEventsAtTimestamp, pair, onClose, onN
       onNavigate(allEventsAtTimestamp[currentIndex + 1]);
     }
   };
-  // Fetch historical events from ClickHouse via API
-  const [historicalData, setHistoricalData] = useState<HistoricalData | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
 
+  // State for historical data, event definition, and statistics
+  const [historicalData, setHistoricalData] = useState<HistoricalData | null>(null);
+  const [eventDefinition, setEventDefinition] = useState<EventDefinition | null>(null);
+  const [statistics, setStatistics] = useState<EventStatistics | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
+    about: false,
+    stats: true,
+  });
+
+  const toggleSection = (section: string) => {
+    setExpandedSections(prev => ({ ...prev, [section]: !prev[section] }));
+  };
+
+  // Fetch all data in parallel
   useEffect(() => {
-    const fetchHistorical = async () => {
+    const fetchAllData = async () => {
       setIsLoading(true);
-      try {
-        const res = await fetch(
-          `/api/news/historical?eventType=${encodeURIComponent(event.eventType)}&pair=${pair}&beforeTimestamp=${event.timestamp}&limit=10`
-        );
-        if (res.ok) {
-          const data = await res.json();
-          setHistoricalData(data);
-        } else {
-          setHistoricalData({ beatHistory: [], missHistory: [], rawHistory: [], hasForecastData: false });
-        }
-      } catch (error) {
-        console.error("Error fetching historical data:", error);
+
+      const [historicalRes, definitionRes, statsRes] = await Promise.allSettled([
+        // Historical events
+        fetch(`/api/news/historical?eventType=${encodeURIComponent(event.eventType)}&pair=${pair}&beforeTimestamp=${event.timestamp}&limit=10`),
+        // Event definition
+        fetch(`/api/news/definitions?eventName=${encodeURIComponent(event.name)}`),
+        // Statistics
+        fetch(`/api/news/statistics?eventType=${encodeURIComponent(event.eventType)}&pair=${pair}`),
+      ]);
+
+      // Process historical data
+      if (historicalRes.status === "fulfilled" && historicalRes.value.ok) {
+        const data = await historicalRes.value.json();
+        setHistoricalData(data);
+      } else {
         setHistoricalData({ beatHistory: [], missHistory: [], rawHistory: [], hasForecastData: false });
-      } finally {
-        setIsLoading(false);
       }
+
+      // Process event definition
+      if (definitionRes.status === "fulfilled" && definitionRes.value.ok) {
+        const data = await definitionRes.value.json();
+        setEventDefinition(data);
+      } else {
+        setEventDefinition({ found: false, type: null, definition: null });
+      }
+
+      // Process statistics
+      if (statsRes.status === "fulfilled" && statsRes.value.ok) {
+        const data = await statsRes.value.json();
+        setStatistics(data);
+      } else {
+        setStatistics(null);
+      }
+
+      setIsLoading(false);
     };
 
-    fetchHistorical();
-  }, [event.eventType, event.timestamp, pair]);
+    fetchAllData();
+  }, [event.eventType, event.name, event.timestamp, pair]);
 
   // Use London time if available (UK timezone), fallback to UTC timestamp
   const formatDateTimeFromLondon = (londonDatetime: string | undefined, timestamp: number) => {
@@ -168,28 +264,42 @@ export function NewsEventPanel({ event, allEventsAtTimestamp, pair, onClose, onN
       )}
 
       {/* Header */}
-      <div className="p-4 border-b border-gray-800 flex items-start justify-between">
-        <div>
-          <div className="text-xs text-gray-500 mb-1">{dateStr} {timeStr}</div>
-          <h2 className="text-lg font-semibold text-white flex items-center gap-2">
-            <span
-              className="w-1 h-6 rounded"
-              style={{
-                backgroundColor: event.impact === "high" ? "#ef4444" : event.impact === "medium" ? "#f59e0b" : "#6b7280"
-              }}
-            />
-            {event.name}
-          </h2>
-          <div className="text-sm text-gray-400 mt-1">{event.currency}</div>
+      <div className="p-4 border-b border-gray-800">
+        <div className="flex items-start justify-between">
+          <div className="flex-1 min-w-0">
+            <div className="text-xs text-gray-500 mb-1">{dateStr} {timeStr}</div>
+            <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+              <span
+                className="w-1 h-6 rounded flex-shrink-0"
+                style={{
+                  backgroundColor: event.impact === "high" ? "#ef4444" : event.impact === "medium" ? "#f59e0b" : "#6b7280"
+                }}
+              />
+              <span className="truncate">{event.name}</span>
+            </h2>
+            <div className="text-sm text-gray-400 mt-1">{event.currency}</div>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-gray-500 hover:text-gray-300 transition-colors p-1 flex-shrink-0"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
         </div>
-        <button
-          onClick={onClose}
-          className="text-gray-500 hover:text-gray-300 transition-colors p-1"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
+
+        {/* Short description from event definition */}
+        {eventDefinition?.found && eventDefinition.type === "economic" && (
+          <p className="text-xs text-gray-400 mt-2 leading-relaxed">
+            {(eventDefinition.definition as EconomicDefinition).shortDescription}
+          </p>
+        )}
+        {eventDefinition?.found && eventDefinition.type === "speaker" && (
+          <p className="text-xs text-gray-400 mt-2 leading-relaxed italic">
+            {(eventDefinition.definition as SpeakerDefinition).speaker.stanceDescription}
+          </p>
+        )}
       </div>
 
       {/* Values Section */}
@@ -251,6 +361,95 @@ export function NewsEventPanel({ event, allEventsAtTimestamp, pair, onClose, onN
               </span>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Statistics Section */}
+      {statistics && statistics.totalOccurrences > 0 && (
+        <div className="border-b border-gray-800">
+          <button
+            onClick={() => toggleSection("stats")}
+            className="w-full p-4 flex items-center justify-between text-left hover:bg-gray-800/30 transition-colors"
+          >
+            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+              Statistics
+            </h3>
+            <svg
+              className={`w-4 h-4 text-gray-500 transition-transform ${expandedSections.stats ? "rotate-180" : ""}`}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          {expandedSections.stats && (
+            <div className="px-4 pb-4 space-y-2">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-gray-800/50 rounded p-2">
+                  <div className="text-xs text-gray-500">Avg Spike</div>
+                  <div className="text-sm font-semibold text-white">
+                    {statistics.avgSpikePips !== null ? `${statistics.avgSpikePips.toFixed(1)} pips` : "—"}
+                  </div>
+                </div>
+                <div className="bg-gray-800/50 rounded p-2">
+                  <div className="text-xs text-gray-500">Sample Size</div>
+                  <div className="text-sm font-semibold text-white">{statistics.totalOccurrences}</div>
+                </div>
+                <div className="bg-gray-800/50 rounded p-2">
+                  <div className="text-xs text-gray-500">Direction Bias</div>
+                  <div className={`text-sm font-semibold ${
+                    statistics.upBias !== null
+                      ? statistics.upBias > 55 ? "text-green-400" : statistics.upBias < 45 ? "text-red-400" : "text-gray-300"
+                      : "text-gray-500"
+                  }`}>
+                    {statistics.upBias !== null ? `${statistics.upBias.toFixed(0)}% UP` : "—"}
+                  </div>
+                </div>
+                <div className="bg-gray-800/50 rounded p-2">
+                  <div className="text-xs text-gray-500">Reversal Rate</div>
+                  <div className={`text-sm font-semibold ${
+                    statistics.reversalRate !== null
+                      ? statistics.reversalRate > 0.4 ? "text-amber-400" : "text-gray-300"
+                      : "text-gray-500"
+                  }`}>
+                    {statistics.reversalRate !== null ? `${(statistics.reversalRate * 100).toFixed(0)}%` : "—"}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* About This Event Section */}
+      {eventDefinition?.found && (
+        <div className="border-b border-gray-800">
+          <button
+            onClick={() => toggleSection("about")}
+            className="w-full p-4 flex items-center justify-between text-left hover:bg-gray-800/30 transition-colors"
+          >
+            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+              {eventDefinition.type === "speaker" ? "About This Speaker" : "What This Means"}
+            </h3>
+            <svg
+              className={`w-4 h-4 text-gray-500 transition-transform ${expandedSections.about ? "rotate-180" : ""}`}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          {expandedSections.about && (
+            <div className="px-4 pb-4">
+              {eventDefinition.type === "speaker" ? (
+                <SpeakerProfileCard definition={eventDefinition.definition as SpeakerDefinition} />
+              ) : (
+                <EconomicEventCard definition={eventDefinition.definition as EconomicDefinition} outcome={outcome} />
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -483,6 +682,184 @@ function HistoricalEventCard({ event, pair = "EUR_USD" }: { event: HistoricalEve
       ) : (
         <div className="border-t border-gray-700/50 pt-2 mt-1 text-xs text-gray-600 text-center">
           Settlement data not available
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Speaker Profile Card Component
+function SpeakerProfileCard({ definition }: { definition: SpeakerDefinition }) {
+  const { speaker } = definition;
+
+  const stanceColor = {
+    hawkish: "text-red-400",
+    dovish: "text-green-400",
+    neutral: "text-gray-400",
+    pragmatic: "text-blue-400",
+    "dovish-to-neutral": "text-green-300",
+    "hawkish-to-neutral": "text-red-300",
+  }[speaker.stance.toLowerCase()] || "text-gray-400";
+
+  return (
+    <div className="space-y-3">
+      {/* Role and Institution */}
+      <div className="space-y-1">
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-gray-500">Role:</span>
+          <span className="text-sm text-white">{speaker.role}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-gray-500">Institution:</span>
+          <span className="text-sm text-gray-300">{speaker.institution}</span>
+        </div>
+        {speaker.votingMember && (
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-500">Voting:</span>
+            <span className="text-sm text-amber-400">{speaker.votingYears || "Yes"}</span>
+          </div>
+        )}
+      </div>
+
+      {/* Stance */}
+      <div className="bg-gray-800/50 rounded p-2">
+        <div className="flex items-center gap-2 mb-1">
+          <span className="text-xs text-gray-500">Stance:</span>
+          <span className={`text-sm font-semibold capitalize ${stanceColor}`}>
+            {speaker.stance}
+          </span>
+        </div>
+      </div>
+
+      {/* What to Watch */}
+      {definition.whatToWatch && (
+        <div>
+          <div className="text-xs text-gray-500 mb-1">What to Watch</div>
+          <p className="text-xs text-gray-300 leading-relaxed">{definition.whatToWatch}</p>
+        </div>
+      )}
+
+      {/* Market Sensitivity */}
+      {definition.marketSensitivity && (
+        <div>
+          <div className="text-xs text-gray-500 mb-1">Market Sensitivity</div>
+          <p className="text-xs text-gray-300 leading-relaxed">{definition.marketSensitivity}</p>
+        </div>
+      )}
+
+      {/* Regime Change Potential */}
+      {definition.regimeChangePotential && (
+        <div className="bg-gray-800/50 rounded p-2">
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-500">Regime Change Potential:</span>
+            <span className={`text-xs font-semibold capitalize ${
+              definition.regimeChangePotential === "very high" ? "text-red-400" :
+              definition.regimeChangePotential === "high" ? "text-amber-400" :
+              "text-gray-400"
+            }`}>
+              {definition.regimeChangePotential}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Notable Moments */}
+      {speaker.notableMoments && speaker.notableMoments.length > 0 && (
+        <div>
+          <div className="text-xs text-gray-500 mb-2">Notable Moments</div>
+          <div className="space-y-2">
+            {speaker.notableMoments.slice(0, 3).map((moment, idx) => (
+              <div key={idx} className="bg-gray-800/30 rounded p-2">
+                <div className="text-xs text-gray-500">{moment.date}</div>
+                <div className="text-xs text-gray-300 leading-relaxed">{moment.description}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Wikipedia Link */}
+      {speaker.wikipediaUrl && (
+        <a
+          href={speaker.wikipediaUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 transition-colors"
+        >
+          <span>Learn more</span>
+          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+          </svg>
+        </a>
+      )}
+    </div>
+  );
+}
+
+// Economic Event Card Component
+function EconomicEventCard({
+  definition,
+  outcome
+}: {
+  definition: EconomicDefinition;
+  outcome: "beat" | "miss" | "inline" | null;
+}) {
+  return (
+    <div className="space-y-3">
+      {/* Beat/Miss Interpretations */}
+      {definition.beatInterpretation && definition.missInterpretation && (
+        <div className="space-y-2">
+          {/* Show relevant interpretation based on outcome, or both for future events */}
+          {(outcome === null || outcome === "beat") && (
+            <div className={`rounded p-2 ${outcome === "beat" ? "bg-green-900/30 border border-green-800/50" : "bg-gray-800/50"}`}>
+              <div className="flex items-center gap-1 mb-1">
+                <span className="text-xs font-semibold text-green-400">If BEATS</span>
+                <span className="text-xs text-gray-500">({definition.beatInterpretation.direction})</span>
+              </div>
+              <p className="text-xs text-gray-300 leading-relaxed">{definition.beatInterpretation.description}</p>
+              <p className="text-xs text-gray-400 mt-1">{definition.beatInterpretation.currency_impact}</p>
+            </div>
+          )}
+          {(outcome === null || outcome === "miss") && (
+            <div className={`rounded p-2 ${outcome === "miss" ? "bg-red-900/30 border border-red-800/50" : "bg-gray-800/50"}`}>
+              <div className="flex items-center gap-1 mb-1">
+                <span className="text-xs font-semibold text-red-400">If MISSES</span>
+                <span className="text-xs text-gray-500">({definition.missInterpretation.direction})</span>
+              </div>
+              <p className="text-xs text-gray-300 leading-relaxed">{definition.missInterpretation.description}</p>
+              <p className="text-xs text-gray-400 mt-1">{definition.missInterpretation.currency_impact}</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Trading Notes */}
+      {definition.tradingNotes && (
+        <div>
+          <div className="text-xs text-gray-500 mb-1">Trading Notes</div>
+          <p className="text-xs text-gray-300 leading-relaxed">{definition.tradingNotes}</p>
+        </div>
+      )}
+
+      {/* Historical Context */}
+      {definition.historicalContext && (
+        <div>
+          <div className="text-xs text-gray-500 mb-1">Historical Context</div>
+          <p className="text-xs text-gray-400 leading-relaxed">{definition.historicalContext}</p>
+        </div>
+      )}
+
+      {/* Related Events */}
+      {definition.relatedEvents && definition.relatedEvents.length > 0 && (
+        <div>
+          <div className="text-xs text-gray-500 mb-1">Related Events</div>
+          <div className="flex flex-wrap gap-1">
+            {definition.relatedEvents.slice(0, 5).map((related, idx) => (
+              <span key={idx} className="text-xs bg-gray-800 text-gray-400 px-1.5 py-0.5 rounded">
+                {related}
+              </span>
+            ))}
+          </div>
         </div>
       )}
     </div>

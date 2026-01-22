@@ -1751,10 +1751,11 @@ This section documents the actual state after completing the migration.
 |------|--------|-------------|--------|
 | Historical candles | Convex | ClickHouse | ✅ 23M+ rows |
 | Recent candles | Convex | TimescaleDB | ✅ 30-day rolling |
-| News events (historical) | TimescaleDB | ClickHouse | ✅ 91,605 rows |
+| News events (historical) | TimescaleDB | ClickHouse | ✅ 87,783 rows |
 | News events (upcoming) | - | TimescaleDB | ✅ 30-day window |
-| Event price reactions | TimescaleDB | ClickHouse | ✅ 578,777 rows |
-| Event candle windows | - | ClickHouse | ✅ 580K+ rows |
+| Event candle windows | OANDA M1 | ClickHouse | ✅ 717,497 rows |
+| Event price reactions | Derived | ClickHouse | ✅ 633,503 rows |
+| Event type statistics | Aggregated | ClickHouse | ✅ 4,435 rows |
 
 ### Key Architecture Decisions Made
 
