@@ -11,7 +11,9 @@
 | [User Stories](plans/user-stories.md) | Who uses what, why, and current status |
 | [Vision](trading-system-vision.md) | Core idea and why this matters |
 | [Technical Overview](trading-system-technical.md) | Architecture and implementation details |
-| [Triple DB ADR](decisions/001-triple-database-architecture.md) | Why we use 3 databases (quick reference) |
+| [ADR-001: Triple DB](decisions/001-triple-database-architecture.md) | Why we use 3 databases |
+| [ADR-002: Settlement Windows](decisions/002-event-settlement-windows.md) | Why 30/75/105 min windows |
+| [ADR-003: Data Routing](decisions/003-data-routing-strategy.md) | Which queries hit which DB |
 
 ---
 
@@ -21,7 +23,9 @@
 docs/
 ├── README.md                          # This file - documentation index
 ├── decisions/
-│   └── 001-triple-database-architecture.md  # Why 3 databases (ADR)
+│   ├── 001-triple-database-architecture.md  # Why 3 databases
+│   ├── 002-event-settlement-windows.md      # Why 30/75/105 min windows
+│   └── 003-data-routing-strategy.md         # Query routing rules
 ├── plans/
 │   └── user-stories.md               # User stories with acceptance criteria
 ├── trading-system-vision.md          # Product vision and goals
@@ -86,11 +90,21 @@ docs/
 
 ### Event Settlement Windows
 
+> See [ADR-002](decisions/002-event-settlement-windows.md) for the full decision record.
+
 | Window | Duration | Events | T+60 | T+90 |
 |--------|----------|--------|------|------|
 | Standard | 30 min | Low/Medium | No | No |
 | High Impact | 75 min | High impact | Yes | No |
 | Extended | 105 min | FOMC/ECB | Yes | Yes |
+
+### Data Routing
+
+> See [ADR-003](decisions/003-data-routing-strategy.md) for the full decision record.
+
+- **< 30 days**: Query TimescaleDB (hot data)
+- **> 30 days**: Query ClickHouse (cold analytics)
+- **Mixed range**: Split query, merge results
 
 ### Pip Calculation
 
