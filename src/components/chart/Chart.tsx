@@ -1070,8 +1070,9 @@ export function Chart({
       const visibleRange = timeScale.getVisibleLogicalRange();
       if (!visibleRange) return;
 
-      // Trigger load when user is viewing candles near the left edge (within 50 bars)
-      const threshold = 50;
+      // Trigger load when user is viewing candles near the left edge (within 150 bars)
+      // Higher threshold = preload earlier for smoother experience
+      const threshold = 150;
       if (visibleRange.from < threshold) {
         scrollLoadingRef.current = true;
         loadMoreHistory().finally(() => {

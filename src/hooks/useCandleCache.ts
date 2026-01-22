@@ -17,9 +17,9 @@ export interface CandleData {
 // All available timeframes in order
 const ALL_TIMEFRAMES = ["M5", "M15", "M30", "H1", "H4", "D", "W", "M"] as const;
 
-// Fixed batch sizes - no configurable limit needed since we have loadMoreHistory
+// Batch sizes for fetching
 const INITIAL_CANDLES = 500;
-const HISTORY_BATCH_SIZE = 500;
+const HISTORY_BATCH_SIZE = 200; // Smaller batches for smoother scroll-back
 
 // Get adjacent timeframes for prefetching
 function getAdjacentTimeframes(tf: string): string[] {
