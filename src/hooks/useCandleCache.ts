@@ -129,7 +129,8 @@ export function useCandleCache({
         next.set(tf, {
           candles,
           fetchedAt: Date.now(),
-          hasMoreHistory: candles.length >= INITIAL_CANDLES,
+          // Always assume there's more history until loadMoreHistory returns 0 candles
+          hasMoreHistory: true,
         });
         return next;
       });
@@ -244,7 +245,8 @@ export function useCandleCache({
             next.set(timeframe, {
               ...existing,
               candles: [...uniqueNew, ...existing.candles],
-              hasMoreHistory: newCandles.length >= HISTORY_BATCH_SIZE,
+              // Only set false when we get 0 candles (handled in the if block above)
+              hasMoreHistory: true,
             });
           }
           return next;
