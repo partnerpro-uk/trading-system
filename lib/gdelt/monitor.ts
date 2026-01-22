@@ -301,7 +301,7 @@ async function insertHeadlines(headlines: ScoredHeadline[]): Promise<number> {
         ]
       );
       inserted++;
-    } catch (error) {
+    } catch {
       // Likely duplicate or constraint violation, skip
       console.warn(`Failed to insert headline: ${h.headline.substring(0, 50)}...`);
     }

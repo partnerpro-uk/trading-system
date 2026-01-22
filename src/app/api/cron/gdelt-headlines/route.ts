@@ -51,7 +51,5 @@ export async function GET(request: Request) {
   }
 }
 
-// Enable Vercel cron
-export const config = {
-  runtime: "nodejs",
-};
+// Enable Vercel cron - use Edge or Node.js runtime
+export const runtime = "nodejs";

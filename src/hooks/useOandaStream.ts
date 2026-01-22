@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useCallback } from "react";
 import {
   isForexMarketOpen,
   getMarketStatus,
@@ -53,10 +53,13 @@ export function useOandaStream(
   const marketCheckIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const reconnectAttemptRef = useRef<number>(0);
   const statusRef = useRef<ConnectionStatus>("disconnected");
+  const connectRef = useRef<(() => void) | null>(null);
   const MAX_RECONNECT_DELAY = 60000; // Max 1 minute between retries
 
-  // Keep statusRef in sync with status state
-  statusRef.current = status;
+  // Keep statusRef in sync with status state (must be in effect, not during render)
+  useLayoutEffect(() => {
+    statusRef.current = status;
+  }, [status]);
 
   // Check market status
   const checkMarketStatus = useCallback(() => {
@@ -160,10 +163,15 @@ export function useOandaStream(
       console.log(`Stream error, reconnecting in ${delay / 1000}s (attempt ${reconnectAttemptRef.current})`);
 
       reconnectTimeoutRef.current = setTimeout(() => {
-        connect();
+        connectRef.current?.();
       }, delay);
     };
   }, [pair, enabled, checkMarketStatus]);
+
+  // Keep connectRef in sync with connect function for self-referential calls
+  useLayoutEffect(() => {
+    connectRef.current = connect;
+  }, [connect]);
 
   const disconnect = useCallback(() => {
     if (eventSourceRef.current) {
@@ -185,6 +193,7 @@ export function useOandaStream(
 
   // Initial connection and market status check
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Intentional: initialize connection on mount
     checkMarketStatus();
     connect();
 
@@ -223,6 +232,7 @@ export function useOandaStream(
     // Only reconnect if pair actually changed
     if (pair && pair !== prevPairRef.current) {
       prevPairRef.current = pair;
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- Intentional: reset state when pair changes
       disconnect();
       // Small delay to ensure clean disconnect
       const timer = setTimeout(() => connect(), 200);

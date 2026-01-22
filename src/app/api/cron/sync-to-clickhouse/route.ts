@@ -127,14 +127,15 @@ export async function GET(request: Request) {
       duration: `${duration}s`,
       logs,
     });
-  } catch (error: any) {
-    log(`ERROR: ${error.message}`);
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    log(`ERROR: ${errorMessage}`);
     console.error(error);
 
     return NextResponse.json(
       {
         success: false,
-        error: error.message,
+        error: errorMessage,
         logs,
       },
       { status: 500 }
@@ -260,7 +261,5 @@ async function deleteOldM1(
   return result.rowCount || 0;
 }
 
-// Enable Vercel cron
-export const config = {
-  runtime: "nodejs",
-};
+// Enable Vercel cron - use Edge or Node.js runtime
+export const runtime = "nodejs";

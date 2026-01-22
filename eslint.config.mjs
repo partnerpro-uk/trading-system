@@ -12,6 +12,17 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Convex generated files
+    "convex/_generated/**",
+    // Scripts - one-off migration/setup utilities
+    "scripts/**",
+    // Worker backfill scripts
+    "worker/src/historical-backfill/**",
+    // Worker test/utility files
+    "worker/src/test-*.ts",
+    "worker/src/verify-*.ts",
+    "worker/src/cleanup-*.ts",
+    "worker/src/triple-check.ts",
   ]),
 ]);
 

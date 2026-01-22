@@ -5,7 +5,7 @@
  * for use with Puppeteer/Cheerio in Node.js
  */
 
-import { formatInTimeZone, toZonedTime } from "date-fns-tz";
+import { formatInTimeZone } from "date-fns-tz";
 
 // Timezone constants
 export const TZ_UTC = "UTC";
@@ -346,7 +346,7 @@ export function parseTimeString(
  */
 export function parseDateString(
   dateStr: string,
-  referenceYear: number
+  _referenceYear: number // Kept for future use with year inference
 ): { month: number; day: number } | null {
   const cleaned = dateStr.trim().replace(/\n/g, "");
 
@@ -446,7 +446,7 @@ export function buildEventRecord(
   previous: string | null
 ): NewsEventRecord {
   const eventId = generateEventId(eventName, currency, date);
-  const { tz: sourceTz, name: sourceTzName } = getSourceTimezone(currency);
+  const { name: sourceTzName } = getSourceTimezone(currency);
   const outcome = calculateOutcome(actual, forecast);
   const { deviation, deviationPct } = calculateDeviation(actual, forecast);
 

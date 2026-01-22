@@ -20,7 +20,6 @@ const LABEL_PADDING_Y = 2;
 const LINE_HEIGHT = 14;
 const FONT_SIZE = 11;
 const FONT = `${FONT_SIZE}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
-const BORDER_RADIUS = 2;
 
 // Price axis pane renderer - draws custom label box on price axis
 class PriceAxisLabelRenderer implements IPrimitivePaneRenderer {

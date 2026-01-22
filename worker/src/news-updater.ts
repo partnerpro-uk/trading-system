@@ -14,7 +14,6 @@ import {
   buildDateUrl,
   parseDateString,
   parseTimeString,
-  normalizeImpact,
   NewsEventRecord,
   TZ_NEW_YORK,
 } from "./lib/ff-parser";

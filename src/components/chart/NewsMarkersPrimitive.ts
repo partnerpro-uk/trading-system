@@ -273,7 +273,7 @@ class NewsMarkersRenderer implements IPrimitivePaneRenderer {
 
         // Draw tooltip if hovered
         if (marker.isHovered) {
-          this._drawTooltip(ctx, x, flagY, marker, scope, borderColor);
+          this._drawTooltip(ctx, x, flagY, marker, scope);
         }
       }
 
@@ -327,7 +327,6 @@ class NewsMarkersRenderer implements IPrimitivePaneRenderer {
     y: number,
     marker: MarkerRenderData,
     scope: BitmapCoordinatesRenderingScope,
-    borderColor: string
   ) {
     const { horizontalPixelRatio, verticalPixelRatio } = scope;
     const titleFontSize = 13 * verticalPixelRatio;

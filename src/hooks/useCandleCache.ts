@@ -79,7 +79,7 @@ export function useCandleCache({
   const [cache, setCache] = useState<Map<string, CandleCacheEntry>>(new Map());
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
-  const [prefetchedTimeframes, setPrefetchedTimeframes] = useState<string[]>([]);
+  const [, setPrefetchedTimeframes] = useState<string[]>([]);
 
   // Track loading state per timeframe to prevent duplicate fetches
   const loadingRef = useRef<Set<string>>(new Set());
