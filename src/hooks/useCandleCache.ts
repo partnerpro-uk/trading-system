@@ -73,7 +73,7 @@ interface UseCandleCacheResult {
 export function useCandleCache({
   pair,
   initialTimeframe,
-  limit = 100, // Reduced from 500 - Vercel serverless times out on larger requests
+  limit = 500,
 }: UseCandleCacheOptions): UseCandleCacheResult {
   const [timeframe, setTimeframe] = useState(initialTimeframe);
   const [cache, setCache] = useState<Map<string, CandleCacheEntry>>(new Map());
