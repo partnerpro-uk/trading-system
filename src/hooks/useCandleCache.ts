@@ -17,6 +17,10 @@ export interface CandleData {
 // All available timeframes in order
 const ALL_TIMEFRAMES = ["M5", "M15", "M30", "H1", "H4", "D", "W", "M"] as const;
 
+// Fixed batch sizes - no configurable limit needed since we have loadMoreHistory
+const INITIAL_CANDLES = 500;
+const HISTORY_BATCH_SIZE = 500;
+
 // Get adjacent timeframes for prefetching
 function getAdjacentTimeframes(tf: string): string[] {
   const idx = ALL_TIMEFRAMES.indexOf(tf as typeof ALL_TIMEFRAMES[number]);
@@ -43,7 +47,6 @@ interface CandleCacheEntry {
 interface UseCandleCacheOptions {
   pair: string;
   initialTimeframe: string;
-  limit?: number;
 }
 
 interface UseCandleCacheResult {
@@ -73,7 +76,6 @@ interface UseCandleCacheResult {
 export function useCandleCache({
   pair,
   initialTimeframe,
-  limit = 10000,
 }: UseCandleCacheOptions): UseCandleCacheResult {
   const [timeframe, setTimeframe] = useState(initialTimeframe);
   const [cache, setCache] = useState<Map<string, CandleCacheEntry>>(new Map());
@@ -91,10 +93,11 @@ export function useCandleCache({
 
   // Fetch candles for a specific timeframe
   const fetchCandles = useCallback(async (tf: string, beforeTimestamp?: number): Promise<CandleData[]> => {
+    const batchSize = beforeTimestamp ? HISTORY_BATCH_SIZE : INITIAL_CANDLES;
     const params = new URLSearchParams({
       pair,
       timeframe: tf,
-      limit: limit.toString(),
+      limit: batchSize.toString(),
     });
 
     if (beforeTimestamp) {
@@ -108,7 +111,7 @@ export function useCandleCache({
 
     const data = await response.json();
     return data.candles;
-  }, [pair, limit]);
+  }, [pair]);
 
   // Load a timeframe into cache
   const loadTimeframe = useCallback(async (tf: string, isBackground = false): Promise<boolean> => {
@@ -126,7 +129,7 @@ export function useCandleCache({
         next.set(tf, {
           candles,
           fetchedAt: Date.now(),
-          hasMoreHistory: candles.length >= limit,
+          hasMoreHistory: candles.length >= INITIAL_CANDLES,
         });
         return next;
       });
@@ -141,7 +144,7 @@ export function useCandleCache({
     } finally {
       loadingRef.current.delete(tf);
     }
-  }, [fetchCandles, limit]); // Removed cache dependency - use cacheRef instead
+  }, [fetchCandles]);
 
   // Load current timeframe on mount/change
   useEffect(() => {
@@ -241,7 +244,7 @@ export function useCandleCache({
             next.set(timeframe, {
               ...existing,
               candles: [...uniqueNew, ...existing.candles],
-              hasMoreHistory: newCandles.length >= limit,
+              hasMoreHistory: newCandles.length >= HISTORY_BATCH_SIZE,
             });
           }
           return next;
@@ -253,7 +256,7 @@ export function useCandleCache({
       setIsLoadingMore(false);
       loadingMoreRef.current = false;
     }
-  }, [timeframe, cache, fetchCandles, limit]);
+  }, [timeframe, cache, fetchCandles]);
 
   // Refetch current timeframe
   const refetch = useCallback(async () => {
