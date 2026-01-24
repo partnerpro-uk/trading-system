@@ -708,7 +708,17 @@ export class NewsMarkersPrimitive implements ISeriesPrimitive<Time> {
     const groups = new Map<number, NewsEventData[]>();
     const TIME_TOLERANCE = 5 * 60 * 1000;
 
-    for (const event of this._events) {
+    // First, deduplicate by eventId to avoid duplicates from database
+    const seenEventIds = new Set<string>();
+    const uniqueEvents = this._events.filter(event => {
+      if (seenEventIds.has(event.eventId)) {
+        return false;
+      }
+      seenEventIds.add(event.eventId);
+      return true;
+    });
+
+    for (const event of uniqueEvents) {
       let foundGroup = false;
       for (const [ts, events] of groups) {
         if (Math.abs(event.timestamp - ts) < TIME_TOLERANCE) {
