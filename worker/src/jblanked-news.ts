@@ -47,6 +47,58 @@ const CURRENCY_COUNTRY: Record<string, string> = {
   CNH: "China",
 };
 
+// Unit suffixes for known events (ForexFactory display format)
+// These events report values in specific units that should be displayed
+const EVENT_UNITS: Record<string, string> = {
+  // Job reports - thousands (K)
+  "Unemployment Claims": "K",
+  "Continuing Claims": "K",
+  "ADP Non-Farm Employment Change": "K",
+  "Non-Farm Employment Change": "K",
+  "Employment Change": "K",
+  "Challenger Job Cuts": "K",
+  "JOLTS Job Openings": "M", // Millions
+
+  // Trade/Currency reports - billions (B)
+  "Trade Balance": "B",
+  "Current Account": "B",
+  "Budget Balance": "B",
+  "Federal Budget Balance": "B",
+  "Treasury Currency Report": "B",
+
+  // Percent-based (%)
+  "CPI m/m": "%",
+  "CPI y/y": "%",
+  "CPI q/q": "%",
+  "Core CPI m/m": "%",
+  "Core CPI y/y": "%",
+  "PPI m/m": "%",
+  "PPI y/y": "%",
+  "Core PPI m/m": "%",
+  "GDP q/q": "%",
+  "Final GDP q/q": "%",
+  "Prelim GDP q/q": "%",
+  "GDP y/y": "%",
+  "Retail Sales m/m": "%",
+  "Core Retail Sales m/m": "%",
+  "Industrial Production m/m": "%",
+  "Manufacturing Production m/m": "%",
+  "Unemployment Rate": "%",
+  "Interest Rate": "%",
+  "Policy Rate": "%",
+  "BOJ Policy Rate": "%",
+  "BOE Policy Rate": "%",
+  "ECB Main Refinancing Rate": "%",
+  "Fed Funds Rate": "%",
+  "Cash Rate": "%",
+  "NHPI m/m": "%",
+  "HPI m/m": "%",
+  "Final GDP Price Index q/q": "%",
+  "Core PCE Price Index m/m": "%",
+  "Personal Income m/m": "%",
+  "Personal Spending m/m": "%",
+};
+
 // =============================================================================
 // Types
 // =============================================================================
@@ -236,10 +288,44 @@ function extractCurrency(raw: string | null): string {
   return raw;
 }
 
+/**
+ * Format a numeric value with its unit suffix based on event name.
+ * Examples: 200 -> "200K" for Unemployment Claims, 0.3 -> "0.3%" for CPI m/m
+ */
+function formatValueWithUnit(value: number, eventName: string): string | null {
+  if (value === 0) return null;
+
+  const unit = EVENT_UNITS[eventName];
+  if (unit) {
+    return `${value}${unit}`;
+  }
+  return String(value);
+}
+
 function isValidEvent(event: JBlankedEvent): boolean {
   // Skip events without required fields
   const currency = extractCurrency(event.Currency);
   return !!(event.Name && currency && event.Date);
+}
+
+/**
+ * Generate a deterministic event ID based on event content.
+ * Format: jb_{source}_{name}_{currency}_{timestamp_ms}
+ * This ensures the same event always gets the same ID.
+ */
+function generateEventId(
+  source: string,
+  name: string,
+  currency: string,
+  timestamp: Date
+): string {
+  // Normalize name: remove spaces, lowercase, truncate
+  const normalizedName = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "_")
+    .substring(0, 20);
+  const timestampMs = timestamp.getTime();
+  return `jb_${source}_${normalizedName}_${currency}_${timestampMs}`;
 }
 
 function transformEvent(event: JBlankedEvent, source: string): NewsEvent | null {
@@ -254,16 +340,16 @@ function transformEvent(event: JBlankedEvent, source: string): NewsEvent | null 
   const currency = extractCurrency(event.Currency);
 
   return {
-    event_id: `jb_${source}_${event.Event_ID || Date.now()}`,
+    event_id: generateEventId(source, event.Name, currency, timestamp),
     event_type: event.Category || "Unknown",
     name: event.Name,
     country: CURRENCY_COUNTRY[currency] || currency || "Unknown",
     currency: currency.substring(0, 5), // Max 5 chars for TimescaleDB
     timestamp,
     impact,
-    actual: event.Actual !== 0 ? String(event.Actual) : null,
-    forecast: event.Forecast !== 0 ? String(event.Forecast) : null,
-    previous: event.Previous !== 0 ? String(event.Previous) : null,
+    actual: formatValueWithUnit(event.Actual, event.Name),
+    forecast: formatValueWithUnit(event.Forecast, event.Name),
+    previous: formatValueWithUnit(event.Previous, event.Name),
     description: event.Outcome !== "Data Not Loaded" ? event.Outcome : null,
     datetime_utc: formatInTimeZone(timestamp, "UTC", "yyyy-MM-dd HH:mm:ss"),
     datetime_new_york: formatInTimeZone(timestamp, "America/New_York", "yyyy-MM-dd HH:mm:ss"),

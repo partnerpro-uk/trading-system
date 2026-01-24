@@ -6,7 +6,7 @@
 
 ## The Core Idea
 
-Build a comprehensive news event database that goes beyond simple calendar data. Track not just *what* happened (actual vs forecast), but *how the market reacted* — the spike, the reversal, the settlement pattern — across every high-impact event historically.
+Build a comprehensive news event database that goes beyond simple calendar data. Track not just *what* happened (actual vs forecast), but *how the market reacted* — the spike, the reversal, the settlement pattern — across **every** event historically.
 
 This isn't about predicting news outcomes. It's about understanding **how markets behave around news** so that when you're in a trade or considering one, you have full context:
 
@@ -30,747 +30,661 @@ This system works alongside technical analysis, not instead of it. News context 
 - Does this event typically spike then reverse?
 - How big are the moves historically?
 - Should you hold through this or close before?
+- How did OTHER pairs react to this event?
+- Did the reaction continue for hours or fade quickly?
 
 ### The Opportunity
 
-Build a system where every red-folder news event has:
-- Full price reaction profile (spike, reversal, settlement)
-- Historical statistics across dozens of occurrences
-- Pattern classification (spike-reversal, continuation, fade, etc.)
+Build a system where **every** news event has:
+- Full price reaction profile (spike, pullback, reversal, extended trend)
+- Cross-pair correlation (how USD events affect EUR/USD, GBP/USD, USD/JPY, etc.)
+- Extended timeframe analysis (immediate spike through T+24 hours)
+- Historical statistics across hundreds of occurrences
+- Pattern classification (spike-reversal, continuation, fade, trap, delayed)
 - Queryable data Claude can reason about
 
 ---
 
-## What We're Building
+## Scope: ALL Events, Not Just High Impact
 
-### Layer 1: Event Metadata
+### Why Track Everything?
 
-Standard calendar data — the foundation.
+Traditional approaches focus only on "red folder" (high impact) events. We track **all 13,000+ events** because:
 
-```
-Event: FOMC Rate Decision
-Country: US
-Currency: USD
-Impact: High (red folder)
-Timestamp: 2025-01-15 19:00:00 UTC
-Actual: 4.50%
-Forecast: 4.50%
-Previous: 4.75%
-Surprise Factor: 0 (met expectations)
-```
+**1. Low Impact Can Become High Impact**
+- A "low impact" speech can move markets 100 pips if the speaker says something unexpected
+- Market context matters: during uncertainty, even medium events can trigger large moves
+- Better to have the data and not need it than miss a significant reaction
 
-**Plus contextual understanding:**
-- What is FOMC? (Federal Open Market Committee sets US interest rates)
-- Why does it matter? (Rate changes affect currency strength, borrowing costs)
-- What pairs does it impact? (All USD pairs, but especially EUR/USD, USD/JPY)
+**2. Pattern Discovery**
+- Aggregate 100 instances of a "medium" event type reveals hidden patterns
+- Some "low impact" events consistently cause 15-20 pip moves — worth knowing
+- Cross-event patterns: "When PMI is bad AND retail sales misses, the next event amplifies"
 
-### Layer 2: Price Reaction Profiles
+**3. Context Building**
+- Every event adds context for Claude's reasoning
+- "Three negative data points today before FOMC" changes the reaction profile
+- Full history = better pattern recognition
 
-For each high-impact event, capture the market's actual response.
+**4. Future-Proofing**
+- Historical data cannot be recovered once lost
+- Storage is cheap; hindsight is expensive
+- 13K events × 9 pairs × 100 candles = ~12M rows (manageable)
 
-```
-Event: FOMC Rate Decision (Jan 15, 2025)
-Pair: EUR/USD
+### Current Data
+- **13,470 events** in ClickHouse (2023-2026)
+- Only 42 have impact classification (2024+ has impact data)
+- Events from 2022-2023 default to "None" impact — still valuable for price reactions
 
-── Pre-Event ──
-Price T-15min:        1.08500
-Price T-5min:         1.08520
-Price at event:       1.08515
+---
 
-── Immediate Reaction (0-5 min) ──
-Spike high:           1.08540  (+2.5 pips)
-Spike low:            1.08180  (-33.5 pips)
-Spike direction:      DOWN
-Spike magnitude:      33.5 pips
-Time to spike:        1m 42s
+## Multi-Pair Analysis
 
-── Settlement Phase ──
-Price T+15min:        1.08350
-Price T+30min:        1.08480
-Price T+1hr:          1.08650
-Price T+3hr:          1.08890
+### The Insight
 
-── Pattern Classification ──
-Pattern type:         "spike_down_full_reversal"
-Did reverse:          true
-Reversal magnitude:   71 pips (from spike low)
-Final direction:      UP (opposite to spike)
-```
+When NFP releases, it doesn't just affect EUR/USD — it affects:
+- **EUR/USD** — Dollar strength/weakness
+- **GBP/USD** — Same USD denominator
+- **USD/JPY** — Direct USD exposure
+- **USD/CHF** — Safe haven correlation
+- **AUD/USD** — Risk-on/off proxy
+- **USD/CAD** — Commodity correlation
+- **NZD/USD** — Risk sentiment
+- **EUR/JPY** — Cross effects
+- **GBP/JPY** — Cross effects
 
-### Layer 3: 1-Minute Candle Windows
+### Why This Matters
 
-Store granular candle data around each event for precise analysis and replay.
+**Cross-Pair Confirmation:**
+> "NFP beat expectations. EUR/USD spiked down 40 pips, but GBP/USD only moved 15 pips. Historical pattern shows when GBP lags, EUR catches up — expect EUR reversal."
 
-```
-Event Window: FOMC Jan 15, 2025
-Pair: EUR/USD
-Window: T-15min to T+60min (75 one-minute candles)
+**Trade Selection:**
+> "CPI coming up. Historical data shows USD/JPY has 20% larger moves than EUR/USD on CPI surprises. If betting on dollar strength, USD/JPY offers better R:R."
 
-Candles: [
-  { time: "18:45", o: 1.08495, h: 1.08502, l: 1.08490, c: 1.08500 },
-  { time: "18:46", o: 1.08500, h: 1.08510, l: 1.08498, c: 1.08505 },
-  ...
-  { time: "19:00", o: 1.08515, h: 1.08540, l: 1.08180, c: 1.08220 }, // The event candle
-  { time: "19:01", o: 1.08220, h: 1.08280, l: 1.08200, c: 1.08265 },
-  ...
-]
-```
+**Correlation Breakdown Detection:**
+> "Normally EUR/USD and GBP/USD correlate 0.85 around Fed events. Last 3 events show correlation dropping to 0.6 — something fundamental is diverging."
 
-**Why store separately from main candles:**
-- Main candle storage is 5m/15m/1H/4H/Daily — optimized for charting
-- News windows are 1-minute, used for different purposes (event analysis)
-- Keeps queries fast — don't need to scan through millions of 1m candles
-- Clear separation of concerns: charting data vs event reaction data
+### Implementation
 
-### Tiered Candle Window Strategy
+For each event, track reactions on **9 major pairs**:
+- 7 USD pairs: EUR/USD, GBP/USD, USD/JPY, USD/CHF, AUD/USD, USD/CAD, NZD/USD
+- 2 major crosses: EUR/JPY, GBP/JPY
 
-Not all events need the same window length. Press conferences have extended Q&A where market-moving comments can come 30-40 minutes in. Data releases are digested within minutes.
+**Backfill estimate:** 13K events × 9 pairs = **117K OANDA API calls**
 
-#### Window Configuration by Event Type
+---
 
-| Tier | Event Types | Window | Candles | Rationale |
-|------|-------------|--------|---------|-----------|
-| **Extended (T+90)** | FOMC Press Conference, ECB Press Conference | T-15 to T+90 | 105 | 45-60 min Q&A, Powell/Lagarde can move markets at T+30, T+40 |
-| **High (T+60)** | All other high-impact events | T-15 to T+60 | 75 | Captures spike + full reversal window |
-| **Medium (T+15)** | Medium-impact events | T-15 to T+15 | 30 | Spike window only, use M5 for settlement |
-| **Low (T+15)** | Low-impact events | T-15 to T+15 | 30 | Minimal reaction expected |
-| **Non-economic** | Bank holidays, etc. | Skip | 0 | No price reaction to measure |
+## Multi-Timeframe Strategy
 
-#### Why FOMC/ECB Get Extended Windows
+### The Three Phases of News Reactions
 
-**FOMC Press Conference:**
-- Opening statement: ~10-15 mins (scripted, fewer surprises)
-- Q&A session: ~30-45 mins (where the action is)
-- Powell has moved markets significantly at T+20, T+35, even T+50
-- Only ~8 events/year — negligible storage overhead
+News events don't resolve in 5 minutes. They unfold in phases:
 
-**ECB Press Conference:**
-- Similar structure to FOMC
-- Lagarde Q&A regularly moves EUR/USD 30-50 pips mid-presser
-- ~8 events/year
+**Phase 1: Spike (T-15min to T+5min)**
+- Initial algorithmic reaction
+- Retail stop hunts
+- Maximum volatility
+- **Captured with:** 1-minute candles
 
-**Why NOT extend other events:**
-- **FOMC Minutes**: Text dump, digested in 15-30 mins, no Q&A
-- **NFP/CPI/GDP**: Instant data release, reaction in first 5-15 mins
-- **RBA/RBNZ/BOC**: Statement-only, no extended presser
+**Phase 2: Settlement (T+5min to T+90min)**
+- Initial reversal or continuation
+- Institutional positioning
+- Pattern classification possible
+- **Captured with:** 1-minute candles
 
-#### Storage Calculation
+**Phase 3: Extended Aftermath (T+90min to T+24hr)**
+- Longer-term trend establishment
+- "Did the spike direction hold?"
+- Next-session reaction (Asian, European opens)
+- **Captured with:** H1 candles (or H4 for T+24hr)
 
-```
-Current event counts:
-- High:         20,090 events
-- Medium:       24,555 events
-- Low:          48,342 events
-- Non-economic:  2,780 events
+### Why Extended Tracking Matters
 
-Estimated storage (× 7 pairs):
-- FOMC/ECB (~160 events):    160 × 7 × 105 = 118K candles
-- Other High (~19,930):   19,930 × 7 × 75  = 10.5M candles
-- Medium:                 24,555 × 7 × 30  = 5.2M candles
-- Low:                    48,342 × 7 × 30  = 10.2M candles
-- Non-economic:                            = 0 candles
+**Story of a Trade:**
+> EUR/USD spikes down 50 pips on hot CPI. Trader sees "reversal setup," goes long at T+20min.
+>
+> - At T+1hr: up 20 pips — looks like a winner
+> - At T+4hr: back to entry — concerning
+> - At T+8hr: down 30 pips — stopped out
+> - At T+24hr: down 80 pips — trend continuation
+>
+> **Historical pattern:** When CPI surprises by >0.3%, the spike direction holds 78% of the time through T+24hr. The "reversal" was a pullback, not a reversal.
 
-Total: ~26M candle records
-```
+**With extended tracking, Claude can warn:**
+> "CPI spike down 50 pips. Historical data shows hot CPI rarely reverses — 78% of the time, price is lower at T+24hr. Consider this a pullback opportunity to add shorts, not a reversal."
 
-Compare to flat T+60 for all: ~49M records (47% reduction with tiered approach)
+### Candle Strategy
 
-#### Settlement Prices Beyond T+15
+| Phase | Timeframe | Window | Candles | Storage |
+|-------|-----------|--------|---------|---------|
+| Spike + Settlement | M1 | T-15 to T+90 | 105 candles | Per event, per pair |
+| Extended Aftermath | H1 | T+2hr, T+4hr, T+8hr, T+24hr | 4 snapshots | Derived from main H1 table |
 
-For medium/low events where we only store T-15 to T+15 candles, settlement prices (T+30m, T+1hr, T+3hr) are pulled from the main M5 candle table. The 1-minute granularity is only needed for spike detection — settlement is adequately captured at 5-minute resolution.
+**Why not M1 for T+24hr?**
+- 24 hours × 60 min = 1,440 candles per event per pair
+- 13K events × 9 pairs × 1,440 = **168 million candles**
+- Overkill: minute-level granularity isn't needed 8 hours later
+- H1 captures the trend; that's what matters for aftermath
 
-### Layer 4: Aggregated Statistics
+---
 
-After collecting 50+ instances of each event type, compute statistics.
+## Live Processing Architecture
+
+### The Problem with Batch Processing
+
+Current approach: Run a script daily/hourly to calculate reactions.
+
+**Issues:**
+- Real-time events aren't captured until next batch
+- Trader needs context NOW, not in 6 hours
+- Miss intraday patterns
+- Can't power real-time alerts
+
+### Real-Time Event State Machine
+
+Each event progresses through states:
 
 ```
-Event: FOMC Rate Decision
-Historical Instances: 67 (2017-2025)
-Pair: EUR/USD
-
-── Spike Statistics ──
-Average spike:              42.3 pips
-Median spike:               38.0 pips
-Largest spike:              127 pips (Mar 2020)
-Smallest spike:             12 pips (no change, expected)
-
-── Direction Statistics ──
-Initial spike UP:           31 (46%)
-Initial spike DOWN:         36 (54%)
-
-── Reversal Statistics ──
-Reversal within 30min:      43/67 (64%)
-Reversal within 1hr:        48/67 (72%)
-Final direction matches spike: 26/67 (39%)
-
-── Surprise Factor Correlation ──
-When actual = forecast:     Avg spike 28 pips
-When actual ≠ forecast:     Avg spike 67 pips
-Bigger surprise → bigger spike: r=0.73
-
-── Best Trading Approach (Historical) ──
-"Fade the spike after 15-20 min consolidation"
-Win rate on reversal trade: 64%
-Average R on reversal:      1.8R
+PENDING → CAPTURING_PRE → ACTIVE → SETTLING → COMPLETE
 ```
+
+**State Definitions:**
+
+| State | When | Actions |
+|-------|------|---------|
+| `PENDING` | T-24hr to T-15min | Event exists, no price capture yet |
+| `CAPTURING_PRE` | T-15min | Start recording M1 candles, capture pre-event prices |
+| `ACTIVE` | T+0 to T+5min | Event released, spike detection, maximum alertness |
+| `SETTLING` | T+5min to T+90min | Pattern forming, reversal detection |
+| `COMPLETE` | T+90min+ | Calculate final metrics, update statistics |
+
+### Live Processing Flow
+
+```
+1. Event Scheduler
+   └── Monitors upcoming events
+   └── Triggers state transitions
+   └── Spawns capture workers
+
+2. Real-Time Capture (during CAPTURING_PRE through SETTLING)
+   └── WebSocket subscription to relevant pairs
+   └── Store M1 candles to TimescaleDB
+   └── Calculate running metrics (spike high/low, reversal detection)
+
+3. Live Updates to UI
+   └── Push via WebSocket to connected clients
+   └── "EUR_USD spiked 45 pips on NFP — historical avg was 42"
+   └── Update sidebar with live event status
+
+4. Completion (after SETTLING)
+   └── Calculate final reaction metrics
+   └── Classify pattern
+   └── Update aggregate statistics
+   └── Archive to ClickHouse
+```
+
+### Why Real-Time Matters
+
+**Without real-time:**
+- Trader: "What just happened on NFP?"
+- System: "Check back tomorrow when we've processed it"
+
+**With real-time:**
+- Trader: "What just happened on NFP?"
+- System: "NFP beat by 50K jobs. EUR/USD spiked down 52 pips in 90 seconds. Historical pattern shows 68% reversal within 30 min when surprise is moderate. Currently at T+7min, watching for reversal signal."
+
+---
+
+## Pattern Classification System
+
+### Core Patterns
+
+| Pattern | Description | Trading Implication |
+|---------|-------------|---------------------|
+| `spike_reversal` | Initial spike fully reverses within settlement | Fade the spike after confirmation |
+| `continuation` | Spike continues in same direction through T+1hr | Trend trade, don't fade |
+| `fade` | Spike partially reverses (30-70%) then ranges | Wait for breakout |
+| `range` | No significant directional move | Event was priced in |
+| `delayed_reaction` | Minimal initial spike, big move at T+30min+ | Second wave entry opportunity |
+| `trap` | Spike reverses aggressively, traps fade traders, then reverses again | Patience — let it settle |
+
+### Classification Logic
+
+```typescript
+function classifyPattern(reaction: PriceReaction): PatternType {
+  const spikeDir = reaction.spikeDirection; // UP or DOWN
+  const spikeMag = reaction.spikeMagnitudePips;
+
+  const t30Change = reaction.priceAtPlus30m - reaction.priceAtEvent;
+  const t1hrChange = reaction.priceAtPlus1hr - reaction.priceAtEvent;
+
+  // Continuation: still moving in spike direction at T+1hr
+  if (Math.sign(t1hrChange) === Math.sign(spikeMag) && Math.abs(t1hrChange) > spikeMag * 0.8) {
+    return 'continuation';
+  }
+
+  // Spike reversal: opposite direction at T+1hr, magnitude > 80% of spike
+  if (Math.sign(t1hrChange) !== Math.sign(spikeMag) && Math.abs(t1hrChange) > spikeMag * 0.8) {
+    return 'spike_reversal';
+  }
+
+  // Fade: partial reversal (30-70%)
+  if (Math.sign(t1hrChange) !== Math.sign(spikeMag) && Math.abs(t1hrChange) > spikeMag * 0.3) {
+    return 'fade';
+  }
+
+  // Delayed: small spike but big T+30m move
+  if (spikeMag < 15 && Math.abs(t30Change) > 30) {
+    return 'delayed_reaction';
+  }
+
+  // Range: no significant movement
+  if (spikeMag < 10 && Math.abs(t1hrChange) < 15) {
+    return 'range';
+  }
+
+  return 'fade'; // Default
+}
+```
+
+### Extended Pattern Analysis (T+24hr)
+
+Add H1-based patterns for longer-term behavior:
+
+| Extended Pattern | Description |
+|-----------------|-------------|
+| `spike_trend` | Spike direction continues through T+24hr |
+| `spike_trap_trend` | Spike reverses, then reverses again to original direction |
+| `mean_reversion` | Returns to pre-event price by T+24hr |
+| `new_range` | Establishes new range at spike level |
 
 ---
 
 ## Data Architecture
 
-### Database Schema
+### Dual Database Strategy
 
-```typescript
-// Event metadata (one per event occurrence)
-economicEvents: defineTable({
-  // Identity
-  eventId: v.string(),              // "{name}_{currency}_{YYYY-MM-DD}_{HH:MM}" e.g. "CPI_m_m_USD_2024-01-15_14:30"
-  eventType: v.string(),            // "FOMC", "NFP", "CPI" (derived/categorized)
-  name: v.string(),                 // "CPI m/m" (original event name from scraper)
+| Database | Purpose | Data |
+|----------|---------|------|
+| **ClickHouse** | Historical storage | All events, all reactions, full M1 windows |
+| **TimescaleDB** | Live/recent data | Last 90 days events, live M1 capture |
 
-  // Location/Currency
-  country: v.string(),              // "US" (derived from currency)
-  currency: v.string(),             // "USD"
+### Schema: Event Core
 
-  // Timing
-  timestamp: v.number(),            // Unix ms (UTC)
-  scrapedAt: v.optional(v.number()), // When data was scraped (for upsert tracking)
+```sql
+-- ClickHouse: news_events
+CREATE TABLE news_events (
+  event_id String,
+  event_type String,
+  name String,
+  country String,
+  currency String,
+  timestamp DateTime,
+  impact String,  -- High/Medium/Low/None
+  actual Nullable(String),
+  forecast Nullable(String),
+  previous Nullable(String),
+  description Nullable(String),
+  trading_session String,
+  source_tz String DEFAULT 'EET',
+  raw_source String DEFAULT 'jblanked_forex-factory',
+  created_at DateTime DEFAULT now(),
 
-  // Status & Session (from scraper)
-  status: v.string(),               // "scheduled" | "released"
-  dayOfWeek: v.optional(v.string()), // "Mon", "Tue", etc.
-  tradingSession: v.optional(v.string()), // "asian" | "london" | "new_york" | "london_ny_overlap" | "off_hours"
-
-  // Impact level
-  impact: v.string(),               // "high" | "medium" | "low" | "non_economic"
-
-  // Values (strings for display: "4.50%", "256K")
-  actual: v.optional(v.string()),
-  forecast: v.optional(v.string()),
-  previous: v.optional(v.string()),
-
-  // Parsed numeric values
-  actualValue: v.optional(v.number()),
-  forecastValue: v.optional(v.number()),
-  previousValue: v.optional(v.number()),
-
-  // Pre-computed from scraper (actual - forecast)
-  deviation: v.optional(v.number()),
-  deviationPct: v.optional(v.number()),
-  outcome: v.optional(v.string()),  // "beat" | "miss" | "met" | null (for scheduled)
-
-  // Z-score normalized: (actual - forecast) / historicalStdDev (calculated post-import)
-  surpriseZScore: v.optional(v.number()),
-
-  // Event relationships (FOMC decision → press conference)
-  relatedEventId: v.optional(v.string()),
-  isFollowUp: v.boolean(),          // true = this is a follow-up event
-
-  // Context
-  description: v.optional(v.string()),
-
-  // Processing status
-  reactionsCalculated: v.boolean(), // Has price reaction been computed?
-})
-.index("by_timestamp", ["timestamp"])
-.index("by_type", ["eventType"])
-.index("by_currency", ["currency"])
-.index("by_event_id", ["eventId"])
-.index("by_related", ["relatedEventId"])
-.index("by_type_timestamp", ["eventType", "timestamp"])
-.index("by_status", ["status"])
-.index("by_impact", ["impact"])
-
-
-// Price reaction per event per pair
-eventPriceReactions: defineTable({
-  eventId: v.string(),              // Links to economicEvents
-  pair: v.string(),                 // "EUR_USD"
-  eventTimestamp: v.number(),       // Denormalized for queries
-
-  // Pre-event prices
-  priceAtMinus15m: v.number(),
-  priceAtMinus5m: v.number(),
-  priceAtMinus1m: v.number(),
-  priceAtEvent: v.number(),
-
-  // Spike data (first 5 minutes)
-  spikeHigh: v.number(),
-  spikeLow: v.number(),
-  spikeDirection: v.string(),       // "UP" | "DOWN"
-  spikeMagnitudePips: v.number(),
-  timeToSpikeSec: v.optional(v.number()),
-
-  // Settlement prices
-  priceAtPlus5m: v.number(),
-  priceAtPlus15m: v.number(),
-  priceAtPlus30m: v.number(),
-  priceAtPlus1hr: v.number(),
-  priceAtPlus3hr: v.optional(v.number()),
-
-  // Pattern classification
-  patternType: v.string(),          // "spike_reversal", "continuation", "fade", "range"
-  didReverse: v.boolean(),
-  reversalMagnitudePips: v.optional(v.number()),
-  finalDirectionMatchesSpike: v.boolean(),
-})
-.index("by_event", ["eventId"])
-.index("by_pair", ["pair"])
-.index("by_pair_event", ["pair", "eventId"])
-.index("by_pair_timestamp", ["pair", "eventTimestamp"])
-.index("by_pattern", ["patternType"])
-
-
-// 1-minute candle windows (stored separately from main candles)
-eventCandleWindows: defineTable({
-  eventId: v.string(),
-  pair: v.string(),
-  eventTimestamp: v.number(),       // Denormalized for sorting
-  windowStart: v.number(),          // T-15min timestamp
-  windowEnd: v.number(),            // T+60min timestamp
-
-  // Array of 1-minute candles (75 candles per window)
-  candles: v.array(v.object({
-    timestamp: v.number(),
-    open: v.number(),
-    high: v.number(),
-    low: v.number(),
-    close: v.number(),
-    volume: v.optional(v.number()),
-  })),
-})
-.index("by_event", ["eventId"])
-.index("by_pair_event", ["pair", "eventId"])
-.index("by_pair_timestamp", ["pair", "eventTimestamp"])
-
-
-// Aggregated statistics per event type per pair
-eventTypeStatistics: defineTable({
-  eventType: v.string(),            // "FOMC"
-  pair: v.string(),                 // "EUR_USD"
-
-  // Sample info
-  sampleSize: v.number(),
-  dateRangeStart: v.number(),
-  dateRangeEnd: v.number(),
-  lastUpdated: v.number(),
-
-  // For z-score calculation
-  historicalStdDev: v.number(),     // StdDev of (actual-forecast) for this event type
-
-  // Spike stats
-  avgSpikePips: v.number(),
-  medianSpikePips: v.number(),
-  maxSpikePips: v.number(),
-  minSpikePips: v.number(),
-  stdDevSpikePips: v.number(),
-
-  // Direction stats
-  spikeUpCount: v.number(),
-  spikeDownCount: v.number(),
-  spikeUpPct: v.number(),
-
-  // Reversal stats
-  reversalWithin30minCount: v.number(),
-  reversalWithin1hrCount: v.number(),
-  reversalWithin30minPct: v.number(),
-  reversalWithin1hrPct: v.number(),
-  finalMatchesSpikeCount: v.number(),
-
-  // Pattern distribution
-  patternCounts: v.object({
-    spike_reversal: v.number(),
-    continuation: v.number(),
-    fade: v.number(),
-    range: v.number(),
-  }),
-
-  // Conditional stats (beat/miss/inline)
-  hasForecastData: v.optional(v.boolean()),
-  beatStats: v.optional(v.object({ ... })),
-  missStats: v.optional(v.object({ ... })),
-  inlineStats: v.optional(v.object({ ... })),
-})
-.index("by_type_pair", ["eventType", "pair"])
-.index("by_type", ["eventType"])
+  -- Processing state
+  processing_state String DEFAULT 'PENDING',  -- PENDING/CAPTURING_PRE/ACTIVE/SETTLING/COMPLETE
+  reactions_calculated Bool DEFAULT false
+) ENGINE = ReplacingMergeTree()
+ORDER BY (timestamp, event_id);
 ```
 
----
+### Schema: Price Reactions (Per Event, Per Pair)
 
-## Storage Strategy
+```sql
+CREATE TABLE event_price_reactions (
+  event_id String,
+  pair String,
+  event_timestamp DateTime,
 
-### Main Candles vs News Candles
+  -- Pre-event prices
+  price_t_minus_15m Float64,
+  price_t_minus_5m Float64,
+  price_t_minus_1m Float64,
+  price_at_event Float64,
 
-| Aspect | Main Candle Storage | News Event Windows |
-|--------|--------------------|--------------------|
-| Timeframes | 5m, 15m, 1H, 4H, D | 1m only |
-| Purpose | Charting, technical analysis | Event reaction analysis |
-| Volume | ~7.4M candles | ~1.6M candles (estimated) |
-| Query pattern | "Give me EURUSD 4H candles for this week" | "Give me 1m candles around FOMC Jan 2025" |
-| Table | `candles` | `eventCandleWindows` |
+  -- Spike data (T+0 to T+5min)
+  spike_high Float64,
+  spike_low Float64,
+  spike_direction String,  -- UP/DOWN
+  spike_magnitude_pips Float64,
+  time_to_spike_sec UInt32,
 
-**Why separate:**
-1. Different access patterns — you never need 1m candles for charting
-2. Keeps main candle queries fast
-3. Event windows are self-contained units (75 candles per event per pair)
-4. Easier to backfill independently
+  -- Settlement prices (M1 derived)
+  price_t_plus_5m Float64,
+  price_t_plus_15m Float64,
+  price_t_plus_30m Float64,
+  price_t_plus_60m Float64,
+  price_t_plus_90m Float64,
 
-### Backfill Requirements
+  -- Extended aftermath (H1 derived)
+  price_t_plus_2hr Nullable(Float64),
+  price_t_plus_4hr Nullable(Float64),
+  price_t_plus_8hr Nullable(Float64),
+  price_t_plus_24hr Nullable(Float64),
 
-**News Events:**
-- Source: JBlanked API (`/forex-factory/calendar/`)
-- Scope: All impact levels (high, medium, low, none) — filter at query time
-- Depth: Data from 2023-01-01 onwards (~27,000 events)
-- Ingestion: Railway worker (hourly) writes to TimescaleDB + ClickHouse
+  -- Pattern classification
+  pattern_type String,  -- spike_reversal/continuation/fade/range/delayed_reaction/trap
+  extended_pattern_type Nullable(String),  -- spike_trend/spike_trap_trend/mean_reversion/new_range
+  did_reverse Bool,
+  reversal_magnitude_pips Nullable(Float64),
+  final_direction_matches_spike Bool,
 
-**1-Minute Candles (Event Windows):**
-- Source: OANDA historical data (we have access)
-- Scope: T-15min to T+60min per event (75 candles)
-- Per event, per pair: 75 candles × 6 major pairs = 450 candles
-- Backfill script: `scripts/backfill-event-windows.ts`
+  -- Cross-pair correlation
+  correlation_with_primary Nullable(Float64),  -- Correlation with EUR/USD during this event
 
-**Price Reaction Calculations:**
-- Derived from 1m candles — computed after windows are fetched
-- Spike detection, reversal detection, pattern classification
-- Script: `scripts/calculate-all-reactions.ts`
-
----
-
-## How Claude Uses This Data
-
-### Context Layer (Always Available)
-
-When the user is analyzing any chart, Claude knows:
-- Upcoming high-impact events and their typical behavior
-- Recent events that may still be influencing price
-- Historical patterns for similar market conditions
-
-### Query Examples
-
-**Pre-trade context:**
-> "I'm looking at a EUR/USD long setup. Any news concerns?"
->
-> **Claude:** "NFP in 4 hours. Historically, NFP causes 45-pip average moves on EUR/USD. 58% of the time the initial spike reverses. If you enter now, consider:
-> - Taking profit before NFP
-> - Reducing position size
-> - Or waiting until 30 minutes post-NFP for the reversal setup"
-
-**Historical analysis:**
-> "How does EUR/USD typically behave around ECB rate decisions?"
->
-> **Claude:** "Based on 52 ECB decisions (2018-2025):
-> - Average spike: 34 pips
-> - Spike direction correlates with surprise factor (r=0.81)
-> - When rates held as expected: avg move only 18 pips
-> - When surprise cut/hike: avg move 67 pips
-> - Reversal within 1hr: 61% of the time
-> - The 3hr direction matches the fundamental implication 73% of the time"
-
-**Trade review:**
-> "I got stopped out during CPI yesterday. What happened?"
->
-> **Claude:** "CPI came in hot — 0.4% vs 0.2% forecast. EUR/USD spiked down 52 pips in 90 seconds (your stop was 30 pips). This was the 4th largest CPI reaction in 3 years.
->
-> Historical note: When CPI surprises by >0.2%, the spike exceeds 40 pips 78% of the time. Your stop placement didn't account for event volatility."
-
-**Pattern recognition:**
-> "Show me all FOMC events where the spike fully reversed"
->
-> **Claude:** Returns list of events with full context, allowing you to study what conditions led to reversals.
-
----
-
-## Integration with Technical Analysis
-
-This news system is **one input** into the broader trading system vision. It provides:
-
-### Pre-Trade Checklist Item
-```
-Setup Analysis: EUR/USD Long
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Technical:
-  ✅ Break of structure on 15m
-  ✅ Liquidity sweep below Asia low
-  ✅ Unfilled FVG at entry level
-  ✅ DXY at resistance
-
-News Context:
-  ⚠️ NFP in 3 hours
-  ℹ️ Historical: 45 pip avg move, 58% reversal rate
-  💡 Suggestion: Consider reduced size or wait for post-NFP setup
+  created_at DateTime DEFAULT now()
+) ENGINE = ReplacingMergeTree()
+ORDER BY (event_id, pair);
 ```
 
-### Trade Journal Enhancement
-Every logged trade includes:
-- Proximity to news events (was there a red-folder within 2hrs?)
-- If news occurred during trade: the event details and price reaction
-- Post-hoc analysis: "This loss occurred during NFP spike"
+### Schema: 1-Minute Candle Windows
 
-### Strategy Backtesting Filter
-> "Backtest my sweep strategy, but exclude 2 hours around red-folder events"
->
-> Compare results with and without news periods. Maybe your strategy works great in normal conditions but fails around news.
+```sql
+CREATE TABLE event_candle_windows (
+  event_id String,
+  pair String,
+  event_timestamp DateTime,
+  candle_timestamp DateTime,
+  open Float64,
+  high Float64,
+  low Float64,
+  close Float64,
+  volume Float64,
 
----
-
-## Chart Tooltip: Individual Events Over Aggregates
-
-### The Problem with Percentages
-
-Early tooltip designs showed aggregated statistics:
-```
-Historical (n=52):
-  72% spike UP
-  38 pips average
-  55% reversal rate
+  -- Relative position
+  minutes_from_event Int16  -- -15 to +90
+) ENGINE = ReplacingMergeTree()
+ORDER BY (event_id, pair, candle_timestamp);
 ```
 
-**Why this fails:** Percentages are abstract. "55% reversal rate" doesn't tell you *how much* it reversed or *when*. Traders need concrete examples to build intuition.
+### Schema: Aggregated Statistics
 
-### The Solution: Show What Actually Happened
+```sql
+CREATE TABLE event_type_statistics (
+  event_type String,
+  pair String,
 
-Instead of aggregates, show the **last 5 individual events** with real pip movements:
+  -- Sample info
+  sample_size UInt32,
+  date_range_start DateTime,
+  date_range_end DateTime,
+  last_updated DateTime,
 
+  -- Spike stats
+  avg_spike_pips Float64,
+  median_spike_pips Float64,
+  max_spike_pips Float64,
+  min_spike_pips Float64,
+  stddev_spike_pips Float64,
+
+  -- Direction stats
+  spike_up_count UInt32,
+  spike_down_count UInt32,
+  spike_up_pct Float64,
+
+  -- Reversal stats
+  reversal_30min_count UInt32,
+  reversal_30min_pct Float64,
+  reversal_1hr_count UInt32,
+  reversal_1hr_pct Float64,
+
+  -- Extended stats
+  trend_continues_24hr_count UInt32,
+  trend_continues_24hr_pct Float64,
+
+  -- Pattern distribution
+  pattern_spike_reversal_count UInt32,
+  pattern_continuation_count UInt32,
+  pattern_fade_count UInt32,
+  pattern_range_count UInt32,
+  pattern_delayed_count UInt32,
+  pattern_trap_count UInt32,
+
+  -- Cross-pair correlation averages
+  avg_correlation_eur_usd Float64,
+  avg_correlation_gbp_usd Float64,
+  avg_correlation_usd_jpy Float64
+) ENGINE = ReplacingMergeTree()
+ORDER BY (event_type, pair);
 ```
-┌────────────────────────────────────────────────────┐
-│ Jan 10, 2025 13:30                                 │
-├────────────────────────────────────────────────────┤
-│ ▌ Non-Farm Payrolls                                │
-│ ▌ Forecast: 200K   Previous: 227K                  │
-├────────────────────────────────────────────────────┤
-│ If BEATS (5):                                      │
-│   Dec 6    1.08234→1.08276   42↑   -15             │
-│   Nov 1    1.08891→1.08929   38↑                   │
-│   Oct 4    1.09102→1.09157   55↑   -22             │
-│   Sep 6    1.07844→1.07875   31↑                   │
-│   Aug 2    1.09234→1.09281   47↑   -18             │
-│                                                    │
-│ If MISSES (5):                                     │
-│   Jul 5    1.08123→1.08094   29↓   -8              │
-│   Jun 7    1.07891→1.07850   41↓   -19             │
-│   May 3    1.08456→1.08434   22↓                   │
-│   Apr 5    1.09012→1.08977   35↓   -12             │
-│   Mar 8    1.08678→1.08650   28↓   -7              │
-└────────────────────────────────────────────────────┘
-```
-
-**Format breakdown:**
-- `Dec 6` — Date of event
-- `1.08234→1.08276` — Price at event → spike target (educational)
-- `42↑` — Pip movement and direction (green/red)
-- `-15` — Reversal magnitude in pips (amber, if occurred)
-
-### Context-Aware Display
-
-**Future events** (before release): Show BOTH scenarios
-- "If BEATS" — last 5 events where actual > forecast
-- "If MISSES" — last 5 events where actual < forecast
-- Helps trader prepare for either outcome
-
-**Past events** (after release): Show what happened
-- "This was a BEAT" — classify the current event
-- Show only relevant history (past beats if this was a beat)
-- Compare: "Did this match historical pattern?"
-
-**Speeches** (no forecast data): Show raw history
-- "Last 5 events:" — no beat/miss classification
-- Still valuable for volatility expectations
-
-### Beat/Miss Classification
-
-Events are classified based on actual vs forecast:
-- **Beat**: Actual better than expected
-- **Miss**: Actual worse than expected
-- **Inline**: Within 5% threshold
-
-**Lower-is-better events** (CPI, Unemployment, Jobless Claims):
-- Beat = actual < forecast (lower inflation is better)
-- Miss = actual > forecast
-
-This is handled automatically using the `LOWER_IS_BETTER_EVENTS` list.
-
-### Lazy Loading for Performance
-
-Historical data is fetched **on hover**, not preloaded:
-1. User hovers over flag marker
-2. Query fetches last N events of this type
-3. Results cached for session
-4. Re-hover uses cache, no re-fetch
-
-This avoids N×5×2 extra DB reads for every event on the chart.
-
-### Implementation
-
-| Component | Role |
-|-----------|------|
-| `getHistoricalEventsForTooltip` query | Fetches last 5 beats, 5 misses, 5 raw for event type + pair |
-| `HistoricalEventReaction` interface | Stores pip/price/reversal data per event |
-| `NewsMarkersPrimitive._drawTooltip` | Renders rows with date, price, pips, reversal |
-| `Chart.tsx` fetchHistorical callback | Triggers query on hover, manages cache |
-
----
-
-## Event Types to Track
-
-### Tier 1: Always Track (Red Folder)
-
-**US Events:**
-- FOMC Rate Decision
-- Non-Farm Payrolls (NFP)
-- CPI (Consumer Price Index)
-- Core CPI
-- GDP
-- Retail Sales
-- PPI (Producer Price Index)
-- Unemployment Rate
-- Fed Chair Powell Speaks
-
-**Eurozone:**
-- ECB Rate Decision
-- ECB Press Conference
-- German CPI
-- Eurozone CPI
-
-**UK:**
-- BoE Rate Decision
-- UK CPI
-- UK GDP
-
-**Other:**
-- BoJ Rate Decision
-- RBA Rate Decision
-- RBNZ Rate Decision
-- SNB Rate Decision
-- BoC Rate Decision
-
-### Tier 2: Track if Relevant
-
-- PMI readings (Manufacturing, Services)
-- Trade Balance
-- Consumer Confidence
-- Housing data
-- Employment Change (non-US)
 
 ---
 
 ## Backfill Strategy
 
-### Phase 1: Event Metadata
+### Phase 1: Event Metadata (DONE)
 
-1. JBlanked API fetches economic calendar data (EET timezone, converted to UTC)
-2. Railway worker runs hourly forward-fill to both TimescaleDB and ClickHouse
-3. Historical backfill: `npx tsx worker/src/jblanked-news.ts backfill 2023-01-01`
-4. Includes: impact, trading session (DST-aware), actual/forecast/previous values
+- JBlanked API provides historical events from 2023-01-01
+- 13,470 events currently in ClickHouse
+- Run: `npx tsx worker/src/jblanked-news.ts backfill 2023-01-01`
 
-### Phase 2: 1-Minute Windows
+### Phase 2: M1 Candle Backfill (NEXT)
 
-1. For each event, fetch 1m candles from OANDA
-2. Window: T-15min to T+60min (75 candles)
-3. Store in `eventCandleWindows` table
-4. Cover major pairs: EUR/USD, GBP/USD, USD/JPY, USD/CHF, AUD/USD, USD/CAD
-5. Run: `npx tsx scripts/backfill-event-windows.ts`
+**Source:** OANDA Historical API
 
-### Phase 3: Calculate Reactions
+**Scope:**
+- 13K events × 9 pairs = 117K API calls
+- Each call fetches 105 candles (T-15 to T+90)
+- Rate limit: ~1 request/second
+- **Estimated runtime:** 2-3 days (can parallelize by pair)
 
-1. Process each event window
-2. Detect spike (high/low in first 5 candles)
-3. Calculate all price points (T-1m, T+5m, T+15m, T+30m, T+1hr, T+3hr)
-4. Classify pattern: spike_reversal, continuation, fade, range
-5. Store in `eventPriceReactions` table
-6. Run: `npx tsx scripts/calculate-all-reactions.ts`
+**Process:**
+```bash
+# Run per pair to parallelize
+npx tsx worker/src/backfill-event-candles.ts --pair=EUR_USD
+npx tsx worker/src/backfill-event-candles.ts --pair=GBP_USD
+# ... etc
+```
 
-### Phase 4: Aggregate Statistics
+**Retry Logic:**
+- 3 retries with exponential backoff
+- Log failures to `backfill_failures` table
+- Resumable from last successful event
 
-1. Group by event type + pair
-2. Calculate averages, medians, percentages, pattern distribution
-3. Calculate conditional stats (beat/miss/inline behavior)
-4. Store in `eventTypeStatistics` table
-5. Run: `npx tsx scripts/regenerate-statistics.ts`
+### Phase 3: Reaction Calculations
+
+After M1 candles exist, compute reactions:
+
+```bash
+npx tsx worker/src/calculate-reactions.ts --all
+```
+
+**Process:**
+1. For each event with candles but no reactions
+2. Calculate spike metrics from M1 candles
+3. Fetch H1 candles for extended aftermath
+4. Classify pattern
+5. Store in `event_price_reactions`
+
+### Phase 4: Statistics Aggregation
+
+After reactions exist, compute aggregates:
+
+```bash
+npx tsx worker/src/aggregate-statistics.ts
+```
+
+**Process:**
+1. Group reactions by event_type + pair
+2. Calculate all statistical metrics
+3. Store in `event_type_statistics`
+4. Schedule for weekly refresh
+
+---
+
+## UI Integration
+
+### Chart News Markers
+
+Current implementation: Flag markers on chart at event timestamps
+
+**Enhanced features:**
+- Color by impact (red/orange/yellow/gray)
+- Tooltip shows spike/reversal summary
+- Click opens detail panel
+
+### Sidebar: Upcoming Events
+
+Real-time list of:
+- Next 24 hours of events
+- Current event state (PENDING/ACTIVE/SETTLING)
+- Live pip movement during ACTIVE state
+- Historical avg spike for comparison
+
+### Sidebar: Cross-Pair Reactions
+
+When an event is ACTIVE:
+```
+NFP (ACTIVE - T+3min)
+━━━━━━━━━━━━━━━━━━━━━
+EUR/USD  -42 pips  ↓
+GBP/USD  -38 pips  ↓
+USD/JPY  +55 pips  ↑
+USD/CHF  +28 pips  ↑
+AUD/USD  -31 pips  ↓
+━━━━━━━━━━━━━━━━━━━━━
+Historical avg: 45 pips
+Pattern forming: continuation
+```
+
+### Event Detail Panel
+
+Accessible via click on marker or sidebar:
+- Full event metadata
+- All 9 pair reactions
+- Pattern classification
+- Historical comparison
+- M1 chart visualization
+
+---
+
+## Implementation Phases
+
+### Phase 1: Data Infrastructure (Current)
+- [x] JBlanked API integration
+- [x] Event ingestion to ClickHouse/TimescaleDB
+- [x] News markers on chart
+- [ ] M1 candle backfill script
+- [ ] Reaction calculation script
+- [ ] Statistics aggregation script
+
+### Phase 2: Historical Analysis
+- [ ] Pattern classification system
+- [ ] Cross-pair correlation tracking
+- [ ] Extended aftermath (H1 snapshots)
+- [ ] Event tooltip with historical data
+
+### Phase 3: Live Processing
+- [ ] Event scheduler service
+- [ ] Real-time M1 capture
+- [ ] Live state machine
+- [ ] WebSocket updates to UI
+
+### Phase 4: Intelligence Layer
+- [ ] Claude integration for insights
+- [ ] Pre-trade news warnings
+- [ ] Pattern-based trade suggestions
+- [ ] Anomaly detection (unusual reactions)
+
+---
+
+## Benefits Summary
+
+### For The Trader
+
+| Feature | Benefit |
+|---------|---------|
+| All events tracked | Never miss a reaction pattern |
+| Multi-pair analysis | Choose best pair for news trades |
+| Extended timeframe | Know if spikes hold or reverse by T+24hr |
+| Live processing | Real-time context during events |
+| Pattern classification | Statistically-backed trade decisions |
+| Historical statistics | "This event typically..." reasoning |
+
+### For The System
+
+| Feature | Benefit |
+|---------|---------|
+| ClickHouse historical | Fast aggregations over 13K+ events |
+| TimescaleDB live | Real-time queries during events |
+| M1 + H1 strategy | Optimal storage vs granularity tradeoff |
+| Event state machine | Clean processing lifecycle |
+| Cross-pair schema | Future correlation analysis |
+
+### For Claude
+
+| Feature | Benefit |
+|---------|---------|
+| Queryable statistics | "FOMC averages 42 pips, reverses 64%" |
+| Pattern history | "Last 5 CPI beats all continued" |
+| Real-time state | "NFP is ACTIVE, currently -45 pips" |
+| Extended aftermath | "Hot CPI holds direction 78% at T+24hr" |
+
+---
+
+## Backfill Estimates
+
+### Storage Requirements
+
+```
+Events: 13,470
+Pairs: 9
+M1 candles per event: 105
+
+Event metadata: 13K rows × 1KB = 13 MB
+M1 candles: 13K × 9 × 105 = 12.7M rows × 100B = 1.3 GB
+Reactions: 13K × 9 = 117K rows × 500B = 59 MB
+Statistics: ~500 event types × 9 pairs = 4.5K rows × 1KB = 4.5 MB
+
+Total: ~1.4 GB (manageable)
+```
+
+### API Call Requirements
+
+```
+OANDA M1 backfill:
+- 13K events × 9 pairs = 117K requests
+- Rate: 1/second = 117K seconds = 32.5 hours
+- Parallelized by pair (9x): ~3.5 hours
+
+H1 aftermath (4 snapshots per event):
+- Already have H1 candles in main storage
+- Just need SQL queries, no API calls
+```
 
 ---
 
 ## Future Enhancements
 
 ### Sentiment Analysis
-- Store the actual announcement text
-- Have Claude analyze hawkish/dovish tone
+- Store announcement text
+- Claude analyzes hawkish/dovish tone
 - Correlate sentiment with price reaction
 
 ### Cross-Event Patterns
 - "When CPI is hot AND FOMC is hawkish, what happens?"
 - Multi-event regime detection
+- Sequence analysis
 
-### Live Event Processing
-- Real-time ingestion when new events occur
-- Automatic reaction calculation
-- Update statistics incrementally
-
-### Replay System Integration
+### Replay System
 - Generate video replays of news events
 - "Show me the 10 biggest NFP reactions with candle animation"
 
----
-
-## What This Enables
-
-After 6-12 months of data collection:
-
-1. **Informed position management** — Know whether to hold through news or close before
-2. **Volatility expectations** — Size positions appropriately for upcoming events
-3. **Pattern trading** — Trade the reversal after spike with statistical backing
-4. **Avoidance rules** — "My strategy loses money around news, so I close 30min before"
-5. **Context for every trade** — Never get surprised by "what just happened?"
-
-This is **preparation and informed prediction** — knowing how markets have historically behaved so you can make probabilistic decisions with statistical backing, not gut feel.
+### Predictive Modeling
+- ML model for spike magnitude prediction
+- Based on surprise factor, market context, session
+- Confidence intervals for expected moves
 
 ---
 
-## JBlanked API Data Format
-
-The JBlanked API (`/forex-factory/calendar/`) returns economic calendar data in EET timezone.
-
-### API Response Example
-
-```json
-{
-  "Event_ID": 12345,
-  "Name": "CPI m/m",
-  "Currency": "USD",
-  "Date": "2024-01-15",
-  "Time": "16:30",
-  "Impact": "High",
-  "Actual": "0.3%",
-  "Forecast": "0.2%",
-  "Previous": "0.1%"
-}
-```
-
-### Transformed Schema (Stored)
-
-```json
-{
-  "event_id": "jb_forex-factory_12345",
-  "name": "CPI m/m",
-  "currency": "USD",
-  "timestamp": "2024-01-15T14:30:00Z",
-  "impact": "High",
-  "actual": "0.3%",
-  "forecast": "0.2%",
-  "previous": "0.1%",
-  "trading_session": "New York",
-  "source_tz": "EET",
-  "raw_source": "jb_forex-factory"
-}
-```
-
-**Key transformations:**
-
-- `timestamp`: Converted from EET (UTC+2/+3) to UTC
-- `trading_session`: DST-aware calculation (London/NY shift with daylight saving)
-- `event_id`: Prefixed with `jb_` to identify JBlanked source
-- `currency`: Extracted from `CURRENCY_XXX` format if needed
-
----
-
-*Document Version: 2.0 — Implementation*
+*Document Version: 3.0 — Comprehensive Vision*
 *Last Updated: January 2025*

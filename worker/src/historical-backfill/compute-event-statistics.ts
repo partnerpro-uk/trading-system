@@ -42,7 +42,7 @@ async function computeStatistics() {
   // Join with news_events to get event_type and beat/miss classification
   console.log("\nComputing statistics...");
 
-  // Full statistics with all 29 columns including beat/miss breakdown
+  // Full statistics with all columns including pattern counts and extended stats
   const insertQuery = `
     INSERT INTO event_type_statistics (
       event_type, pair, sample_size, date_range_start, date_range_end,
@@ -53,6 +53,9 @@ async function computeStatistics() {
       final_matches_spike_count, final_matches_spike_pct,
       avg_spike_when_no_surprise, avg_spike_when_surprise,
       beat_count, miss_count, inline_count, avg_spike_on_beat, avg_spike_on_miss,
+      trend_continues_24hr_count, trend_continues_24hr_pct,
+      pattern_spike_reversal_count, pattern_continuation_count, pattern_fade_count,
+      pattern_range_count, pattern_delayed_count, pattern_trap_count,
       last_updated
     )
     SELECT
@@ -134,6 +137,24 @@ async function computeStatistics() {
         ), 2),
         null
       ) as avg_spike_on_miss,
+
+      -- Extended aftermath: trend continues at T+24hr
+      toUInt32(countIf(r.extended_pattern_type = 'spike_trend')) as trend_continues_24hr_count,
+      toDecimal64(
+        if(countIf(r.price_t_plus_24hr IS NOT NULL) > 0,
+          countIf(r.extended_pattern_type = 'spike_trend') * 100.0 / countIf(r.price_t_plus_24hr IS NOT NULL),
+          0
+        ),
+        2
+      ) as trend_continues_24hr_pct,
+
+      -- Pattern distribution counts
+      toUInt32(countIf(r.pattern_type = 'spike_reversal')) as pattern_spike_reversal_count,
+      toUInt32(countIf(r.pattern_type = 'continuation')) as pattern_continuation_count,
+      toUInt32(countIf(r.pattern_type = 'fade')) as pattern_fade_count,
+      toUInt32(countIf(r.pattern_type = 'range')) as pattern_range_count,
+      toUInt32(countIf(r.pattern_type = 'delayed_reaction')) as pattern_delayed_count,
+      toUInt32(countIf(r.pattern_type = 'trap')) as pattern_trap_count,
 
       now() as last_updated
 

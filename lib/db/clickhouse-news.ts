@@ -46,15 +46,22 @@ export interface HistoricalReaction {
   spikeMagnitudePips: number;
   timeToSpikeSeconds: number | null;
 
-  // Settlement prices
+  // Settlement prices (short-term)
   priceAtPlus5m: number | null;
   priceAtPlus15m: number | null;
   priceAtPlus30m: number | null;
   priceAtPlus60m: number | null; // High impact events only
   priceAtPlus90m: number | null; // FOMC/ECB events only
 
+  // Extended aftermath prices (from H1 candles)
+  priceAtPlus2hr: number | null;
+  priceAtPlus4hr: number | null;
+  priceAtPlus8hr: number | null;
+  priceAtPlus24hr: number | null;
+
   // Pattern analysis
   patternType: string;
+  extendedPatternType: string | null;
   didReverse: boolean;
   reversalMagnitudePips: number | null;
   finalMatchesSpike: boolean;
@@ -98,7 +105,15 @@ export interface HistoricalEventForDisplay {
   pipsAt60m: number | null;
   pipsAt90m: number | null;
 
+  // Extended aftermath pips from T-15 baseline
+  pipsAt2hr: number | null;
+  pipsAt4hr: number | null;
+  pipsAt8hr: number | null;
+  pipsAt24hr: number | null;
+
   // Pattern info
+  patternType: string;
+  extendedPatternType: string | null;
   didReverse: boolean;
   reversalMagnitudePips?: number;
   windowMinutes: number;
@@ -168,7 +183,12 @@ export async function getHistoricalEventsFromClickHouse(
         r.price_at_plus_30m as priceAtPlus30m,
         r.price_at_plus_60m as priceAtPlus60m,
         r.price_at_plus_90m as priceAtPlus90m,
+        r.price_t_plus_2hr as priceAtPlus2hr,
+        r.price_t_plus_4hr as priceAtPlus4hr,
+        r.price_t_plus_8hr as priceAtPlus8hr,
+        r.price_t_plus_24hr as priceAtPlus24hr,
         r.pattern_type as patternType,
+        r.extended_pattern_type as extendedPatternType,
         r.did_reverse as didReverse,
         r.reversal_magnitude_pips as reversalMagnitudePips,
         r.final_matches_spike as finalMatchesSpike,
@@ -227,7 +247,12 @@ export async function getHistoricalEventsFromClickHouse(
           priceAtPlus30m: row.priceAtPlus30m ? parseFloat(String(row.priceAtPlus30m)) : null,
           priceAtPlus60m: row.priceAtPlus60m ? parseFloat(String(row.priceAtPlus60m)) : null,
           priceAtPlus90m: row.priceAtPlus90m ? parseFloat(String(row.priceAtPlus90m)) : null,
+          priceAtPlus2hr: row.priceAtPlus2hr ? parseFloat(String(row.priceAtPlus2hr)) : null,
+          priceAtPlus4hr: row.priceAtPlus4hr ? parseFloat(String(row.priceAtPlus4hr)) : null,
+          priceAtPlus8hr: row.priceAtPlus8hr ? parseFloat(String(row.priceAtPlus8hr)) : null,
+          priceAtPlus24hr: row.priceAtPlus24hr ? parseFloat(String(row.priceAtPlus24hr)) : null,
           patternType: row.patternType || "",
+          extendedPatternType: row.extendedPatternType || null,
           didReverse: Boolean(row.didReverse),
           reversalMagnitudePips: row.reversalMagnitudePips ? parseFloat(String(row.reversalMagnitudePips)) : null,
           finalMatchesSpike: Boolean(row.finalMatchesSpike),
@@ -368,7 +393,15 @@ export function transformToDisplayFormat(
         pipsAt60m: r.priceAtPlus60m ? (r.priceAtPlus60m - baseline) / pipValue : null,
         pipsAt90m: r.priceAtPlus90m ? (r.priceAtPlus90m - baseline) / pipValue : null,
 
+        // Extended aftermath pips
+        pipsAt2hr: r.priceAtPlus2hr ? (r.priceAtPlus2hr - baseline) / pipValue : null,
+        pipsAt4hr: r.priceAtPlus4hr ? (r.priceAtPlus4hr - baseline) / pipValue : null,
+        pipsAt8hr: r.priceAtPlus8hr ? (r.priceAtPlus8hr - baseline) / pipValue : null,
+        pipsAt24hr: r.priceAtPlus24hr ? (r.priceAtPlus24hr - baseline) / pipValue : null,
+
         // Pattern info
+        patternType: r.patternType,
+        extendedPatternType: r.extendedPatternType,
         didReverse: r.didReverse,
         reversalMagnitudePips: r.reversalMagnitudePips ?? undefined,
         windowMinutes: r.windowMinutes,
@@ -423,6 +456,7 @@ interface RawHistoricalEventRow {
   country: string;
   currency: string;
   timestamp: number | string;
+  ts: number | string; // Alias used in chart query to avoid column name conflict
   impact: string;
   actual: string | null;
   forecast: string | null;
@@ -444,7 +478,12 @@ interface RawHistoricalEventRow {
   priceAtPlus30m: number | string | null;
   priceAtPlus60m: number | string | null;
   priceAtPlus90m: number | string | null;
+  priceAtPlus2hr: number | string | null;
+  priceAtPlus4hr: number | string | null;
+  priceAtPlus8hr: number | string | null;
+  priceAtPlus24hr: number | string | null;
   patternType: string;
+  extendedPatternType: string | null;
   didReverse: number | boolean;
   reversalMagnitudePips: number | string | null;
   finalMatchesSpike: number | boolean;
@@ -458,4 +497,173 @@ interface RawEventTypeStats {
   upCount: number | string;
   downCount: number | string;
   reversalRate: number | string | null;
+}
+
+// ============================================================================
+// Chart Display Events (for markers on historical charts)
+// ============================================================================
+
+/**
+ * Get upcoming news events (next 7 days) from ClickHouse
+ * Returns high/medium impact events sorted by timestamp
+ */
+export async function getUpcomingEvents(
+  limit: number = 10
+): Promise<HistoricalNewsEvent[]> {
+  try {
+    const clickhouse = getClickHouseClient();
+
+    const now = Math.floor(Date.now() / 1000);
+    const weekFromNow = now + 7 * 24 * 60 * 60;
+
+    const query = `
+      SELECT
+        event_id as eventId,
+        event_type as eventType,
+        name,
+        country,
+        currency,
+        toUnixTimestamp(timestamp) * 1000 as ts,
+        impact,
+        actual,
+        forecast,
+        previous,
+        description,
+        datetime_utc as datetimeUtc,
+        datetime_new_york as datetimeNewYork,
+        datetime_london as datetimeLondon
+      FROM news_events
+      WHERE timestamp >= fromUnixTimestamp(${now})
+        AND timestamp <= fromUnixTimestamp(${weekFromNow})
+        AND impact IN ('High', 'Medium')
+      ORDER BY timestamp ASC
+      LIMIT ${limit}
+    `;
+
+    const result = await clickhouse.query({
+      query,
+      format: "JSONEachRow",
+    });
+
+    const rows = (await result.json()) as RawHistoricalEventRow[];
+
+    return rows.map((row) => ({
+      eventId: row.eventId,
+      eventType: row.eventType || "Unknown",
+      name: row.name,
+      country: row.country,
+      currency: row.currency,
+      timestamp:
+        typeof row.ts === "string"
+          ? parseInt(row.ts, 10)
+          : Number(row.ts),
+      impact: row.impact || "None",
+      actual: row.actual,
+      forecast: row.forecast,
+      previous: row.previous,
+      description: row.description,
+      datetimeUtc: row.datetimeUtc,
+      datetimeNewYork: row.datetimeNewYork,
+      datetimeLondon: row.datetimeLondon,
+    }));
+  } catch (error) {
+    console.error("[ClickHouse] Error fetching upcoming events:", error);
+    return [];
+  }
+}
+
+/**
+ * Get news events in a time range for chart display from ClickHouse
+ * Used when viewing historical periods (older than 90 days)
+ */
+export async function getEventsInTimeRangeFromClickHouse(
+  pair: string,
+  startTime: number, // Unix ms
+  endTime: number,
+  impactFilter?: string // "high" | "medium" | "low" | "all"
+): Promise<HistoricalNewsEvent[]> {
+  try {
+    const clickhouse = getClickHouseClient();
+
+    // Extract currencies from pair (e.g., "EUR_USD" -> ["EUR", "USD"])
+    const [base, quote] = pair.split("_");
+
+    // Validate currency codes (prevent SQL injection)
+    if (!/^[A-Z]{3}$/.test(base) || !/^[A-Z]{3}$/.test(quote)) {
+      console.error("[ClickHouse] Invalid currency codes:", base, quote);
+      return [];
+    }
+
+    // Build impact filter clause
+    let impactClause = "";
+    if (impactFilter && impactFilter !== "all") {
+      const impacts =
+        impactFilter === "high"
+          ? ["High"]
+          : impactFilter === "medium"
+          ? ["High", "Medium"]
+          : ["High", "Medium", "Low"];
+      impactClause = `AND impact IN ('${impacts.join("','")}')`;
+    }
+
+    // Convert ms timestamps to seconds for ClickHouse DateTime comparison
+    const startTimeSec = Math.floor(startTime / 1000);
+    const endTimeSec = Math.floor(endTime / 1000);
+
+    // Query with inline values (validated inputs)
+    const query = `
+      SELECT
+        event_id as eventId,
+        event_type as eventType,
+        name,
+        country,
+        currency,
+        toUnixTimestamp(timestamp) * 1000 as ts,
+        impact,
+        actual,
+        forecast,
+        previous,
+        description,
+        datetime_utc as datetimeUtc,
+        datetime_new_york as datetimeNewYork,
+        datetime_london as datetimeLondon
+      FROM news_events
+      WHERE timestamp >= fromUnixTimestamp(${startTimeSec})
+        AND timestamp <= fromUnixTimestamp(${endTimeSec})
+        AND currency IN ('${base}', '${quote}')
+        ${impactClause}
+      ORDER BY timestamp ASC
+      LIMIT 500
+    `;
+
+    const result = await clickhouse.query({
+      query,
+      format: "JSONEachRow",
+    });
+
+    const rows = (await result.json()) as RawHistoricalEventRow[];
+
+  return rows.map((row) => ({
+    eventId: row.eventId,
+    eventType: row.eventType || "Unknown",
+    name: row.name,
+    country: row.country,
+    currency: row.currency,
+    timestamp:
+      typeof row.ts === "string"
+        ? parseInt(row.ts, 10)
+        : Number(row.ts),
+    impact: row.impact || "None",
+    actual: row.actual,
+    forecast: row.forecast,
+    previous: row.previous,
+    description: row.description,
+    datetimeUtc: row.datetimeUtc,
+    datetimeNewYork: row.datetimeNewYork,
+    datetimeLondon: row.datetimeLondon,
+  }));
+  } catch (error) {
+    console.error("[ClickHouse] Error fetching events:", error);
+    return []; // Return empty array to not break chart loading
+  }
 }

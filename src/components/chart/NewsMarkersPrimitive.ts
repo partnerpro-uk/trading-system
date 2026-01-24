@@ -96,6 +96,12 @@ export interface HistoricalEventReaction {
   priceAtPlus60m?: number;
   priceAtPlus90m?: number;
 
+  // Extended aftermath (from H1 candles)
+  priceAtPlus2hr?: number;
+  priceAtPlus4hr?: number;
+  priceAtPlus8hr?: number;
+  priceAtPlus24hr?: number;
+
   // NEW: Pips calculated from T-15 baseline (more accurate)
   pipsFromBaseline?: {
     atEvent: number;
@@ -104,7 +110,15 @@ export interface HistoricalEventReaction {
     at30m: number | null;
     at60m: number | null;
     at90m: number | null;
+    at2hr: number | null;
+    at4hr: number | null;
+    at8hr: number | null;
+    at24hr: number | null;
   };
+
+  // Pattern classification
+  patternType?: string;
+  extendedPatternType?: string;
 
   // NEW: Window type (30=standard, 75=high impact, 105=FOMC/ECB)
   windowMinutes?: number;

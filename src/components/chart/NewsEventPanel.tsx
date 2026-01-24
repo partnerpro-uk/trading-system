@@ -617,11 +617,18 @@ function HistoricalEventCard({ event, pair = "EUR_USD" }: { event: HistoricalEve
   const pipsAt60m = usePipsFromBaseline ? event.pipsFromBaseline?.at60m ?? null : calcPips(event.priceAtPlus60m ?? event.priceAtPlus1hr);
   const pipsAt90m = usePipsFromBaseline ? event.pipsFromBaseline?.at90m ?? null : calcPips(event.priceAtPlus90m);
 
+  // Extended aftermath pips
+  const pipsAt2hr = usePipsFromBaseline ? event.pipsFromBaseline?.at2hr ?? null : calcPips(event.priceAtPlus2hr);
+  const pipsAt4hr = usePipsFromBaseline ? event.pipsFromBaseline?.at4hr ?? null : calcPips(event.priceAtPlus4hr);
+  const pipsAt8hr = usePipsFromBaseline ? event.pipsFromBaseline?.at8hr ?? null : calcPips(event.priceAtPlus8hr);
+  const pipsAt24hr = usePipsFromBaseline ? event.pipsFromBaseline?.at24hr ?? null : calcPips(event.priceAtPlus24hr);
+
   // Check if we have settlement data to show
   const hasSettlementData = pipsAt15m !== null || pipsAt30m !== null || pipsAt60m !== null;
+  const hasExtendedData = pipsAt2hr !== null || pipsAt4hr !== null || pipsAt8hr !== null || pipsAt24hr !== null;
 
   // Max for bar scaling (use largest absolute value across all timepoints)
-  const allPips = [spikePips, pipsAt15m, pipsAt30m, pipsAt60m, pipsAt90m].filter((p): p is number => p !== null && !isNaN(p));
+  const allPips = [spikePips, pipsAt15m, pipsAt30m, pipsAt60m, pipsAt90m, pipsAt2hr, pipsAt4hr, pipsAt8hr, pipsAt24hr].filter((p): p is number => p !== null && !isNaN(p));
   const maxPips = Math.max(...allPips.map(Math.abs), 10);
 
   // Window type indicator
@@ -650,8 +657,8 @@ function HistoricalEventCard({ event, pair = "EUR_USD" }: { event: HistoricalEve
         </span>
       </div>
 
-      {/* Reversal info */}
-      <div className="flex items-center gap-2 mb-2">
+      {/* Reversal info + Pattern type */}
+      <div className="flex items-center gap-2 mb-2 flex-wrap">
         {event.didReverse && event.reversalMagnitudePips ? (
           <>
             <span className="text-xs text-gray-500">Reversal:</span>
@@ -664,6 +671,28 @@ function HistoricalEventCard({ event, pair = "EUR_USD" }: { event: HistoricalEve
             <span className="text-xs text-gray-500">Result:</span>
             <span className="text-sm font-semibold text-green-400">Held direction ✓</span>
           </>
+        )}
+        {event.patternType && (
+          <span className={`text-[10px] px-1.5 py-0.5 rounded ${
+            event.patternType === "continuation" ? "bg-green-900/50 text-green-400" :
+            event.patternType === "spike_reversal" ? "bg-red-900/50 text-red-400" :
+            event.patternType === "fade" ? "bg-amber-900/50 text-amber-400" :
+            event.patternType === "trap" ? "bg-purple-900/50 text-purple-400" :
+            event.patternType === "range" ? "bg-blue-900/50 text-blue-400" :
+            "bg-gray-700/50 text-gray-400"
+          }`}>
+            {event.patternType.replace(/_/g, " ")}
+          </span>
+        )}
+        {event.extendedPatternType && (
+          <span className={`text-[10px] px-1.5 py-0.5 rounded ${
+            event.extendedPatternType === "spike_trend" ? "bg-green-900/50 text-green-400" :
+            event.extendedPatternType === "mean_reversion" ? "bg-amber-900/50 text-amber-400" :
+            event.extendedPatternType === "new_range" ? "bg-blue-900/50 text-blue-400" :
+            "bg-gray-700/50 text-gray-400"
+          }`}>
+            24hr: {event.extendedPatternType.replace(/_/g, " ")}
+          </span>
         )}
       </div>
 
@@ -678,6 +707,17 @@ function HistoricalEventCard({ event, pair = "EUR_USD" }: { event: HistoricalEve
           {pipsAt30m !== null && <SettlementBar label="+30m" pips={pipsAt30m} maxPips={maxPips} />}
           {pipsAt60m !== null && <SettlementBar label="+60m" pips={pipsAt60m} maxPips={maxPips} />}
           {pipsAt90m !== null && <SettlementBar label="+90m" pips={pipsAt90m} maxPips={maxPips} />}
+
+          {/* Extended aftermath section */}
+          {hasExtendedData && (
+            <>
+              <div className="border-t border-gray-700/30 my-1" />
+              {pipsAt2hr !== null && <SettlementBar label="+2hr" pips={pipsAt2hr} maxPips={maxPips} />}
+              {pipsAt4hr !== null && <SettlementBar label="+4hr" pips={pipsAt4hr} maxPips={maxPips} />}
+              {pipsAt8hr !== null && <SettlementBar label="+8hr" pips={pipsAt8hr} maxPips={maxPips} />}
+              {pipsAt24hr !== null && <SettlementBar label="+24hr" pips={pipsAt24hr} maxPips={maxPips} />}
+            </>
+          )}
         </div>
       ) : (
         <div className="border-t border-gray-700/50 pt-2 mt-1 text-xs text-gray-600 text-center">

@@ -10,6 +10,15 @@ interface PriceData {
   timestamp: number;
 }
 
+interface UpcomingEvent {
+  eventId: string;
+  name: string;
+  currency: string;
+  impact: string;
+  timestamp: number;
+  datetimeLondon: string | null;
+}
+
 const PAIRS = [
   // Indices
   { id: "DXY", name: "DXY", category: "indices" },
@@ -51,6 +60,38 @@ function formatPrice(pair: string, price: number): string {
   return price.toFixed(5);
 }
 
+// Format countdown until event
+function formatCountdown(timestamp: number): string {
+  const now = Date.now();
+  const diff = timestamp - now;
+
+  if (diff <= 0) return "Now";
+
+  const hours = Math.floor(diff / (1000 * 60 * 60));
+  const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+
+  if (hours >= 24) {
+    const days = Math.floor(hours / 24);
+    return `${days}d ${hours % 24}h`;
+  }
+  if (hours > 0) {
+    return `${hours}h ${minutes}m`;
+  }
+  return `${minutes}m`;
+}
+
+// Format time from London datetime
+function formatEventTime(datetimeLondon: string | null, timestamp: number): string {
+  if (datetimeLondon) {
+    const timePart = datetimeLondon.split(" ")[1];
+    if (timePart) {
+      return timePart.slice(0, 5) + " UK";
+    }
+  }
+  const date = new Date(timestamp);
+  return date.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }) + " UTC";
+}
+
 export function ChartSidebar({
   currentPair,
   magnetMode,
@@ -65,6 +106,8 @@ export function ChartSidebar({
   onShowNewsChange,
 }: ChartSidebarProps) {
   const [prices, setPrices] = useState<Record<string, PriceData>>({});
+  const [upcomingEvents, setUpcomingEvents] = useState<UpcomingEvent[]>([]);
+  const [, setCountdownTick] = useState(0);
 
   // Fetch prices on mount and every 5 seconds
   useEffect(() => {
@@ -82,6 +125,33 @@ export function ChartSidebar({
 
     fetchPrices();
     const interval = setInterval(fetchPrices, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Fetch upcoming events on mount and every minute
+  useEffect(() => {
+    const fetchUpcoming = async () => {
+      try {
+        const response = await fetch("/api/news/upcoming?limit=8");
+        if (response.ok) {
+          const data = await response.json();
+          setUpcomingEvents(data.events || []);
+        }
+      } catch (error) {
+        console.error("Failed to fetch upcoming events:", error);
+      }
+    };
+
+    fetchUpcoming();
+    const interval = setInterval(fetchUpcoming, 60000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Update countdown every minute
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCountdownTick((t) => t + 1);
+    }, 60000);
     return () => clearInterval(interval);
   }, []);
 
@@ -139,6 +209,60 @@ export function ChartSidebar({
           })}
         </div>
       </div>
+
+      {/* Upcoming Events Section */}
+      {upcomingEvents.length > 0 && (
+        <div className="p-3 border-b border-gray-800">
+          <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+            Upcoming Events
+          </h3>
+          <div className="space-y-1.5">
+            {upcomingEvents.slice(0, 6).map((event) => {
+              const isImminent = event.timestamp - Date.now() < 60 * 60 * 1000; // < 1 hour
+              const isVeryClose = event.timestamp - Date.now() < 15 * 60 * 1000; // < 15 min
+
+              return (
+                <div
+                  key={event.eventId}
+                  className={`px-2 py-1.5 rounded text-xs ${
+                    isVeryClose
+                      ? "bg-red-900/40 border border-red-800/50"
+                      : isImminent
+                      ? "bg-amber-900/30 border border-amber-800/30"
+                      : "bg-gray-800/50"
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                      <span
+                        className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                          event.impact === "High" ? "bg-red-500" : "bg-amber-500"
+                        }`}
+                      />
+                      <span className="text-gray-300 truncate">{event.name}</span>
+                    </div>
+                    <span className="text-gray-500 flex-shrink-0">{event.currency}</span>
+                  </div>
+                  <div className="flex items-center justify-between mt-1 text-gray-500">
+                    <span>{formatEventTime(event.datetimeLondon, event.timestamp)}</span>
+                    <span
+                      className={`font-medium ${
+                        isVeryClose
+                          ? "text-red-400"
+                          : isImminent
+                          ? "text-amber-400"
+                          : "text-gray-400"
+                      }`}
+                    >
+                      {formatCountdown(event.timestamp)}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Controls Section */}
       <div className="p-3">

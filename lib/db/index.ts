@@ -25,6 +25,7 @@ export function getClickHouseClient(): ClickHouseClient {
       url: process.env.CLICKHOUSE_HOST,
       username: process.env.CLICKHOUSE_USER || "default",
       password: process.env.CLICKHOUSE_PASSWORD || "",
+      database: "default",
       request_timeout: 30000, // 30 second timeout for queries
     });
   }

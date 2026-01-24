@@ -1,26 +1,247 @@
 @import "tailwindcss";
+@import "tw-animate-css";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+@custom-variant dark (&:is(.dark *));
+
+/* ============================================
+   TRADING SYSTEM DESIGN TOKENS
+   ============================================ */
 
 @theme inline {
+  /* Base colors */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+
+  /* shadcn semantic colors */
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  /* Trading-specific semantic colors */
+  --color-up: var(--up);
+  --color-up-foreground: var(--up-foreground);
+  --color-down: var(--down);
+  --color-down-foreground: var(--down-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+
+  /* Session colors */
+  --color-session-asia: var(--session-asia);
+  --color-session-london: var(--session-london);
+  --color-session-ny: var(--session-ny);
+
+  /* Impact colors */
+  --color-impact-high: var(--impact-high);
+  --color-impact-medium: var(--impact-medium);
+  --color-impact-low: var(--impact-low);
+
+  /* Chart colors (for data visualization) */
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  /* Sidebar colors */
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  /* Border radius scale */
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+/* ============================================
+   DARK MODE (Default for Trading)
+   ============================================ */
+
+:root {
+  --radius: 0.5rem;
+
+  /* Core colors - Trading dark theme */
+  --background: #0a0a0a;
+  --foreground: #ededed;
+
+  /* Card/Panel backgrounds */
+  --card: #111111;
+  --card-foreground: #ededed;
+  --popover: #111111;
+  --popover-foreground: #ededed;
+
+  /* Primary - Blue accent */
+  --primary: #3b82f6;
+  --primary-foreground: #ffffff;
+
+  /* Secondary - Subtle gray */
+  --secondary: #1f2937;
+  --secondary-foreground: #d1d5db;
+
+  /* Muted - For disabled/subtle elements */
+  --muted: #1f2937;
+  --muted-foreground: #6b7280;
+
+  /* Accent - For highlights */
+  --accent: #1f2937;
+  --accent-foreground: #d1d5db;
+
+  /* Destructive - For errors/delete actions */
+  --destructive: #dc2626;
+
+  /* Borders and inputs */
+  --border: #374151;
+  --input: #374151;
+  --ring: #3b82f6;
+
+  /* ========================================
+     TRADING-SPECIFIC SEMANTIC COLORS
+     ======================================== */
+
+  /* Up/Bullish - TradingView green */
+  --up: #089981;
+  --up-foreground: #ffffff;
+
+  /* Down/Bearish - TradingView red */
+  --down: #f23645;
+  --down-foreground: #ffffff;
+
+  /* Warning - Amber for alerts/caution */
+  --warning: #f59e0b;
+  --warning-foreground: #000000;
+
+  /* Success - Confirmations */
+  --success: #10b981;
+  --success-foreground: #ffffff;
+
+  /* Session colors (for backgrounds and lines) */
+  --session-asia: #fbbf24;
+  --session-london: #ef4444;
+  --session-ny: #3b82f6;
+
+  /* News impact colors */
+  --impact-high: #ef4444;
+  --impact-medium: #f59e0b;
+  --impact-low: #6b7280;
+
+  /* Chart data visualization colors */
+  --chart-1: #3b82f6;
+  --chart-2: #10b981;
+  --chart-3: #f59e0b;
+  --chart-4: #8b5cf6;
+  --chart-5: #ec4899;
+
+  /* Sidebar */
+  --sidebar: #111111;
+  --sidebar-foreground: #ededed;
+  --sidebar-primary: #3b82f6;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #1f2937;
+  --sidebar-accent-foreground: #ededed;
+  --sidebar-border: #374151;
+  --sidebar-ring: #3b82f6;
+}
+
+/* Light mode (optional - rarely used in trading) */
+.light {
+  --background: #ffffff;
+  --foreground: #171717;
+  --card: #ffffff;
+  --card-foreground: #171717;
+  --popover: #ffffff;
+  --popover-foreground: #171717;
+  --primary: #2563eb;
+  --primary-foreground: #ffffff;
+  --secondary: #f3f4f6;
+  --secondary-foreground: #374151;
+  --muted: #f3f4f6;
+  --muted-foreground: #6b7280;
+  --accent: #f3f4f6;
+  --accent-foreground: #374151;
+  --destructive: #dc2626;
+  --border: #e5e7eb;
+  --input: #e5e7eb;
+  --ring: #2563eb;
+
+  /* Trading colors stay consistent */
+  --up: #089981;
+  --up-foreground: #ffffff;
+  --down: #f23645;
+  --down-foreground: #ffffff;
+  --warning: #f59e0b;
+  --warning-foreground: #000000;
+  --success: #10b981;
+  --success-foreground: #ffffff;
+}
+
+/* ============================================
+   BASE STYLES
+   ============================================ */
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  html {
+    color-scheme: dark;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: var(--font-geist-sans), system-ui, sans-serif;
+  }
+
+  /* Monospace for numbers/prices */
+  .font-mono {
+    font-family: var(--font-geist-mono), ui-monospace, monospace;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* ============================================
+   SCROLLBAR STYLES (Dark theme)
+   ============================================ */
+
+@layer base {
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: #374151;
+    border-radius: 4px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: #4b5563;
+  }
 }

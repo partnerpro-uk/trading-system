@@ -1,25 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getEventsWithReactions } from "@/lib/db/news";
-
-const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+import { getEventsInTimeRangeFromClickHouse, HistoricalNewsEvent } from "@/lib/db/clickhouse-news";
 
 /**
  * GET /api/news/events
  *
- * Fetch news events with reactions from TimescaleDB for chart display.
- * This endpoint queries TimescaleDB which contains recent events (30-day window).
- *
- * For historical event analysis (older than 30 days), use:
- * - /api/news/historical (queries ClickHouse)
+ * Fetch news events for chart display from ClickHouse.
+ * ClickHouse contains all historical events from 2023-01-01 onwards.
  *
  * Query params:
  * - pair: Currency pair (required, e.g., "EUR_USD")
  * - startTime: Unix timestamp (ms) - start of time range
  * - endTime: Unix timestamp (ms) - end of time range
  * - impactFilter: "high" | "medium" | "low" | "all" (optional, default: "all")
- *
- * Note: startTime is clamped to 30 days ago to ensure queries stay within
- * TimescaleDB's retention window. Events older than 30 days are in ClickHouse.
  */
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
@@ -37,23 +29,26 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  let startTime = parseInt(startTimeParam, 10);
+  const startTime = parseInt(startTimeParam, 10);
   const endTime = parseInt(endTimeParam, 10);
 
-  // Clamp startTime to 30 days ago - older events are in ClickHouse, not TimescaleDB
-  const thirtyDaysAgo = Date.now() - THIRTY_DAYS_MS;
-  if (startTime < thirtyDaysAgo) {
-    startTime = thirtyDaysAgo;
-  }
-
   try {
-    const events = await getEventsWithReactions(pair, startTime, endTime, impactFilter);
+    console.log(`[News API] Fetching events for ${pair} from ${new Date(startTime).toISOString()} to ${new Date(endTime).toISOString()}`);
 
+    // Query ClickHouse for all events - it has the complete dataset
+    const events: HistoricalNewsEvent[] = await getEventsInTimeRangeFromClickHouse(
+      pair,
+      startTime,
+      endTime,
+      impactFilter
+    );
+
+    console.log(`[News API] Found ${events.length} events`);
     return NextResponse.json({ events });
   } catch (error) {
-    console.error("Error fetching news events:", error);
+    console.error("[News API] Error fetching news events:", error);
     return NextResponse.json(
-      { error: "Failed to fetch news events" },
+      { error: "Failed to fetch news events", details: String(error) },
       { status: 500 }
     );
   }

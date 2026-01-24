@@ -239,9 +239,11 @@ export function Chart({
       return;
     }
 
-    // Compute time range: 14 days back + 2 weeks forward
-    const startTime = candles[candles.length - 1].timestamp - 14 * 24 * 60 * 60 * 1000;
-    const endTime = candles[candles.length - 1].timestamp + 14 * 24 * 60 * 60 * 1000;
+    // Compute time range: from oldest candle to newest candle + buffer for upcoming events
+    const oldestCandle = candles[0].timestamp;
+    const newestCandle = candles[candles.length - 1].timestamp;
+    const startTime = oldestCandle - 24 * 60 * 60 * 1000; // 1 day before oldest
+    const endTime = newestCandle + 7 * 24 * 60 * 60 * 1000; // 1 week after newest
 
     const fetchNewsEvents = async () => {
       try {
