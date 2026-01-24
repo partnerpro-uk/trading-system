@@ -33,5 +33,6 @@ export * from "./vectorBuilders";
 // Dimensionality reduction (PCA, UMAP, kNN)
 export * from "./dimensionReduction";
 
-// Cluster map canvas rendering
-export * from "./clusterMapCanvas";
+// Simple settings
+export * from "./simple-settings-types";
+export * from "./settings-mapper";
