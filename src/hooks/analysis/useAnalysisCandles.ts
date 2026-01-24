@@ -29,7 +29,7 @@ interface UseAnalysisCandlesResult {
 export function useAnalysisCandles({
   pair,
   timeframe,
-  targetCount = 10000, // Increased default for date range queries
+  targetCount = 10000,
   enabled = true,
   dateStart,
   dateEnd,
@@ -43,6 +43,9 @@ export function useAnalysisCandles({
   const startTimestamp = dateStart ? new Date(dateStart).getTime() : null;
   const endTimestamp = dateEnd ? new Date(dateEnd + "T23:59:59").getTime() : null;
 
+  // Use range API when we have date filters (much faster - single query)
+  const hasDateFilter = startTimestamp !== null || endTimestamp !== null;
+
   const fetchCandles = useCallback(async () => {
     if (!enabled || !pair || !timeframe) return;
 
@@ -52,104 +55,102 @@ export function useAnalysisCandles({
     setCandles([]);
 
     try {
-      const allCandles: AnalysisCandle[] = [];
-      let beforeTimestamp: number | undefined = endTimestamp || undefined;
-      const batchSize = 500;
-      let iteration = 0;
-      // Allow many more iterations when fetching a date range (could be years of data)
-      // H1 = 24 candles/day × 365 = 8760/year, at 500/batch = ~18 iterations/year
-      const maxIterations = startTimestamp
-        ? 500  // Allow up to ~5 years of history when date filtering
-        : Math.ceil(targetCount / batchSize) + 10;
+      if (hasDateFilter) {
+        // Fast path: Use range API for date-filtered queries
+        // This is a single query instead of paginating in 500-candle batches
+        setProgress(10);
 
-      while (iteration < maxIterations) {
-        iteration++;
+        const params = new URLSearchParams({ pair, timeframe });
+        if (startTimestamp) params.set("from", startTimestamp.toString());
+        if (endTimestamp) params.set("to", endTimestamp.toString());
 
-        const params = new URLSearchParams({
-          pair,
-          timeframe,
-          limit: batchSize.toString(),
-        });
-
-        if (beforeTimestamp) {
-          params.set("before", beforeTimestamp.toString());
-        }
-
-        const response = await fetch(`/api/candles?${params}`);
+        const response = await fetch(`/api/candles/range?${params}`);
         if (!response.ok) {
           throw new Error(`Failed to fetch candles: ${response.status}`);
         }
 
+        setProgress(80);
+
         const data = await response.json();
-        const batch = data.candles as AnalysisCandle[];
+        const fetchedCandles = (data.candles || []) as AnalysisCandle[];
 
-        if (!batch || batch.length === 0) {
-          break; // No more history available
+        setCandles(fetchedCandles);
+        setProgress(100);
+      } else {
+        // Legacy path: Paginate backwards for "ALL" or no date filter
+        // This fetches in 500-candle batches
+        const allCandles: AnalysisCandle[] = [];
+        let beforeTimestamp: number | undefined = undefined;
+        const batchSize = 500;
+        let iteration = 0;
+        const maxIterations = Math.ceil(targetCount / batchSize) + 10;
+
+        while (iteration < maxIterations) {
+          iteration++;
+
+          const params = new URLSearchParams({
+            pair,
+            timeframe,
+            limit: batchSize.toString(),
+          });
+
+          if (beforeTimestamp) {
+            params.set("before", beforeTimestamp.toString());
+          }
+
+          const response = await fetch(`/api/candles?${params}`);
+          if (!response.ok) {
+            throw new Error(`Failed to fetch candles: ${response.status}`);
+          }
+
+          const data = await response.json();
+          const batch = data.candles as AnalysisCandle[];
+
+          if (!batch || batch.length === 0) {
+            break; // No more history available
+          }
+
+          // Prepend older candles
+          allCandles.unshift(...batch);
+
+          // Update progress
+          const progressPct = Math.min(95, Math.round((allCandles.length / targetCount) * 100));
+          setProgress(progressPct);
+
+          // Get oldest timestamp for next batch
+          beforeTimestamp = batch[0].timestamp;
+
+          // Stop if we've hit the target count
+          if (allCandles.length >= targetCount) {
+            break;
+          }
+          // Stop if we got fewer than requested (reached end of history)
+          if (batch.length < batchSize) {
+            break;
+          }
         }
 
-        // Filter batch by start date if specified
-        let filteredBatch = batch;
-        if (startTimestamp) {
-          filteredBatch = batch.filter((c) => c.timestamp >= startTimestamp);
-        }
+        // Deduplicate by timestamp
+        const seen = new Set<number>();
+        const deduped = allCandles.filter((c) => {
+          if (seen.has(c.timestamp)) return false;
+          seen.add(c.timestamp);
+          return true;
+        });
 
-        // Prepend older candles
-        allCandles.unshift(...filteredBatch);
+        // Sort ascending (oldest first)
+        deduped.sort((a, b) => a.timestamp - b.timestamp);
 
-        // Update progress - estimate based on date range or count
-        const progressPct = startTimestamp
-          ? Math.min(95, Math.round(((endTimestamp || Date.now()) - batch[0].timestamp) / ((endTimestamp || Date.now()) - startTimestamp) * 100))
-          : Math.min(95, Math.round((allCandles.length / targetCount) * 100));
-        setProgress(progressPct);
-
-        // Get oldest timestamp for next batch
-        beforeTimestamp = batch[0].timestamp;
-
-        // Stop conditions:
-        // 1. If we have a start date and the oldest candle is before it - we've fetched enough
-        if (startTimestamp && batch[0].timestamp < startTimestamp) {
-          break;
-        }
-        // 2. If no date range and we've hit the target count
-        if (!startTimestamp && allCandles.length >= targetCount) {
-          break;
-        }
-        // 3. If we got fewer than requested AND no date range - we've reached the end
-        //    (When date filtering, keep going - dual-database may return partial batches)
-        if (!startTimestamp && batch.length < batchSize) {
-          break;
-        }
+        setCandles(deduped);
+        setProgress(100);
       }
-
-      // Deduplicate by timestamp
-      const seen = new Set<number>();
-      const deduped = allCandles.filter((c) => {
-        if (seen.has(c.timestamp)) return false;
-        seen.add(c.timestamp);
-        return true;
-      });
-
-      // Sort ascending (oldest first)
-      deduped.sort((a, b) => a.timestamp - b.timestamp);
-
-      // Final filter by date range
-      let finalCandles = deduped;
-      if (startTimestamp) {
-        finalCandles = finalCandles.filter((c) => c.timestamp >= startTimestamp);
-      }
-      if (endTimestamp) {
-        finalCandles = finalCandles.filter((c) => c.timestamp <= endTimestamp);
-      }
-
-      setCandles(finalCandles);
-      setProgress(100);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to fetch candles");
       setCandles([]);
     } finally {
       setIsLoading(false);
     }
-  }, [pair, timeframe, targetCount, enabled, startTimestamp, endTimestamp]);
+  }, [pair, timeframe, targetCount, enabled, hasDateFilter, startTimestamp, endTimestamp]);
 
   useEffect(() => {
     fetchCandles();

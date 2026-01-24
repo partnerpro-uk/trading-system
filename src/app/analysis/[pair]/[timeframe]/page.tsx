@@ -152,8 +152,8 @@ export default function AnalysisViewPage() {
     });
   }, [candles, settings.dateStart, settings.dateEnd]);
 
-  // Map simple settings to full settings for worker
-  const fullSettings = useMemo(() => mapSimpleToFull(settings), [settings]);
+  // Map simple settings to full settings for worker (pass pair for correct dollarsPerMove)
+  const fullSettings = useMemo(() => mapSimpleToFull(settings, selectedPair), [settings, selectedPair]);
 
   // Convert to compute format
   const computeSettings = useMemo(() => {

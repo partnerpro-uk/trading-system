@@ -411,6 +411,119 @@ export async function getLatestPrices(pairs: string[]): Promise<Record<string, P
 }
 
 /**
+ * Get candles within a date range (optimized for 1M, 3M, 6M, 1Y, ALL queries)
+ * Single query instead of pagination - much faster for large ranges
+ *
+ * @param pair - Currency pair (e.g., "EUR_USD")
+ * @param timeframe - Timeframe (e.g., "H1")
+ * @param from - Start timestamp (ms) or null for earliest
+ * @param to - End timestamp (ms) or null for latest
+ * @param limit - Max candles (default 100000 for safety)
+ */
+export async function getCandlesInRange(
+  pair: string,
+  timeframe: string,
+  from: number | null,
+  to: number | null,
+  limit: number = 100000
+): Promise<Candle[]> {
+  const client = getClickHouseClient();
+
+  // Build WHERE clauses
+  const conditions = [
+    "pair = {pair:String}",
+    "timeframe = {timeframe:String}",
+  ];
+  const params: Record<string, unknown> = { pair, timeframe, limit };
+
+  if (from !== null) {
+    conditions.push("time >= {from:DateTime}");
+    params.from = new Date(from).toISOString().replace("T", " ").slice(0, 19);
+  }
+  if (to !== null) {
+    conditions.push("time <= {to:DateTime}");
+    params.to = new Date(to).toISOString().replace("T", " ").slice(0, 19);
+  }
+
+  // ClickHouse is partitioned by month and ordered by (pair, timeframe, time)
+  // This query is optimized because:
+  // 1. Partition pruning: toYYYYMM(time) eliminates irrelevant partitions
+  // 2. Primary key: (pair, timeframe, time) is the ORDER BY key
+  const query = `
+    SELECT time, pair, timeframe, open, high, low, close, volume
+    FROM candles
+    WHERE ${conditions.join(" AND ")}
+    ORDER BY time ASC
+    LIMIT {limit:UInt32}
+  `;
+
+  const result = await client.query({
+    query,
+    query_params: params,
+    format: "JSONEachRow",
+  });
+
+  const data = await result.json();
+  const rows = data as ClickHouseCandle[];
+
+  return rows.map((row) => ({
+    time: row.time,
+    timestamp: new Date(row.time + "Z").getTime(),
+    pair: row.pair,
+    timeframe: row.timeframe,
+    open: Number(row.open),
+    high: Number(row.high),
+    low: Number(row.low),
+    close: Number(row.close),
+    volume: Number(row.volume),
+  }));
+}
+
+/**
+ * Get estimated candle count for a date range (fast metadata query)
+ * Uses ClickHouse partition statistics for O(1) estimation
+ */
+export async function getEstimatedRangeCount(
+  pair: string,
+  timeframe: string,
+  from: number | null,
+  to: number | null
+): Promise<number> {
+  const client = getClickHouseClient();
+
+  const conditions = [
+    "pair = {pair:String}",
+    "timeframe = {timeframe:String}",
+  ];
+  const params: Record<string, unknown> = { pair, timeframe };
+
+  if (from !== null) {
+    conditions.push("time >= {from:DateTime}");
+    params.from = new Date(from).toISOString().replace("T", " ").slice(0, 19);
+  }
+  if (to !== null) {
+    conditions.push("time <= {to:DateTime}");
+    params.to = new Date(to).toISOString().replace("T", " ").slice(0, 19);
+  }
+
+  const query = `
+    SELECT count() as count
+    FROM candles
+    WHERE ${conditions.join(" AND ")}
+  `;
+
+  const result = await client.query({
+    query,
+    query_params: params,
+    format: "JSONEachRow",
+  });
+
+  const data = await result.json();
+  const rows = data as Array<{ count: string }>;
+  return rows.length > 0 ? parseInt(rows[0].count, 10) : 0;
+}
+
+/**
  * Get data range (earliest and latest timestamps) for a pair
  */
 export async function getDataRange(

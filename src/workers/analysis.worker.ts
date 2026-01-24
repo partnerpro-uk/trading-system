@@ -1205,8 +1205,9 @@ function simulate(settings: SimulateSettings): SimulateResult {
         const barsInTrade = i - trade.entryIndex;
 
         // Break-even stop (modes 1 and 3)
+        // beMove is a percentage of tpDist (which is already a price distance)
         if ((stopMode === 1 || stopMode === 3) && barsInTrade > 0) {
-          const beMove = tpDist * (breakEvenTriggerPct / 100) * atrVal / 10000;
+          const beMove = tpDist * (breakEvenTriggerPct / 100);
           if (dir === 1 && (high - entryPrice) >= beMove) {
             sl = Math.max(sl, entryPrice);
           } else if (dir === -1 && (entryPrice - low) >= beMove) {
@@ -1216,9 +1217,10 @@ function simulate(settings: SimulateSettings): SimulateResult {
         }
 
         // Trailing stop (modes 2 and 3)
+        // startMove and trailDist are percentages of tpDist (which is already a price distance)
         if ((stopMode === 2 || stopMode === 3) && barsInTrade > 0) {
-          const startMove = tpDist * (trailingStartPct / 100) * atrVal / 10000;
-          const trailDist = tpDist * (trailingDistPct / 100) * atrVal / 10000;
+          const startMove = tpDist * (trailingStartPct / 100);
+          const trailDist = tpDist * (trailingDistPct / 100);
           if (dir === 1) {
             const adv = high - entryPrice;
             if (adv >= startMove) {
@@ -1382,8 +1384,9 @@ function simulate(settings: SimulateSettings): SimulateResult {
         if (passConfidence) {
           const entryPrice = c.close;
           const dir = signal.dir;
-          const tp = entryPrice + (dir * tpDist * atrVal) / 10000;
-          const sl = entryPrice - (dir * slDist * atrVal) / 10000;
+          // tpDist and slDist are already price distances (converted from pips in settings-mapper)
+          const tp = entryPrice + dir * tpDist;
+          const sl = entryPrice - dir * slDist;
           const sess = sessionFromTime(c.time, parseMode);
 
           const trade: Trade = {
