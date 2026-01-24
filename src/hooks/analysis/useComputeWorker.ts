@@ -35,71 +35,71 @@ export function useComputeWorker(): UseComputeWorkerResult {
   const resolveRef = useRef<((result: ComputeResult) => void) | null>(null);
   const rejectRef = useRef<((error: Error) => void) | null>(null);
 
+  // Helper to set up worker message handlers (defined first so it can be used below)
+  const setupWorkerHandlers = useCallback((worker: Worker) => {
+    worker.onmessage = (ev) => {
+      const msg = ev.data || {};
+
+      if (msg.type === "candles_ok") {
+        return;
+      }
+
+      if (msg.type === "progress") {
+        setProgress({
+          phase: msg.phase || "Working",
+          pct: Math.round((msg.pct || 0) * 100),
+        });
+        return;
+      }
+
+      if (msg.type === "result") {
+        setIsComputing(false);
+        setResult(msg.res);
+        setProgress({ phase: "Done", pct: 100 });
+        if (resolveRef.current) {
+          resolveRef.current(msg.res);
+          resolveRef.current = null;
+          rejectRef.current = null;
+        }
+        return;
+      }
+
+      if (msg.type === "error") {
+        setIsComputing(false);
+        setError(msg.message || "Unknown error");
+        setProgress({ phase: "Error", pct: 0 });
+        if (rejectRef.current) {
+          rejectRef.current(new Error(msg.message));
+          resolveRef.current = null;
+          rejectRef.current = null;
+        }
+        return;
+      }
+    };
+
+    worker.onerror = (err) => {
+      console.error("Worker error:", err);
+      setIsComputing(false);
+      setError("Worker crashed");
+      if (rejectRef.current) {
+        rejectRef.current(new Error("Worker crashed"));
+        resolveRef.current = null;
+        rejectRef.current = null;
+      }
+    };
+  }, []);
+
   // Initialize worker
   useEffect(() => {
     // Only create worker in browser environment
     if (typeof window === "undefined") return;
 
     try {
-      // Create worker from the TypeScript file
-      // Next.js will handle the bundling
       const worker = new Worker(
         new URL("../../workers/analysis.worker.ts", import.meta.url),
         { type: "module" }
       );
-
-      worker.onmessage = (ev) => {
-        const msg = ev.data || {};
-
-        if (msg.type === "candles_ok") {
-          // Candles loaded successfully
-          return;
-        }
-
-        if (msg.type === "progress") {
-          setProgress({
-            phase: msg.phase || "Working",
-            pct: Math.round((msg.pct || 0) * 100),
-          });
-          return;
-        }
-
-        if (msg.type === "result") {
-          setIsComputing(false);
-          setResult(msg.res);
-          setProgress({ phase: "Done", pct: 100 });
-          if (resolveRef.current) {
-            resolveRef.current(msg.res);
-            resolveRef.current = null;
-            rejectRef.current = null;
-          }
-          return;
-        }
-
-        if (msg.type === "error") {
-          setIsComputing(false);
-          setError(msg.message || "Unknown error");
-          setProgress({ phase: "Error", pct: 0 });
-          if (rejectRef.current) {
-            rejectRef.current(new Error(msg.message));
-            resolveRef.current = null;
-            rejectRef.current = null;
-          }
-          return;
-        }
-      };
-
-      worker.onerror = (err) => {
-        console.error("Worker error:", err);
-        setIsComputing(false);
-        setError("Worker crashed");
-        if (rejectRef.current) {
-          rejectRef.current(new Error("Worker crashed"));
-          resolveRef.current = null;
-          rejectRef.current = null;
-        }
-      };
-
+      setupWorkerHandlers(worker);
       workerRef.current = worker;
     } catch (err) {
       console.error("Failed to create worker:", err);
@@ -112,7 +112,7 @@ export function useComputeWorker(): UseComputeWorkerResult {
         workerRef.current = null;
       }
     };
-  }, []);
+  }, [setupWorkerHandlers]);
 
   // Compute function
   const compute = useCallback(
@@ -175,12 +175,13 @@ export function useComputeWorker(): UseComputeWorkerResult {
       setIsComputing(false);
       setProgress({ phase: "Cancelled", pct: 0 });
 
-      // Recreate worker
+      // Recreate worker with handlers
       try {
         const worker = new Worker(
           new URL("../../workers/analysis.worker.ts", import.meta.url),
           { type: "module" }
         );
+        setupWorkerHandlers(worker);
         workerRef.current = worker;
       } catch (err) {
         console.error("Failed to recreate worker:", err);
@@ -192,7 +193,7 @@ export function useComputeWorker(): UseComputeWorkerResult {
         rejectRef.current = null;
       }
     }
-  }, []);
+  }, [setupWorkerHandlers]);
 
   return {
     isComputing,

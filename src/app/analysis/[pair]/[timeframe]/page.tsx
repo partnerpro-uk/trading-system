@@ -389,13 +389,9 @@ export default function AnalysisViewPage() {
 
   // Live calculator: auto-run analysis when settings or candles change (debounced)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const settingsVersionRef = useRef(0);
+  const prevSettingsRef = useRef<string>("");
 
   useEffect(() => {
-    // Increment version to track settings changes
-    settingsVersionRef.current += 1;
-    const currentVersion = settingsVersionRef.current;
-
     // Clear any pending debounce
     if (debounceRef.current) {
       clearTimeout(debounceRef.current);
@@ -406,14 +402,20 @@ export default function AnalysisViewPage() {
       return;
     }
 
+    // Create a settings fingerprint to detect actual changes
+    const settingsFingerprint = JSON.stringify(computeSettings);
+
+    // Skip if settings haven't actually changed (prevents duplicate runs)
+    if (settingsFingerprint === prevSettingsRef.current) {
+      return;
+    }
+
     // Debounce the analysis run (400ms)
     debounceRef.current = setTimeout(() => {
-      // Only run if this is still the latest version (settings haven't changed again)
-      if (currentVersion === settingsVersionRef.current) {
-        // Cancel any in-progress computation before starting new one (safe to call even if not computing)
-        cancel();
-        runAnalysis();
-      }
+      // Update the fingerprint before running
+      prevSettingsRef.current = settingsFingerprint;
+      // Run analysis (don't cancel - let the worker handle it)
+      runAnalysis();
     }, 400);
 
     return () => {
@@ -422,7 +424,7 @@ export default function AnalysisViewPage() {
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [computeSettings, analysisCandles.length, isLoadingCandles]); // Intentionally omit cancel/runAnalysis - they're stable callbacks
+  }, [computeSettings, analysisCandles.length, isLoadingCandles]); // Intentionally omit runAnalysis - it's a stable callback
 
   // Calculate basic candle statistics
   const candleStats = useMemo(() => {
