@@ -1,15 +1,11 @@
 "use client";
 
-import { useState, useMemo, useEffect, useCallback } from "react";
-import { useParams, useSearchParams } from "next/navigation";
-import Link from "next/link";
+import { useState, useMemo, useCallback, useEffect } from "react";
+import { useParams, useRouter } from "next/navigation";
 import {
-  ArrowLeft,
   Loader2,
-  Settings,
   TrendingUp,
   TrendingDown,
-  Activity,
   Calendar,
   BarChart3,
   RefreshCw,
@@ -18,6 +14,9 @@ import {
   StopCircle,
   PanelLeftClose,
   PanelLeft,
+  ChevronDown,
+  Settings,
+  Activity,
 } from "lucide-react";
 import { useAnalysisCandles, useComputeWorker } from "@/hooks/analysis";
 import { StatCard } from "@/components/analysis/ui";
@@ -35,102 +34,112 @@ import {
   createExport,
 } from "../../../../lib/analysis/settings-types";
 
-// Interface for initial config from landing page
-interface AnalysisConfig {
-  modelStates?: Record<string, number>;
-  dateStart?: string | null;
-  dateEnd?: string | null;
-  tpDollars?: number;
-  slDollars?: number;
-  dollarsPerMove?: number;
-  chunkBars?: number;
-}
+// ============================================
+// CONSTANTS (like Haji's single-page design)
+// ============================================
+
+const PAIRS = [
+  { id: "DXY", name: "DXY" },
+  { id: "SPX500_USD", name: "S&P 500" },
+  { id: "EUR_USD", name: "EUR/USD" },
+  { id: "GBP_USD", name: "GBP/USD" },
+  { id: "USD_JPY", name: "USD/JPY" },
+  { id: "USD_CHF", name: "USD/CHF" },
+  { id: "AUD_USD", name: "AUD/USD" },
+  { id: "USD_CAD", name: "USD/CAD" },
+  { id: "NZD_USD", name: "NZD/USD" },
+  { id: "XAU_USD", name: "Gold" },
+  { id: "BTC_USD", name: "Bitcoin" },
+];
+
+const TIMEFRAMES = [
+  { id: "M5", name: "5m" },
+  { id: "M15", name: "15m" },
+  { id: "M30", name: "30m" },
+  { id: "H1", name: "1H" },
+  { id: "H4", name: "4H" },
+  { id: "D", name: "1D" },
+];
+
+const MODELS = [
+  { id: "Momentum", name: "Momentum", color: "bg-blue-500" },
+  { id: "Mean Reversion", name: "Mean Reversion", color: "bg-green-500" },
+  { id: "Fibonacci", name: "Fibonacci", color: "bg-yellow-500" },
+  { id: "Support / Resistance", name: "S/R", color: "bg-orange-500" },
+  { id: "Seasons", name: "Seasons", color: "bg-pink-500" },
+  { id: "Time of Day", name: "ToD", color: "bg-cyan-500" },
+];
 
 export default function AnalysisViewPage() {
   const params = useParams();
-  const searchParams = useSearchParams();
+  const router = useRouter();
 
-  const pair = params.pair as string;
-  const timeframe = params.timeframe as string;
-
-  const formattedPair = pair.replace("_", "/");
+  // Get initial pair/timeframe from URL
+  const urlPair = params.pair as string;
+  const urlTimeframe = params.timeframe as string;
 
   // ============================================
-  // Full Settings State - initialized from sessionStorage if available
+  // Pair/Timeframe State (editable on page)
   // ============================================
-  const [settings, setSettings] = useState<FullAnalysisSettings>(() => {
-    // Try to read initial config from sessionStorage (set by landing page)
-    if (typeof window !== "undefined") {
-      try {
-        const configStr = sessionStorage.getItem("analysisConfig");
-        if (configStr) {
-          const config: AnalysisConfig = JSON.parse(configStr);
-          // Clear it after reading so refresh doesn't reuse old config
-          sessionStorage.removeItem("analysisConfig");
+  const [selectedPair, setSelectedPair] = useState(urlPair || "EUR_USD");
+  const [selectedTimeframe, setSelectedTimeframe] = useState(urlTimeframe || "H1");
 
-          return {
-            ...DEFAULT_FULL_SETTINGS,
-            // Apply model states from landing page
-            modelStates: config.modelStates
-              ? (config.modelStates as typeof DEFAULT_FULL_SETTINGS.modelStates)
-              : DEFAULT_FULL_SETTINGS.modelStates,
-            // Apply trade settings
-            tpDollars: config.tpDollars ?? DEFAULT_FULL_SETTINGS.tpDollars,
-            slDollars: config.slDollars ?? DEFAULT_FULL_SETTINGS.slDollars,
-            dollarsPerMove: config.dollarsPerMove ?? DEFAULT_FULL_SETTINGS.dollarsPerMove,
-            chunkBars: config.chunkBars ?? DEFAULT_FULL_SETTINGS.chunkBars,
-          };
-        }
-      } catch (e) {
-        console.warn("Failed to read analysis config from sessionStorage:", e);
-      }
-    }
-    return { ...DEFAULT_FULL_SETTINGS };
-  });
+  const formattedPair = selectedPair.replace("_", "/");
+
+  // Navigate when pair/timeframe changes
+  const handlePairChange = useCallback((newPair: string) => {
+    setSelectedPair(newPair);
+    router.push(`/analysis/${newPair}/${selectedTimeframe}`);
+  }, [selectedTimeframe, router]);
+
+  const handleTimeframeChange = useCallback((newTf: string) => {
+    setSelectedTimeframe(newTf);
+    router.push(`/analysis/${selectedPair}/${newTf}`);
+  }, [selectedPair, router]);
+
+  // ============================================
+  // Full Settings State (all on this page now)
+  // ============================================
+  const [settings, setSettings] = useState<FullAnalysisSettings>({ ...DEFAULT_FULL_SETTINGS });
 
   // Sidebar visibility
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
-  // Additional filter state (date range) - also initialized from sessionStorage
-  const [dateFilters, setDateFilters] = useState<{ dateStart: string | null; dateEnd: string | null }>(() => {
-    if (typeof window !== "undefined") {
-      try {
-        const configStr = sessionStorage.getItem("analysisConfigDates");
-        if (configStr) {
-          const config: AnalysisConfig = JSON.parse(configStr);
-          sessionStorage.removeItem("analysisConfigDates");
-          return {
-            dateStart: config.dateStart || null,
-            dateEnd: config.dateEnd || null,
-          };
-        }
-      } catch (e) {
-        // Ignore
-      }
-    }
-    return { dateStart: null, dateEnd: null };
+  // Date range filters (directly on page, no sessionStorage)
+  const [dateFilters, setDateFilters] = useState<{ dateStart: string | null; dateEnd: string | null }>({
+    dateStart: null,
+    dateEnd: null,
   });
 
-  // On mount, also check for date filters in the main config
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      try {
-        // Check if we have a fresh config with dates
-        const configStr = sessionStorage.getItem("analysisConfigDates");
-        if (configStr) {
-          const config: AnalysisConfig = JSON.parse(configStr);
-          sessionStorage.removeItem("analysisConfigDates");
-          if (config.dateStart || config.dateEnd) {
-            setDateFilters({
-              dateStart: config.dateStart || null,
-              dateEnd: config.dateEnd || null,
-            });
-          }
-        }
-      } catch (e) {
-        // Ignore
-      }
-    }
+  // Date presets
+  const setDatePreset = useCallback((months: number) => {
+    const end = new Date();
+    const start = new Date();
+    start.setMonth(start.getMonth() - months);
+    setDateFilters({
+      dateStart: start.toISOString().split("T")[0],
+      dateEnd: end.toISOString().split("T")[0],
+    });
+  }, []);
+
+  // Count enabled models
+  const enabledModelCount = useMemo(() => {
+    return Object.values(settings.modelStates).filter((s) => s > 0).length;
+  }, [settings.modelStates]);
+
+  // Cycle model state: Off -> Entry -> Full -> Off
+  const cycleModelState = useCallback((modelId: string) => {
+    setSettings((prev) => {
+      const current = prev.modelStates[modelId as keyof typeof prev.modelStates] || 0;
+      const next = ((current + 1) % 3) as 0 | 1 | 2;
+      return {
+        ...prev,
+        modelStates: {
+          ...prev.modelStates,
+          [modelId]: next,
+        },
+      };
+    });
   }, []);
 
   // Selected trade for modal
@@ -154,12 +163,12 @@ export default function AnalysisViewPage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `analysis-settings-${pair}-${timeframe}-${new Date().toISOString().split("T")[0]}.json`;
+    a.download = `analysis-settings-${selectedPair}-${selectedTimeframe}-${new Date().toISOString().split("T")[0]}.json`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-  }, [settings, pair, timeframe]);
+  }, [settings, selectedPair, selectedTimeframe]);
 
   // Import settings
   const handleImportSettings = useCallback((jsonString: string) => {
@@ -191,7 +200,7 @@ export default function AnalysisViewPage() {
     }
   }, []);
 
-  // Load candle data
+  // Load candle data (no sessionStorage dependency - everything on this page)
   const {
     candles,
     isLoading: isLoadingCandles,
@@ -199,10 +208,12 @@ export default function AnalysisViewPage() {
     progress: loadProgress,
     refetch,
   } = useAnalysisCandles({
-    pair,
-    timeframe,
-    targetCount: 3000,
+    pair: selectedPair,
+    timeframe: selectedTimeframe,
+    targetCount: 50000, // Fetch more candles for date range queries
     enabled: true,
+    dateStart: dateFilters.dateStart,
+    dateEnd: dateFilters.dateEnd,
   });
 
   // Compute worker
@@ -263,8 +274,8 @@ export default function AnalysisViewPage() {
 
     return {
       // Basic
-      pair,
-      timeframe,
+      pair: selectedPair,
+      timeframe: selectedTimeframe,
       parseMode: "utc" as const,
 
       // Trade parameters
@@ -364,7 +375,7 @@ export default function AnalysisViewPage() {
         Object.entries(settings.enabledYears).map(([k, v]) => [Number(k), v])
       ),
     };
-  }, [settings, pair, timeframe]);
+  }, [settings, selectedPair, selectedTimeframe]);
 
   // Run analysis
   const runAnalysis = useCallback(async () => {
@@ -469,10 +480,10 @@ export default function AnalysisViewPage() {
   // Format price for display
   const formatPrice = (price: number) => {
     if (!price) return "—";
-    if (pair.includes("JPY")) return price.toFixed(3);
-    if (pair.includes("BTC")) return price.toLocaleString("en-US", { maximumFractionDigits: 2 });
-    if (pair.includes("XAU")) return price.toFixed(2);
-    if (pair.includes("SPX") || pair.includes("DXY")) return price.toFixed(2);
+    if (selectedPair.includes("JPY")) return price.toFixed(3);
+    if (selectedPair.includes("BTC")) return price.toLocaleString("en-US", { maximumFractionDigits: 2 });
+    if (selectedPair.includes("XAU")) return price.toFixed(2);
+    if (selectedPair.includes("SPX") || selectedPair.includes("DXY")) return price.toFixed(2);
     return price.toFixed(5);
   };
 
@@ -514,11 +525,13 @@ export default function AnalysisViewPage() {
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-h-screen overflow-hidden">
-        {/* Header */}
+        {/* Header - All configuration in one place like Haji */}
         <header className="border-b border-gray-800 bg-gray-900">
-          <div className="px-4">
-            <div className="flex items-center justify-between h-14">
-              <div className="flex items-center gap-4">
+          <div className="px-4 py-3">
+            {/* Row 1: Pair/Timeframe + Models + Actions */}
+            <div className="flex items-center justify-between gap-4 flex-wrap">
+              {/* Left: Pair & Timeframe selectors */}
+              <div className="flex items-center gap-3">
                 {!sidebarOpen && (
                   <button
                     onClick={() => setSidebarOpen(true)}
@@ -528,39 +541,78 @@ export default function AnalysisViewPage() {
                     <PanelLeft className="w-5 h-5" />
                   </button>
                 )}
-                <Link
-                  href="/analysis"
-                  className="flex items-center gap-2 text-gray-400 hover:text-gray-200 transition-colors"
-                >
-                  <ArrowLeft className="w-4 h-4" />
-                  Back
-                </Link>
-                <div className="h-6 w-px bg-gray-700" />
-                <div className="flex items-center gap-2">
-                  <span className="font-semibold text-gray-100">{formattedPair}</span>
-                  <span className="text-gray-500">·</span>
-                  <span className="text-gray-400">{timeframe}</span>
-                  <span className="text-gray-500">·</span>
-                  <span className="text-purple-400">{activeModel}</span>
-                  {candleStats && (
-                    <>
-                      <span className="text-gray-500">·</span>
-                      <span
-                        className={`flex items-center gap-1 ${
-                          candleStats.trend === "bullish" ? "text-green-400" : "text-red-400"
-                        }`}
-                      >
-                        {candleStats.trend === "bullish" ? (
-                          <TrendingUp className="w-4 h-4" />
-                        ) : (
-                          <TrendingDown className="w-4 h-4" />
-                        )}
-                        {formatPrice(candleStats.currentPrice)}
-                      </span>
-                    </>
-                  )}
+                {/* Pair Selector */}
+                <div className="relative">
+                  <select
+                    value={selectedPair}
+                    onChange={(e) => handlePairChange(e.target.value)}
+                    className="appearance-none bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 pr-8 text-sm font-medium text-gray-100 focus:outline-none focus:border-purple-500 cursor-pointer"
+                  >
+                    {PAIRS.map((p) => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                  </select>
+                  <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
                 </div>
+                {/* Timeframe Buttons */}
+                <div className="flex rounded-lg overflow-hidden border border-gray-700">
+                  {TIMEFRAMES.map((tf) => (
+                    <button
+                      key={tf.id}
+                      onClick={() => handleTimeframeChange(tf.id)}
+                      className={`px-2.5 py-1 text-xs font-medium transition-colors ${
+                        selectedTimeframe === tf.id
+                          ? "bg-purple-600 text-white"
+                          : "bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200"
+                      }`}
+                    >
+                      {tf.name}
+                    </button>
+                  ))}
+                </div>
+                {/* Current Price */}
+                {candleStats && (
+                  <span
+                    className={`flex items-center gap-1 text-sm ${
+                      candleStats.trend === "bullish" ? "text-green-400" : "text-red-400"
+                    }`}
+                  >
+                    {candleStats.trend === "bullish" ? (
+                      <TrendingUp className="w-4 h-4" />
+                    ) : (
+                      <TrendingDown className="w-4 h-4" />
+                    )}
+                    {formatPrice(candleStats.currentPrice)}
+                  </span>
+                )}
               </div>
+
+              {/* Center: Model buttons with state cycling */}
+              <div className="flex items-center gap-1">
+                {MODELS.map((model) => {
+                  const state = settings.modelStates[model.id as keyof typeof settings.modelStates] || 0;
+                  return (
+                    <button
+                      key={model.id}
+                      onClick={() => cycleModelState(model.id)}
+                      className={`px-2 py-1 text-xs font-medium rounded transition-colors ${
+                        state === 0
+                          ? "bg-gray-800 text-gray-500"
+                          : state === 1
+                          ? "bg-amber-900/50 text-amber-400 border border-amber-700"
+                          : "bg-purple-900/50 text-purple-300 border border-purple-700"
+                      }`}
+                      title={`${model.name}: ${state === 0 ? "Off" : state === 1 ? "Entry Only" : "Full"} (click to cycle)`}
+                    >
+                      <span className={`inline-block w-1.5 h-1.5 rounded-full mr-1 ${model.color}`} />
+                      {model.name}
+                    </button>
+                  );
+                })}
+                <span className="text-xs text-gray-500 ml-2">({enabledModelCount} active)</span>
+              </div>
+
+              {/* Right: Actions */}
               <div className="flex items-center gap-2">
                 {isComputing ? (
                   <button
@@ -595,6 +647,72 @@ export default function AnalysisViewPage() {
                   {sidebarOpen ? <PanelLeftClose className="w-4 h-4" /> : <Settings className="w-4 h-4" />}
                   Settings
                 </button>
+              </div>
+            </div>
+
+            {/* Row 2: Date Range */}
+            <div className="flex items-center gap-3 mt-3 pt-3 border-t border-gray-800">
+              <Calendar className="w-4 h-4 text-gray-500" />
+              <div className="flex gap-1">
+                <button
+                  onClick={() => setDatePreset(1)}
+                  className={`px-2 py-1 text-xs rounded transition-colors ${
+                    dateFilters.dateStart ? "bg-gray-800 text-gray-400 hover:bg-gray-700" : "bg-gray-800 text-gray-400 hover:bg-gray-700"
+                  }`}
+                >
+                  1M
+                </button>
+                <button
+                  onClick={() => setDatePreset(3)}
+                  className="px-2 py-1 text-xs bg-gray-800 text-gray-400 rounded hover:bg-gray-700 transition-colors"
+                >
+                  3M
+                </button>
+                <button
+                  onClick={() => setDatePreset(6)}
+                  className="px-2 py-1 text-xs bg-gray-800 text-gray-400 rounded hover:bg-gray-700 transition-colors"
+                >
+                  6M
+                </button>
+                <button
+                  onClick={() => setDatePreset(12)}
+                  className="px-2 py-1 text-xs bg-gray-800 text-gray-400 rounded hover:bg-gray-700 transition-colors"
+                >
+                  1Y
+                </button>
+                <button
+                  onClick={() => setDateFilters({ dateStart: null, dateEnd: null })}
+                  className="px-2 py-1 text-xs bg-gray-800 text-gray-400 rounded hover:bg-gray-700 transition-colors"
+                >
+                  All
+                </button>
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="date"
+                  value={dateFilters.dateStart || ""}
+                  onChange={(e) => setDateFilters((prev) => ({ ...prev, dateStart: e.target.value || null }))}
+                  className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-gray-200 focus:outline-none focus:border-purple-500"
+                />
+                <span className="text-gray-500 text-xs">to</span>
+                <input
+                  type="date"
+                  value={dateFilters.dateEnd || ""}
+                  onChange={(e) => setDateFilters((prev) => ({ ...prev, dateEnd: e.target.value || null }))}
+                  className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-gray-200 focus:outline-none focus:border-purple-500"
+                />
+              </div>
+              {(dateFilters.dateStart || dateFilters.dateEnd) && (
+                <span className="text-xs text-purple-400">
+                  {dateFilters.dateStart || "..."} → {dateFilters.dateEnd || "now"}
+                </span>
+              )}
+              <div className="ml-auto flex items-center gap-2 text-xs text-gray-500">
+                <BarChart3 className="w-3 h-3" />
+                <span>{candles.length.toLocaleString()} candles</span>
+                {analysisCandles.length !== candles.length && (
+                  <span className="text-gray-600">({analysisCandles.length.toLocaleString()} filtered)</span>
+                )}
               </div>
             </div>
           </div>
@@ -971,7 +1089,7 @@ export default function AnalysisViewPage() {
             </div>
             <h2 className="text-xl font-semibold text-gray-200 mb-2">No Candle Data Available</h2>
             <p className="text-gray-500 max-w-md mb-6">
-              No historical candle data was found for {formattedPair} on the {timeframe} timeframe.
+              No historical candle data was found for {formattedPair} on the {selectedTimeframe} timeframe.
               This could mean the data hasn&apos;t been ingested yet.
             </p>
             <button
@@ -992,7 +1110,7 @@ export default function AnalysisViewPage() {
           trade={selectedTrade}
           candles={candles}
           dollarsPerMove={settings.dollarsPerMove}
-          interval={timeframe}
+          interval={selectedTimeframe}
           parseMode="utc"
           tpDist={Math.round(settings.tpDollars / settings.dollarsPerMove)}
           slDist={Math.round(settings.slDollars / settings.dollarsPerMove)}

@@ -8,6 +8,8 @@ interface UseAnalysisCandlesOptions {
   timeframe: string;
   targetCount?: number;
   enabled?: boolean;
+  dateStart?: string | null; // ISO date string (YYYY-MM-DD)
+  dateEnd?: string | null;   // ISO date string (YYYY-MM-DD)
 }
 
 interface UseAnalysisCandlesResult {
@@ -27,13 +29,19 @@ interface UseAnalysisCandlesResult {
 export function useAnalysisCandles({
   pair,
   timeframe,
-  targetCount = 3000,
+  targetCount = 10000, // Increased default for date range queries
   enabled = true,
+  dateStart,
+  dateEnd,
 }: UseAnalysisCandlesOptions): UseAnalysisCandlesResult {
   const [candles, setCandles] = useState<AnalysisCandle[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
+
+  // Convert date strings to timestamps
+  const startTimestamp = dateStart ? new Date(dateStart).getTime() : null;
+  const endTimestamp = dateEnd ? new Date(dateEnd + "T23:59:59").getTime() : null;
 
   const fetchCandles = useCallback(async () => {
     if (!enabled || !pair || !timeframe) return;
@@ -45,12 +53,13 @@ export function useAnalysisCandles({
 
     try {
       const allCandles: AnalysisCandle[] = [];
-      let beforeTimestamp: number | undefined;
+      let beforeTimestamp: number | undefined = endTimestamp || undefined;
       const batchSize = 500;
       let iteration = 0;
-      const maxIterations = Math.ceil(targetCount / batchSize) + 2;
+      // Allow more iterations when fetching a date range
+      const maxIterations = Math.ceil(targetCount / batchSize) + 10;
 
-      while (allCandles.length < targetCount && iteration < maxIterations) {
+      while (iteration < maxIterations) {
         iteration++;
 
         const params = new URLSearchParams({
@@ -75,16 +84,34 @@ export function useAnalysisCandles({
           break; // No more history available
         }
 
-        // Prepend older candles
-        allCandles.unshift(...batch);
+        // Filter batch by start date if specified
+        let filteredBatch = batch;
+        if (startTimestamp) {
+          filteredBatch = batch.filter((c) => c.timestamp >= startTimestamp);
+        }
 
-        // Update progress
-        setProgress(Math.min(95, Math.round((allCandles.length / targetCount) * 100)));
+        // Prepend older candles
+        allCandles.unshift(...filteredBatch);
+
+        // Update progress - estimate based on date range or count
+        const progressPct = startTimestamp
+          ? Math.min(95, Math.round(((endTimestamp || Date.now()) - batch[0].timestamp) / ((endTimestamp || Date.now()) - startTimestamp) * 100))
+          : Math.min(95, Math.round((allCandles.length / targetCount) * 100));
+        setProgress(progressPct);
 
         // Get oldest timestamp for next batch
         beforeTimestamp = batch[0].timestamp;
 
-        // If we got fewer than requested, we've reached the end
+        // Stop conditions:
+        // 1. If we have a start date and the oldest candle is before it
+        if (startTimestamp && batch[0].timestamp < startTimestamp) {
+          break;
+        }
+        // 2. If no date range and we've hit the target count
+        if (!startTimestamp && allCandles.length >= targetCount) {
+          break;
+        }
+        // 3. If we got fewer than requested, we've reached the end
         if (batch.length < batchSize) {
           break;
         }
@@ -101,7 +128,16 @@ export function useAnalysisCandles({
       // Sort ascending (oldest first)
       deduped.sort((a, b) => a.timestamp - b.timestamp);
 
-      setCandles(deduped);
+      // Final filter by date range
+      let finalCandles = deduped;
+      if (startTimestamp) {
+        finalCandles = finalCandles.filter((c) => c.timestamp >= startTimestamp);
+      }
+      if (endTimestamp) {
+        finalCandles = finalCandles.filter((c) => c.timestamp <= endTimestamp);
+      }
+
+      setCandles(finalCandles);
       setProgress(100);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to fetch candles");
@@ -109,7 +145,7 @@ export function useAnalysisCandles({
     } finally {
       setIsLoading(false);
     }
-  }, [pair, timeframe, targetCount, enabled]);
+  }, [pair, timeframe, targetCount, enabled, startTimestamp, endTimestamp]);
 
   useEffect(() => {
     fetchCandles();
