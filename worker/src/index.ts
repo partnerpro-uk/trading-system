@@ -14,6 +14,7 @@ import { Pool } from "pg";
 import { resolve } from "path";
 import { forwardFill } from "./jblanked-news";
 import { runCaretaker } from "./gap-caretaker";
+import { processEventReactions } from "./event-reaction-processor";
 
 // Load env from parent .env.local
 config({ path: resolve(process.cwd(), "../.env.local") });
@@ -384,6 +385,9 @@ async function main(): Promise<void> {
   // Start gap caretaker (runs every 6 hours)
   startGapCaretaker();
 
+  // Start event reaction processor (runs every 15 minutes)
+  startEventReactionProcessor();
+
   // Keep process alive
   console.log("\nWorker running. Press Ctrl+C to stop.\n");
 }
@@ -441,6 +445,35 @@ function startGapCaretaker(): void {
   }, CARETAKER_INTERVAL);
 
   console.log(`[Caretaker] Scheduled gap scans (every ${CARETAKER_INTERVAL / (60 * 60 * 1000)} hours, first run in 5 minutes)`);
+}
+
+/**
+ * Start event reaction processor on 15-minute schedule
+ * Processes news events to capture price reactions in real-time
+ */
+function startEventReactionProcessor(): void {
+  const REACTION_INTERVAL = 15 * 60 * 1000; // 15 minutes
+
+  // Run after 2 minutes (let initial sync complete first)
+  setTimeout(() => {
+    console.log("\n[EventReactions] Running initial reaction processing...");
+    processEventReactions().catch((err) => {
+      console.error("[EventReactions] Initial processing failed:", err);
+    });
+  }, 2 * 60 * 1000);
+
+  // Then run every 15 minutes
+  setInterval(async () => {
+    console.log("\n[EventReactions] Running scheduled reaction processing...");
+    try {
+      await processEventReactions();
+      console.log("[EventReactions] Processing complete");
+    } catch (err) {
+      console.error("[EventReactions] Processing failed:", err);
+    }
+  }, REACTION_INTERVAL);
+
+  console.log(`[EventReactions] Scheduled reaction processing (every ${REACTION_INTERVAL / (60 * 1000)} minutes, first run in 2 minutes)`);
 }
 
 // Graceful shutdown
