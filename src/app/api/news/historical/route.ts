@@ -127,7 +127,7 @@ function mapToLegacyFormat(event: HistoricalEventForDisplay): HistoricalEvent {
     // NEW: T-15 baseline for proper pip calculations
     priceAtMinus15m: event.priceAtMinus15m,
 
-    // NEW: Extended windows
+    // NEW: Extended windows (short-term)
     priceAtPlus60m: event.priceAtPlus60m ?? undefined,
     priceAtPlus90m: event.priceAtPlus90m ?? undefined,
 
@@ -139,7 +139,16 @@ function mapToLegacyFormat(event: HistoricalEventForDisplay): HistoricalEvent {
       at30m: event.pipsAt30m,
       at60m: event.pipsAt60m,
       at90m: event.pipsAt90m,
+      // Extended aftermath pips
+      at2hr: event.pipsAt2hr,
+      at4hr: event.pipsAt4hr,
+      at8hr: event.pipsAt8hr,
+      at24hr: event.pipsAt24hr,
     },
+
+    // Pattern types
+    patternType: event.patternType,
+    extendedPatternType: event.extendedPatternType,
 
     // NEW: Window info
     windowMinutes: event.windowMinutes,
@@ -180,7 +189,16 @@ interface HistoricalEvent {
     at30m: number | null;
     at60m: number | null;
     at90m: number | null;
+    // Extended aftermath pips
+    at2hr: number | null;
+    at4hr: number | null;
+    at8hr: number | null;
+    at24hr: number | null;
   };
+
+  // Pattern types
+  patternType: string;
+  extendedPatternType: string | null;
 
   // NEW: Window type (30=standard, 75=high impact, 105=FOMC/ECB)
   windowMinutes: number;
