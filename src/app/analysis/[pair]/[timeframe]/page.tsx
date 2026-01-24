@@ -164,8 +164,8 @@ export default function AnalysisViewPage() {
       model:
         Object.entries(fullSettings.modelStates).find(([, state]) => state === 2)?.[0] ||
         "Momentum",
-      tpDist: Math.round(fullSettings.tpDollars / fullSettings.dollarsPerMove),
-      slDist: Math.round(fullSettings.slDollars / fullSettings.dollarsPerMove),
+      tpDist: fullSettings.tpDollars / fullSettings.dollarsPerMove,
+      slDist: fullSettings.slDollars / fullSettings.dollarsPerMove,
       chunkBars: fullSettings.chunkBars,
       dollarsPerMove: fullSettings.dollarsPerMove,
       aiMethod: fullSettings.aiMethod,
