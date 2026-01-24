@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
   Loader2,
@@ -387,15 +387,42 @@ export default function AnalysisViewPage() {
     }
   }, [analysisCandles, compute, computeSettings]);
 
-  // Auto-run analysis when candles are loaded
-  const [hasAutoRun, setHasAutoRun] = useState(false);
+  // Live calculator: auto-run analysis when settings or candles change (debounced)
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const settingsVersionRef = useRef(0);
+
   useEffect(() => {
-    if (analysisCandles.length > 100 && !hasAutoRun && !isComputing && !computeResult) {
-      setHasAutoRun(true);
-      runAnalysis();
+    // Increment version to track settings changes
+    settingsVersionRef.current += 1;
+    const currentVersion = settingsVersionRef.current;
+
+    // Clear any pending debounce
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
     }
+
+    // Don't run if not enough candles or still loading
+    if (analysisCandles.length < 100 || isLoadingCandles) {
+      return;
+    }
+
+    // Debounce the analysis run (400ms)
+    debounceRef.current = setTimeout(() => {
+      // Only run if this is still the latest version (settings haven't changed again)
+      if (currentVersion === settingsVersionRef.current) {
+        // Cancel any in-progress computation before starting new one (safe to call even if not computing)
+        cancel();
+        runAnalysis();
+      }
+    }, 400);
+
+    return () => {
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+      }
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [analysisCandles.length, hasAutoRun, isComputing, computeResult]);
+  }, [computeSettings, analysisCandles.length, isLoadingCandles]); // Intentionally omit cancel/runAnalysis - they're stable callbacks
 
   // Calculate basic candle statistics
   const candleStats = useMemo(() => {
