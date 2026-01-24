@@ -989,7 +989,10 @@ function TradeCandlestickChartLightweight({
         text: `Exit ${exitSide}`,
       });
     }
-    if (markers.length) series.setMarkers(markers);
+    // lightweight-charts v5: markers are set on chart, not series
+    if (markers.length && chart.setMarkers) {
+      chart.setMarkers(series, markers);
+    }
 
     if (tp != null && series.createPriceLine) {
       series.createPriceLine({
