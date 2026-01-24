@@ -25,6 +25,7 @@ import { SettingsSidebar } from "@/components/analysis/SettingsSidebar";
 import { FilterBar, DEFAULT_FILTERS, type FilterState } from "@/components/analysis/filters";
 import { TradeDetailsModal } from "@/components/analysis/TradeDetailsModal";
 import { TradeCandlestickChart } from "@/components/analysis/charts";
+import { PropFirmSimulation } from "@/components/analysis/PropFirmSimulation";
 import type { Trade } from "../../../../lib/analysis/types";
 import {
   type FullAnalysisSettings,
@@ -1107,6 +1108,17 @@ export default function AnalysisViewPage() {
                 </div>
               </div>
             )}
+
+            {/* Prop Firm Simulation */}
+            <div className="mb-6">
+              <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4">
+                Prop Firm Simulation
+              </h2>
+              <PropFirmSimulation
+                trades={filteredTrades}
+                parseMode="utc"
+              />
+            </div>
           </>
         )}
 
