@@ -916,7 +916,7 @@ function TradeCandlestickChartLightweight({
     const el = containerRef.current;
     el.innerHTML = "";
 
-    const { createChart } = lw;
+    const { createChart, CandlestickSeries } = lw;
     const CrosshairMode = lw?.CrosshairMode;
     const LineStyle = lw?.LineStyle;
 
@@ -947,7 +947,8 @@ function TradeCandlestickChartLightweight({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     }) as any;
 
-    const series = chart.addCandlestickSeries({
+    // lightweight-charts v5 uses addSeries with series type
+    const series = chart.addSeries(CandlestickSeries, {
       upColor: "#34d399",
       downColor: "#fb7185",
       wickUpColor: "#34d399",
