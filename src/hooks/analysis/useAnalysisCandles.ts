@@ -56,8 +56,11 @@ export function useAnalysisCandles({
       let beforeTimestamp: number | undefined = endTimestamp || undefined;
       const batchSize = 500;
       let iteration = 0;
-      // Allow more iterations when fetching a date range
-      const maxIterations = Math.ceil(targetCount / batchSize) + 10;
+      // Allow many more iterations when fetching a date range (could be years of data)
+      // H1 = 24 candles/day × 365 = 8760/year, at 500/batch = ~18 iterations/year
+      const maxIterations = startTimestamp
+        ? 500  // Allow up to ~5 years of history when date filtering
+        : Math.ceil(targetCount / batchSize) + 10;
 
       while (iteration < maxIterations) {
         iteration++;
@@ -103,7 +106,7 @@ export function useAnalysisCandles({
         beforeTimestamp = batch[0].timestamp;
 
         // Stop conditions:
-        // 1. If we have a start date and the oldest candle is before it
+        // 1. If we have a start date and the oldest candle is before it - we've fetched enough
         if (startTimestamp && batch[0].timestamp < startTimestamp) {
           break;
         }
@@ -111,8 +114,9 @@ export function useAnalysisCandles({
         if (!startTimestamp && allCandles.length >= targetCount) {
           break;
         }
-        // 3. If we got fewer than requested, we've reached the end
-        if (batch.length < batchSize) {
+        // 3. If we got fewer than requested AND no date range - we've reached the end
+        //    (When date filtering, keep going - dual-database may return partial batches)
+        if (!startTimestamp && batch.length < batchSize) {
           break;
         }
       }
