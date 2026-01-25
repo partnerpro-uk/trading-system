@@ -1,0 +1,337 @@
+{
+  "strategy": {
+    "name": "The Echo System",
+    "version": "2.0",
+    
+    "thesis": {
+      "summary": "Trade pullbacks within established trends, expecting price to return to the trend direction after a sharp counter-move.",
+      "reasoning": "When price is trending in one direction (confirmed by moving average alignment), sharp moves against that trend often represent temporary exhaustion rather than trend reversal. These counter-moves create favorable entry points to join the existing trend."
+    },
+
+    "visual_representations": {
+      
+      "chart_basics": {
+        "description": "A price chart displays price movement over time",
+        "x_axis": "Time moves from left to right. Each unit represents one candle/time period.",
+        "y_axis": "Price levels increase going upward, decrease going downward.",
+        "candles": "Each candle is a vertical shape showing the Open, High, Low, Close for that time period. The body shows Open-to-Close range. The wicks (thin lines) extend to the High and Low."
+      },
+
+      "exponential_moving_average_visual": {
+        "appearance": "A continuous line that flows through the chart, following the general direction of price but smoother.",
+        "behavior": "The line connects the calculated EMA value at each candle. Because it's an average, it doesn't jump around like individual candle prices - it creates a smooth curve.",
+        "fast_ema_30": "This line reacts more quickly to price changes. It will turn and follow price movements with only a slight delay.",
+        "slow_ema_200": "This line reacts slowly to price changes. It appears almost flat during short-term moves and only curves gradually over longer periods.",
+        "trend_visual": {
+          "uptrend": "The fast EMA line is visibly positioned ABOVE the slow EMA line on the chart. There is vertical space between them with the 30 EMA on top.",
+          "downtrend": "The fast EMA line is visibly positioned BELOW the slow EMA line on the chart. There is vertical space between them with the 30 EMA on bottom.",
+          "crossover": "When trend changes, the two lines intersect and swap positions. This crossing point is visually obvious on the chart."
+        }
+      },
+
+      "price_spike_visual": {
+        "appearance": "A price spike appears as a sudden, sharp move in candle positions.",
+        "upward_spike": "Several candles in a row where each candle's body is positioned noticeably higher than the previous. The overall movement from 6 candles ago to now shows a steep upward angle. The vertical distance covered is large relative to normal candle-to-candle movement.",
+        "downward_spike": "Several candles in a row where each candle's body is positioned noticeably lower than the previous. The overall movement from 6 candles ago to now shows a steep downward angle. The vertical distance covered is large relative to normal candle-to-candle movement.",
+        "comparison_to_normal": "Normal price movement shows candles moving up and down in small increments. A spike stands out because the vertical distance traveled is visually much larger - the candles appear to 'jump' rather than 'step'."
+      },
+
+      "atr_visual": {
+        "not_directly_visible": "ATR itself is not drawn on the price chart. It is a calculated number representing average candle size.",
+        "what_it_represents_visually": "Look at any candle's total height (from wick bottom to wick top). ATR is roughly the average of these heights over 100 candles. If most candles are about 10 units tall, ATR would be approximately 10.",
+        "threshold_visual": "When we say 'price moved 2x ATR', imagine stacking two average-sized candles on top of each other. If price moved more than that combined height over 6 candles, a spike occurred."
+      },
+
+      "trade_entry_visual": {
+        "entry_point": "The exact candle where a trade begins. Often marked with a triangle or arrow pointing in the trade direction.",
+        "buy_entry": "Typically shown as an upward-pointing triangle below the candle, colored green.",
+        "sell_entry": "Typically shown as a downward-pointing triangle above the candle, colored red."
+      },
+
+      "take_profit_and_stop_loss_visual": {
+        "appearance": "Two horizontal lines extending from the entry point to the right.",
+        "take_profit_line": "A horizontal line at the target price. For a buy trade, this line is ABOVE the entry price. For a sell trade, this line is BELOW the entry price. Often colored green.",
+        "stop_loss_line": "A horizontal line at the maximum loss price. For a buy trade, this line is BELOW the entry price. For a sell trade, this line is ABOVE the entry price. Often colored red.",
+        "profit_zone": "The vertical space between entry price and take profit. Often shaded with transparent green to show the 'reward' area.",
+        "loss_zone": "The vertical space between entry price and stop loss. Often shaded with transparent red to show the 'risk' area.",
+        "line_extension": "These lines extend horizontally to the right as time passes, until the trade closes. They show where price needs to reach for exit."
+      },
+
+      "trade_exit_visual": {
+        "exit_point": "The candle where the trade closes. Often marked with an X symbol.",
+        "tp_hit": "The candle's high (for buys) or low (for sells) touches or crosses the take profit line. The X marker appears at or near the TP line.",
+        "sl_hit": "The candle's low (for buys) or high (for sells) touches or crosses the stop loss line. The X marker appears at or near the SL line.",
+        "price_path": "A dotted or dashed line often connects the entry point to the exit point, showing the trade's journey."
+      },
+
+      "trend_context_visual": {
+        "momentum_mode_setup": {
+          "description": "What a valid buy setup looks like on chart",
+          "visual": "The 30 EMA line is clearly above the 200 EMA line (uptrend confirmed). Then you see a sharp drop - several red candles moving down steeply. This drop stands out against the overall upward structure. The entry signal appears at the bottom of this drop."
+        },
+        "complete_trade_visual": {
+          "description": "A full trade from entry to exit",
+          "visual": "Entry marker at a candle. Horizontal TP line above (for buys), horizontal SL line below. Green shaded zone between entry and TP. Red shaded zone between entry and SL. As candles progress rightward, eventually price reaches one of the lines. Exit marker appears. The shaded zones and lines stop extending."
+        }
+      }
+    },
+
+    "data_requirements": {
+      "candle_data": {
+        "description": "Each time period (candle) provides four price points",
+        "fields": {
+          "open": "The first price when this time period began",
+          "high": "The highest price reached during this time period",
+          "low": "The lowest price reached during this time period",
+          "close": "The final price when this time period ended"
+        }
+      },
+      "candle_reference": {
+        "description": "How to reference historical candles",
+        "current": "The candle that is currently forming (incomplete)",
+        "previous_1": "The most recently completed candle (1 candle ago)",
+        "previous_6": "The candle that completed 6 candles ago",
+        "previous_n": "The candle that completed N candles ago"
+      }
+    },
+
+    "calculations": {
+      
+      "exponential_moving_average": {
+        "abbreviation": "EMA",
+        "purpose": "Measure the average price over a period, giving more weight to recent prices",
+        "literal_explanation": "Take the closing prices of the last N candles. Calculate an average where newer candles have exponentially more influence than older candles. The result is a single number representing the 'weighted average price' over that period.",
+        "used_periods": {
+          "fast_ema": {
+            "period": 30,
+            "meaning": "The weighted average of the last 30 closing prices, biased toward recent prices"
+          },
+          "slow_ema": {
+            "period": 200,
+            "meaning": "The weighted average of the last 200 closing prices, biased toward recent prices"
+          }
+        },
+        "comparison_meaning": "When the 30-period EMA is above the 200-period EMA, recent prices are higher than the longer-term average, indicating upward momentum. The reverse indicates downward momentum."
+      },
+
+      "average_true_range": {
+        "abbreviation": "ATR",
+        "purpose": "Measure how much price typically moves per candle (volatility)",
+        "literal_explanation": "For each candle, calculate its 'true range' which captures the full price movement including any gaps from the previous candle. Then average these ranges over N candles to get a single number representing 'normal' price movement.",
+        "true_range_calculation": {
+          "step_1": "Calculate this candle's High minus this candle's Low",
+          "step_2": "Calculate the distance from previous candle's Close to this candle's High",
+          "step_3": "Calculate the distance from previous candle's Close to this candle's Low",
+          "step_4": "The True Range is whichever of these three values is largest"
+        },
+        "used_period": {
+          "period": 100,
+          "meaning": "Average the True Range values of the last 100 candles to determine what 'normal' volatility looks like"
+        }
+      }
+    },
+
+    "conditions": {
+      
+      "trend_detection": {
+        "purpose": "Determine if price is in an uptrend or downtrend",
+        "uptrend": {
+          "condition": "The 30-period EMA is greater than the 200-period EMA",
+          "meaning": "Recent prices (last 30 candles weighted average) are higher than the longer-term average (last 200 candles weighted average). This indicates price has been moving upward."
+        },
+        "downtrend": {
+          "condition": "The 30-period EMA is less than the 200-period EMA",
+          "meaning": "Recent prices are lower than the longer-term average. This indicates price has been moving downward."
+        }
+      },
+
+      "price_spike_detection": {
+        "purpose": "Detect when price has moved unusually far in a short period",
+        
+        "upward_spike": {
+          "condition": "The closing price of the previous candle is greater than (the closing price from 6 candles ago plus twice the 100-period ATR)",
+          "literal_breakdown": {
+            "step_1": "Get the closing price of the candle that just completed",
+            "step_2": "Get the closing price of the candle that completed 6 candles ago",
+            "step_3": "Get the average true range over the last 100 candles",
+            "step_4": "Multiply that ATR by 2",
+            "step_5": "Add that value to the closing price from 6 candles ago",
+            "step_6": "If the previous candle's close is ABOVE this sum, an upward spike occurred"
+          },
+          "meaning": "Price rose by more than twice the normal candle range over the span of 6 candles. This is a significant upward move, not normal fluctuation."
+        },
+
+        "downward_spike": {
+          "condition": "The closing price of the previous candle is less than (the closing price from 6 candles ago minus twice the 100-period ATR)",
+          "literal_breakdown": {
+            "step_1": "Get the closing price of the candle that just completed",
+            "step_2": "Get the closing price of the candle that completed 6 candles ago",
+            "step_3": "Get the average true range over the last 100 candles",
+            "step_4": "Multiply that ATR by 2",
+            "step_5": "Subtract that value from the closing price from 6 candles ago",
+            "step_6": "If the previous candle's close is BELOW this difference, a downward spike occurred"
+          },
+          "meaning": "Price fell by more than twice the normal candle range over the span of 6 candles. This is a significant downward move, not normal fluctuation."
+        }
+      },
+
+      "freshness_filter": {
+        "purpose": "Ensure the spike signal is new, not a continuation of an ongoing move",
+        "condition": "The same spike condition must NOT have been true on any of the previous 10 candles",
+        "literal_breakdown": {
+          "step_1": "Check if the spike condition was true 1 candle ago",
+          "step_2": "Check if the spike condition was true 2 candles ago",
+          "step_3": "Continue checking for candles 3, 4, 5, 6, 7, 8, 9, and 10 candles ago",
+          "step_4": "If ANY of these checks are true, the signal is NOT fresh",
+          "step_5": "Only if ALL ten checks are false is the signal considered fresh"
+        },
+        "meaning": "This prevents entering multiple times during the same extended move. We only want the first signal of a new spike, not ongoing signals as the spike continues."
+      },
+
+      "no_existing_trade": {
+        "purpose": "Only enter if we are not already in a trade",
+        "condition": "No trade is currently open",
+        "meaning": "We cannot have multiple positions open simultaneously. Wait until any existing trade is closed before considering new entries."
+      }
+    },
+
+    "entry_logic": {
+      
+      "modes": {
+        "momentum": {
+          "description": "Trade counter-trend spikes expecting a return to trend",
+          "philosophy": "A sharp move against the trend represents temporary exhaustion. Buyers/sellers will step in to push price back toward the trend direction."
+        },
+        "mean_reversion": {
+          "description": "Trade with-trend spikes expecting continuation",
+          "philosophy": "A sharp move with the trend represents momentum. Price is breaking out and will continue in that direction."
+        }
+      },
+
+      "momentum_mode_entries": {
+        "buy_signal": {
+          "all_conditions_must_be_true": [
+            "Market is in an uptrend (30 EMA > 200 EMA)",
+            "A downward spike just occurred (price fell significantly)",
+            "The downward spike signal is fresh (did not occur in the last 10 candles)",
+            "No trade is currently open"
+          ],
+          "reasoning": "Price dipped sharply within an uptrend. This is likely exhaustion selling, and buyers will push price back up."
+        },
+        "sell_signal": {
+          "all_conditions_must_be_true": [
+            "Market is in a downtrend (30 EMA < 200 EMA)",
+            "An upward spike just occurred (price rose significantly)",
+            "The upward spike signal is fresh (did not occur in the last 10 candles)",
+            "No trade is currently open"
+          ],
+          "reasoning": "Price rallied sharply within a downtrend. This is likely a bull trap, and sellers will push price back down."
+        }
+      },
+
+      "mean_reversion_mode_entries": {
+        "buy_signal": {
+          "all_conditions_must_be_true": [
+            "Market is in an uptrend (30 EMA > 200 EMA)",
+            "An upward spike just occurred (price rose significantly)",
+            "The upward spike signal is fresh (did not occur in the last 10 candles)",
+            "No trade is currently open"
+          ],
+          "reasoning": "Price is breaking out higher within an uptrend. Momentum is strong and will continue."
+        },
+        "sell_signal": {
+          "all_conditions_must_be_true": [
+            "Market is in a downtrend (30 EMA < 200 EMA)",
+            "A downward spike just occurred (price fell significantly)",
+            "The downward spike signal is fresh (did not occur in the last 10 candles)",
+            "No trade is currently open"
+          ],
+          "reasoning": "Price is breaking down within a downtrend. Momentum is strong and will continue."
+        }
+      }
+    },
+
+    "exit_logic": {
+      
+      "take_profit": {
+        "description": "A fixed price level where we close the trade with a profit",
+        "buy_trade": {
+          "calculation": "Entry price plus the take profit distance",
+          "meaning": "If we bought at 100 and take profit distance is 30, we exit when price reaches 130"
+        },
+        "sell_trade": {
+          "calculation": "Entry price minus the take profit distance",
+          "meaning": "If we sold at 100 and take profit distance is 30, we exit when price reaches 70"
+        }
+      },
+
+      "stop_loss": {
+        "description": "A fixed price level where we close the trade to limit loss",
+        "buy_trade": {
+          "calculation": "Entry price minus the stop loss distance",
+          "meaning": "If we bought at 100 and stop loss distance is 13.25, we exit when price reaches 86.75"
+        },
+        "sell_trade": {
+          "calculation": "Entry price plus the stop loss distance",
+          "meaning": "If we sold at 100 and stop loss distance is 13.25, we exit when price reaches 113.25"
+        }
+      },
+
+      "exit_detection": {
+        "take_profit_hit": {
+          "buy_trade": "The highest price of any candle reaches or exceeds the take profit level",
+          "sell_trade": "The lowest price of any candle reaches or falls below the take profit level"
+        },
+        "stop_loss_hit": {
+          "buy_trade": "The lowest price of any candle reaches or falls below the stop loss level",
+          "sell_trade": "The highest price of any candle reaches or exceeds the stop loss level"
+        }
+      },
+
+      "exit_priority": {
+        "description": "If both TP and SL are hit on the same candle, take profit takes priority",
+        "reasoning": "We assume the favorable price was reached first (optimistic fill assumption)"
+      }
+    },
+
+    "trade_outcomes": {
+      "TP": {
+        "label": "Take Profit",
+        "meaning": "Trade closed because price reached the profit target"
+      },
+      "SL": {
+        "label": "Stop Loss",
+        "meaning": "Trade closed because price reached the loss limit"
+      },
+      "MW": {
+        "label": "Manual Win",
+        "meaning": "Trade closed for other reasons while in profit"
+      },
+      "ML": {
+        "label": "Manual Loss",
+        "meaning": "Trade closed for other reasons while in loss"
+      }
+    },
+
+    "parameters": {
+      "take_profit_amount": {
+        "default": 3000,
+        "unit": "Currency units (divided by 100 and pip multiplier for actual price distance)",
+        "description": "How much profit to target per trade"
+      },
+      "stop_loss_amount": {
+        "default": 1325,
+        "unit": "Currency units (divided by 100 and pip multiplier for actual price distance)",
+        "description": "Maximum loss to accept per trade"
+      },
+      "units": {
+        "default": 1.0,
+        "description": "Position size in lots"
+      },
+      "pip_multiplier": {
+        "default": 1.0,
+        "description": "Adjusts calculations for different instruments"
+      }
+    }
+  }
+}

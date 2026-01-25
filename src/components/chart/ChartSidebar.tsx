@@ -36,6 +36,13 @@ const PAIRS = [
   { id: "BTC_USD", name: "Bitcoin", category: "crypto" },
 ];
 
+interface Strategy {
+  id: string;
+  name: string;
+  version: string;
+  summary: string;
+}
+
 interface ChartSidebarProps {
   currentPair: string;
   magnetMode: boolean;
@@ -48,6 +55,9 @@ interface ChartSidebarProps {
   onShowSessionLabelsChange: (value: boolean) => void;
   showNews: boolean;
   onShowNewsChange: (value: boolean) => void;
+  strategies?: Strategy[];
+  selectedStrategy?: string | null;
+  onStrategyChange?: (strategyId: string | null) => void;
 }
 
 // Format price based on pair type
@@ -104,6 +114,9 @@ export function ChartSidebar({
   onShowSessionLabelsChange,
   showNews,
   onShowNewsChange,
+  strategies = [],
+  selectedStrategy,
+  onStrategyChange,
 }: ChartSidebarProps) {
   const [prices, setPrices] = useState<Record<string, PriceData>>({});
   const [upcomingEvents, setUpcomingEvents] = useState<UpcomingEvent[]>([]);
@@ -333,6 +346,32 @@ export function ChartSidebar({
               </button>
             </div>
           </div>
+
+          {/* Strategy Section */}
+          {strategies.length > 0 && onStrategyChange && (
+            <div className="mt-3">
+              <span className="text-xs text-gray-500 uppercase tracking-wider">Strategy</span>
+              <select
+                value={selectedStrategy || ""}
+                onChange={(e) => onStrategyChange(e.target.value || null)}
+                className="w-full mt-1 px-2 py-1.5 text-sm bg-gray-800 border border-gray-700 rounded text-gray-200 focus:outline-none focus:border-purple-500"
+              >
+                <option value="">None</option>
+                {strategies.map((strategy) => (
+                  <option key={strategy.id} value={strategy.id}>
+                    {strategy.name}
+                  </option>
+                ))}
+              </select>
+              {selectedStrategy && (
+                <div className="mt-1.5 px-2 py-1.5 bg-purple-900/20 border border-purple-800/30 rounded">
+                  <div className="text-xs text-purple-300">
+                    {strategies.find((s) => s.id === selectedStrategy)?.summary}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>

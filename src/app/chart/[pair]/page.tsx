@@ -9,6 +9,7 @@ import { NewsEventPanel } from "@/components/chart/NewsEventPanel";
 import { NewsEventData } from "@/components/chart/NewsMarkersPrimitive";
 import { useOandaStream } from "@/hooks/useOandaStream";
 import { useCandleCache } from "@/hooks/useCandleCache";
+import { useStrategies } from "@/hooks/useStrategies";
 import Link from "next/link";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 
@@ -62,6 +63,10 @@ export default function ChartPage() {
   }, []);
 
   const { status, currentSession, nextOpen, livePrice } = useOandaStream(pair);
+
+  // Strategies
+  const { strategies } = useStrategies();
+  const [selectedStrategy, setSelectedStrategy] = useState<string | null>(null);
 
   // Format pair for display (EUR_USD -> EUR/USD)
   const displayPair = pair.replace("_", "/");
@@ -198,6 +203,9 @@ export default function ChartPage() {
                   onShowSessionLabelsChange={setShowSessionLabels}
                   showNews={showNews}
                   onShowNewsChange={setShowNews}
+                  strategies={strategies}
+                  selectedStrategy={selectedStrategy}
+                  onStrategyChange={setSelectedStrategy}
                 />
               )}
             </div>

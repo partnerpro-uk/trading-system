@@ -1,0 +1,7 @@
+{
+  "mcpServers": {
+    "clickhouse_cloud": {
+      "url": "https://mcp.clickhouse.cloud/mcp"
+    }
+  }
+}
