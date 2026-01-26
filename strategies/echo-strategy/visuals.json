@@ -1,0 +1,93 @@
+{
+  "strategyId": "echo-strategy",
+  "name": "The Echo System",
+  "version": "2.0",
+
+  "indicators": [
+    {
+      "id": "fast_ema",
+      "type": "ema",
+      "params": { "period": 30, "source": "close" },
+      "style": {
+        "color": "#3B82F6",
+        "lineWidth": 2,
+        "visible": true
+      }
+    },
+    {
+      "id": "slow_ema",
+      "type": "ema",
+      "params": { "period": 200, "source": "close" },
+      "style": {
+        "color": "#EF4444",
+        "lineWidth": 2,
+        "visible": true
+      }
+    },
+    {
+      "id": "volatility_atr",
+      "type": "atr",
+      "params": { "period": 100 },
+      "style": {
+        "color": "#9CA3AF",
+        "lineWidth": 1,
+        "visible": false
+      }
+    }
+  ],
+
+  "customIndicators": [
+    {
+      "id": "spike_detector",
+      "module": "./custom/spike-detector",
+      "params": {
+        "atrMultiplier": 2,
+        "lookback": 6,
+        "freshnessWindow": 10,
+        "atrPeriod": 100
+      }
+    }
+  ],
+
+  "markers": {
+    "spike_up": {
+      "condition": "spike_detector.upSpike === 1",
+      "shape": "arrowUp",
+      "color": "#22C55E",
+      "position": "belowBar",
+      "text": "Spike"
+    },
+    "spike_down": {
+      "condition": "spike_detector.downSpike === 1",
+      "shape": "arrowDown",
+      "color": "#EF4444",
+      "position": "aboveBar",
+      "text": "Spike"
+    }
+  },
+
+  "zones": {
+    "uptrend_bg": {
+      "condition": "fast_ema > slow_ema",
+      "color": "rgba(34, 197, 94, 0.03)"
+    },
+    "downtrend_bg": {
+      "condition": "fast_ema < slow_ema",
+      "color": "rgba(239, 68, 68, 0.03)"
+    }
+  },
+
+  "description": {
+    "fast_ema": "30-period EMA for trend direction (fast)",
+    "slow_ema": "200-period EMA for trend confirmation (slow)",
+    "volatility_atr": "100-period ATR for spike detection threshold",
+    "spike_detector": "Detects price spikes (2x ATR over 6 candles) with freshness filter"
+  },
+
+  "trend_rules": {
+    "uptrend": "fast_ema > slow_ema",
+    "downtrend": "fast_ema < slow_ema"
+  },
+
+  "notes": "The ATR is used internally for spike detection (2x ATR over 6 candles) but is not displayed on the chart by default. Spike markers appear when price moves significantly."
+}
