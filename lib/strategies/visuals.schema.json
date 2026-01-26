@@ -1,0 +1,201 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trading-system/schemas/visuals.json",
+  "title": "Strategy Visuals",
+  "description": "Schema for strategy visualization configuration",
+  "type": "object",
+  "required": ["strategyId", "indicators"],
+  "properties": {
+    "strategyId": {
+      "type": "string",
+      "description": "Unique identifier for the strategy"
+    },
+    "name": {
+      "type": "string",
+      "description": "Display name for the strategy"
+    },
+    "version": {
+      "type": "string",
+      "description": "Version of the strategy visuals"
+    },
+    "indicators": {
+      "type": "array",
+      "description": "Standard indicators to display",
+      "items": {
+        "$ref": "#/$defs/indicatorConfig"
+      }
+    },
+    "customIndicators": {
+      "type": "array",
+      "description": "Custom strategy-specific indicators",
+      "items": {
+        "$ref": "#/$defs/customIndicatorConfig"
+      }
+    },
+    "markers": {
+      "type": "object",
+      "description": "Visual markers (arrows, shapes) on the chart",
+      "additionalProperties": {
+        "$ref": "#/$defs/markerConfig"
+      }
+    },
+    "zones": {
+      "type": "object",
+      "description": "Background zones/highlighting",
+      "additionalProperties": {
+        "$ref": "#/$defs/zoneConfig"
+      }
+    },
+    "description": {
+      "type": "object",
+      "description": "Human-readable descriptions for each element",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "trend_rules": {
+      "type": "object",
+      "description": "Quick reference for trend determination",
+      "properties": {
+        "uptrend": {
+          "type": "string"
+        },
+        "downtrend": {
+          "type": "string"
+        }
+      }
+    },
+    "notes": {
+      "type": "string",
+      "description": "Additional notes about the visuals"
+    }
+  },
+  "$defs": {
+    "indicatorConfig": {
+      "type": "object",
+      "required": ["id", "type", "params", "style"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for this indicator instance"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["ema", "sma", "atr", "rsi", "macd", "macd_signal", "macd_histogram", "bollinger_upper", "bollinger_middle", "bollinger_lower"],
+          "description": "Type of indicator"
+        },
+        "params": {
+          "type": "object",
+          "description": "Indicator parameters",
+          "properties": {
+            "period": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "source": {
+              "type": "string",
+              "enum": ["close", "open", "high", "low", "hl2", "hlc3"]
+            },
+            "multiplier": {
+              "type": "number"
+            },
+            "fastPeriod": {
+              "type": "integer"
+            },
+            "slowPeriod": {
+              "type": "integer"
+            },
+            "signalPeriod": {
+              "type": "integer"
+            }
+          }
+        },
+        "style": {
+          "type": "object",
+          "required": ["color"],
+          "properties": {
+            "color": {
+              "type": "string",
+              "description": "Line color (hex or named)"
+            },
+            "lineWidth": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 4
+            },
+            "visible": {
+              "type": "boolean",
+              "default": true
+            }
+          }
+        }
+      }
+    },
+    "customIndicatorConfig": {
+      "type": "object",
+      "required": ["id", "module", "params"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for this custom indicator"
+        },
+        "module": {
+          "type": "string",
+          "description": "Relative path to the indicator module"
+        },
+        "params": {
+          "type": "object",
+          "description": "Parameters to pass to the indicator"
+        },
+        "outputs": {
+          "type": "array",
+          "description": "Names of output series",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "markerConfig": {
+      "type": "object",
+      "required": ["condition", "shape", "color", "position"],
+      "properties": {
+        "condition": {
+          "type": "string",
+          "description": "Expression to evaluate for showing the marker"
+        },
+        "shape": {
+          "type": "string",
+          "enum": ["arrowUp", "arrowDown", "circle", "square"]
+        },
+        "color": {
+          "type": "string"
+        },
+        "position": {
+          "type": "string",
+          "enum": ["aboveBar", "belowBar", "inBar"]
+        },
+        "text": {
+          "type": "string"
+        },
+        "size": {
+          "type": "number"
+        }
+      }
+    },
+    "zoneConfig": {
+      "type": "object",
+      "required": ["condition", "color"],
+      "properties": {
+        "condition": {
+          "type": "string",
+          "description": "Expression to evaluate for showing the zone"
+        },
+        "color": {
+          "type": "string",
+          "description": "RGBA color for the zone background"
+        }
+      }
+    }
+  }
+}

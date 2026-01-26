@@ -55,3 +55,6 @@ worker/src/**/progress-*.json
 
 # env files
 .env*.local
+
+# clerk configuration (can include secrets)
+/.clerk/

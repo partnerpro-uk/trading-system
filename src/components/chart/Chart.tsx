@@ -16,6 +16,23 @@ import { useCandles } from "@/hooks/useCandles";
 import { SessionLabelsPrimitive, SessionData } from "./SessionLabelsPrimitive";
 import { NewsMarkersPrimitive, NewsEventData, HistoricalEventHistory } from "./NewsMarkersPrimitive";
 import { LivePricePrimitive } from "./LivePricePrimitive";
+import type { IndicatorSeries, IndicatorConfig } from "@/lib/indicators";
+import type { ChartMarker, ChartZone } from "@/hooks/useStrategyVisuals";
+import type { Drawing, DrawingType, DrawingAnchor, PositionDrawing } from "@/lib/drawings/types";
+import {
+  isFibonacciDrawing,
+  isTrendlineDrawing,
+  isHorizontalLineDrawing,
+  isHorizontalRayDrawing,
+  isRectangleDrawing,
+  isCircleDrawing,
+  isPositionDrawing,
+  isLongPositionDrawing,
+  DEFAULT_FIB_LEVELS,
+  DEFAULT_DRAWING_COLORS,
+} from "@/lib/drawings/types";
+import { ContextualToolbar } from "./ContextualToolbar";
+import { DrawingSettings } from "./DrawingSettings";
 
 // Session colors - Asia keeps yellow bg for contrast, London/NY are neutral
 const SESSION_COLORS = {
@@ -95,6 +112,7 @@ interface ChartProps {
   showNews: boolean;
   livePrice?: LivePrice | null; // Passed from parent to avoid duplicate streams
   onResetViewReady?: (resetFn: () => void) => void; // Expose reset function to parent
+  onScrollToTimestampReady?: (scrollFn: (timestamp: number) => void) => void; // Expose scroll-to-timestamp function
   onEventSelect?: (event: NewsEventData | null, allEventsAtTimestamp?: NewsEventData[]) => void; // Callback when event is clicked
   // External candle data management (from useCandleCache)
   candles?: CandleData[] | null;
@@ -102,6 +120,41 @@ interface ChartProps {
   isLoadingMore?: boolean;
   hasMoreHistory?: boolean;
   loadMoreHistory?: () => Promise<void>;
+  // Strategy indicators
+  indicatorSeries?: IndicatorSeries[];
+  indicatorConfigs?: IndicatorConfig[];
+  // Strategy markers and zones
+  strategyMarkers?: ChartMarker[];
+  strategyZones?: ChartZone[];
+  // Drawing tools
+  activeDrawingTool?: DrawingType | null;
+  drawings?: Drawing[];
+  selectedDrawingId?: string | null;
+  onDrawingCreate?: (type: DrawingType, anchors: { anchor1: DrawingAnchor; anchor2?: DrawingAnchor }, options?: Record<string, unknown>) => void;
+  onDrawingSelect?: (id: string | null) => void;
+  onDrawingUpdate?: (id: string, updates: Partial<Drawing>) => void;
+  onDrawingDelete?: (id: string) => void;
+  // Trades data for position drawings (source of truth for exits)
+  tradesMap?: Map<string, {
+    _id: string;
+    status: string;
+    outcome?: string;
+    exitPrice?: number;
+    exitTime?: number;
+    pnlPips?: number;
+  }>;
+}
+
+// Drag/hover part types
+type DragType = "move" | "anchor1" | "anchor2" | "price" | "entry" | "tp" | "sl" | "rightEdge";
+
+// Drag state for manipulating drawings
+interface DragState {
+  type: DragType;
+  drawingId: string;
+  startX: number;
+  startY: number;
+  originalDrawing: Drawing;
 }
 
 // Get candle duration in milliseconds based on timeframe (M5 is floor - no M1)
@@ -129,6 +182,7 @@ export function Chart({
   showNews,
   livePrice,
   onResetViewReady,
+  onScrollToTimestampReady,
   onEventSelect,
   // External candle management (optional - falls back to internal useCandles)
   candles: externalCandles,
@@ -136,6 +190,21 @@ export function Chart({
   isLoadingMore: externalLoadingMore,
   hasMoreHistory: externalHasMore,
   loadMoreHistory: externalLoadMore,
+  // Strategy indicators
+  indicatorSeries,
+  indicatorConfigs,
+  // Strategy markers and zones
+  strategyMarkers,
+  strategyZones,
+  // Drawing tools
+  activeDrawingTool,
+  drawings,
+  selectedDrawingId,
+  onDrawingCreate,
+  onDrawingSelect,
+  onDrawingUpdate,
+  onDrawingDelete,
+  tradesMap,
 }: ChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -146,11 +215,32 @@ export function Chart({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const sessionLineSeriesRef = useRef<Map<string, any>>(new Map());
   const sessionBgCanvasRef = useRef<HTMLCanvasElement>(null);
+  const zoneBgCanvasRef = useRef<HTMLCanvasElement>(null);
   const lastCandleRef = useRef<CandlestickData<Time> | null>(null);
   const candleDataRef = useRef<Map<number, CandlestickData<Time>>>(new Map());
   const sessionLabelsPrimitiveRef = useRef<SessionLabelsPrimitive | null>(null);
   const newsMarkersPrimitiveRef = useRef<NewsMarkersPrimitive | null>(null);
   const livePricePrimitiveRef = useRef<LivePricePrimitive | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const indicatorLineSeriesRef = useRef<Map<string, any>>(new Map());
+
+  // Drawing canvas and state
+  const drawingCanvasRef = useRef<HTMLCanvasElement>(null);
+  const drawingAnchor1Ref = useRef<DrawingAnchor | null>(null);
+  const isDrawingRef = useRef(false);
+  const pendingDrawingRef = useRef<{ type: DrawingType; anchor1: DrawingAnchor; currentPos?: { x: number; y: number } } | null>(null);
+
+  // Hover and drag state for drawing manipulation
+  type HoverPart = "anchor1" | "anchor2" | "body" | "price" | "entry" | "tp" | "sl" | "rightEdge";
+  const hoveredDrawingIdRef = useRef<string | null>(null);
+  const hoveredAnchorRef = useRef<HoverPart | null>(null);
+  const dragStateRef = useRef<DragState | null>(null);
+
+  // Selected drawing position for contextual toolbar
+  const [selectedDrawingPosition, setSelectedDrawingPosition] = useState<{ x: number; y: number } | null>(null);
+
+  // Drawing settings modal state
+  const [settingsDrawingId, setSettingsDrawingId] = useState<string | null>(null);
 
   // Scroll-back loading ref (prevents duplicate load calls)
   const scrollLoadingRef = useRef(false);
@@ -742,6 +832,2014 @@ export function Chart({
     };
   }, [candles, showSessionLines]);
 
+  // Render strategy indicator line series
+  useEffect(() => {
+    if (!chartRef.current) return;
+
+    const chart = chartRef.current;
+
+    // Remove existing indicator series
+    for (const [, series] of indicatorLineSeriesRef.current) {
+      try {
+        chart.removeSeries(series);
+      } catch {
+        // Series may already be removed
+      }
+    }
+    indicatorLineSeriesRef.current.clear();
+
+    // Skip if no indicator series provided
+    if (!indicatorSeries || indicatorSeries.length === 0 || !indicatorConfigs) return;
+
+    // Create line series for each visible indicator
+    for (const series of indicatorSeries) {
+      // Find the config for this series
+      const config = indicatorConfigs.find((c) => c.id === series.id);
+      if (!config) continue;
+
+      // Skip if not visible
+      if (config.style.visible === false) continue;
+
+      // Convert indicator values to line data format
+      const lineData = series.values.map((v) => ({
+        time: (v.timestamp / 1000) as Time,
+        value: v.value,
+      }));
+
+      // Create line series with config styling
+      const lineSeries = chart.addSeries(LineSeries, {
+        color: config.style.color,
+        lineWidth: (config.style.lineWidth || 2) as 1 | 2 | 3 | 4,
+        priceLineVisible: false,
+        lastValueVisible: false,
+        crosshairMarkerVisible: true,
+        lineStyle: config.style.lineStyle === "dashed" ? 1 : config.style.lineStyle === "dotted" ? 2 : 0,
+        priceScaleId: config.style.priceScaleId || "right",
+      });
+
+      lineSeries.setData(lineData);
+      indicatorLineSeriesRef.current.set(series.id, lineSeries);
+    }
+
+    // Cleanup on unmount or when indicators change
+    return () => {
+      for (const [, series] of indicatorLineSeriesRef.current) {
+        try {
+          chart.removeSeries(series);
+        } catch {
+          // Series may already be removed
+        }
+      }
+      indicatorLineSeriesRef.current.clear();
+    };
+  }, [indicatorSeries, indicatorConfigs]);
+
+  // Render strategy markers on candlestick series
+  // lightweight-charts v5: markers are set on chart, not series
+  useEffect(() => {
+    const chart = chartRef.current;
+    const series = seriesRef.current;
+
+    if (!chart || !series) return;
+
+    // v5 API: chart.setMarkers(series, markers)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const chartAny = chart as any;
+
+    if (!chartAny.setMarkers) {
+      return; // API not available
+    }
+
+    if (!strategyMarkers || strategyMarkers.length === 0) {
+      // Clear markers
+      chartAny.setMarkers(series, []);
+      return;
+    }
+
+    // Convert ChartMarker to lightweight-charts SeriesMarker format
+    const markers = strategyMarkers.map((m) => ({
+      time: (m.time / 1000) as Time,
+      position: m.position,
+      color: m.color,
+      shape: m.shape,
+      text: m.text || "",
+    }));
+
+    // Sort by time (required by lightweight-charts)
+    markers.sort((a, b) => (a.time as number) - (b.time as number));
+
+    chartAny.setMarkers(series, markers);
+
+    // Cleanup
+    return () => {
+      if (chartAny.setMarkers && series) {
+        chartAny.setMarkers(series, []);
+      }
+    };
+  }, [strategyMarkers]);
+
+  // Render strategy zones as background colors
+  useEffect(() => {
+    if (!zoneBgCanvasRef.current || !chartRef.current || !containerRef.current) {
+      return;
+    }
+
+    const canvas = zoneBgCanvasRef.current;
+    const chart = chartRef.current;
+    const container = containerRef.current;
+
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    // Clear canvas if no zones
+    if (!strategyZones || strategyZones.length === 0) {
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      return;
+    }
+
+    const drawZones = () => {
+      const dpr = window.devicePixelRatio || 1;
+      const logicalWidth = container.clientWidth;
+      const logicalHeight = container.clientHeight;
+
+      // Setup DPI-aware canvas
+      const needsResize = canvas.width !== logicalWidth * dpr || canvas.height !== logicalHeight * dpr;
+      if (needsResize) {
+        canvas.width = logicalWidth * dpr;
+        canvas.height = logicalHeight * dpr;
+        canvas.style.width = `${logicalWidth}px`;
+        canvas.style.height = `${logicalHeight}px`;
+      }
+
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, logicalWidth, logicalHeight);
+
+      const timeScale = chart.timeScale();
+
+      for (const zone of strategyZones) {
+        // Convert zone times to x coordinates
+        const startX = timeScale.timeToCoordinate((zone.startTime / 1000) as Time);
+        const endX = timeScale.timeToCoordinate((zone.endTime / 1000) as Time);
+
+        if (startX === null || endX === null) continue;
+
+        // Draw background rectangle (full height)
+        ctx.fillStyle = zone.color;
+        ctx.fillRect(startX, 0, endX - startX, logicalHeight);
+      }
+    };
+
+    // Draw initially
+    drawZones();
+
+    // Redraw when visible range changes
+    const timeScale = chart.timeScale();
+    timeScale.subscribeVisibleLogicalRangeChange(drawZones);
+
+    // Redraw on resize
+    const handleResize = () => drawZones();
+    window.addEventListener("resize", handleResize);
+
+    return () => {
+      timeScale.unsubscribeVisibleLogicalRangeChange(drawZones);
+      window.removeEventListener("resize", handleResize);
+    };
+  }, [strategyZones]);
+
+  // Drawing interaction handlers with hover and drag support
+  useEffect(() => {
+    if (!drawingCanvasRef.current || !chartRef.current || !containerRef.current || !seriesRef.current) {
+      return;
+    }
+
+    const canvas = drawingCanvasRef.current;
+    const chart = chartRef.current;
+    const container = containerRef.current;
+    const series = seriesRef.current;
+
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    const ANCHOR_RADIUS = 6;
+    const HIT_THRESHOLD = 10;
+
+    // Helper to get time/price from mouse position
+    const getCoordinatesFromMouse = (e: MouseEvent, applyMagnet = true): { time: number; price: number; x: number; y: number } | null => {
+      const rect = container.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+
+      const timeCoord = chart.timeScale().coordinateToTime(x);
+      const priceCoord = series.coordinateToPrice(y);
+
+      if (timeCoord === null || priceCoord === null) return null;
+
+      let timestamp = (timeCoord as number) * 1000;
+      let price = priceCoord;
+
+      // Apply magnet mode if enabled
+      if (applyMagnet && magnetMode) {
+        const candleData = candleDataRef.current.get(timeCoord as number);
+        if (candleData) {
+          const ohlcValues = [candleData.open, candleData.high, candleData.low, candleData.close];
+          let nearest = ohlcValues[0];
+          let minDist = Math.abs(priceCoord - ohlcValues[0]);
+          for (const val of ohlcValues) {
+            const dist = Math.abs(priceCoord - val);
+            if (dist < minDist) {
+              minDist = dist;
+              nearest = val;
+            }
+          }
+          price = nearest;
+        }
+      }
+
+      return { time: timestamp, price, x, y };
+    };
+
+    // Get drawing coordinates for hit testing
+    const getDrawingCoords = (drawing: Drawing) => {
+      const timeScale = chart.timeScale();
+      if (isHorizontalLineDrawing(drawing)) {
+        const y = series.priceToCoordinate(drawing.price);
+        return y !== null ? { type: "horizontal" as const, y, price: drawing.price } : null;
+      } else if (isHorizontalRayDrawing(drawing)) {
+        const x = timeScale.timeToCoordinate((drawing.anchor.timestamp / 1000) as Time);
+        const y = series.priceToCoordinate(drawing.anchor.price);
+        return x !== null && y !== null ? { type: "horizontalRay" as const, x, y, anchor: drawing.anchor } : null;
+      } else if (isPositionDrawing(drawing)) {
+        const entryX = timeScale.timeToCoordinate((drawing.entry.timestamp / 1000) as Time);
+        const entryY = series.priceToCoordinate(drawing.entry.price);
+        const tpY = series.priceToCoordinate(drawing.takeProfit);
+        const slY = series.priceToCoordinate(drawing.stopLoss);
+        if (entryX === null || entryY === null || tpY === null || slY === null) return null;
+
+        // Calculate right edge
+        let rightEdgeX: number;
+        if (drawing.endTimestamp) {
+          const endX = timeScale.timeToCoordinate((drawing.endTimestamp / 1000) as Time);
+          rightEdgeX = endX !== null ? endX : entryX + 200;
+        } else {
+          rightEdgeX = entryX + 200; // Default width for new positions
+        }
+
+        return {
+          type: "position" as const,
+          entryX,
+          entryY,
+          tpY,
+          slY,
+          rightEdgeX,
+          drawing,
+        };
+      } else if (isTrendlineDrawing(drawing) || isFibonacciDrawing(drawing) || isRectangleDrawing(drawing) || isCircleDrawing(drawing)) {
+        const d = drawing as { anchor1: DrawingAnchor; anchor2: DrawingAnchor };
+        const x1 = timeScale.timeToCoordinate((d.anchor1.timestamp / 1000) as Time);
+        const y1 = series.priceToCoordinate(d.anchor1.price);
+        const x2 = timeScale.timeToCoordinate((d.anchor2.timestamp / 1000) as Time);
+        const y2 = series.priceToCoordinate(d.anchor2.price);
+        if (x1 === null || y1 === null || x2 === null || y2 === null) return null;
+        return { type: "twoPoint" as const, x1, y1, x2, y2, anchor1: d.anchor1, anchor2: d.anchor2 };
+      }
+      return null;
+    };
+
+    // Check what part of a drawing the mouse is over
+    const getHoverInfo = (mouseX: number, mouseY: number): { drawingId: string; part: HoverPart } | null => {
+      if (!drawings) return null;
+
+      // Check drawings in reverse order (top drawings first)
+      for (let i = drawings.length - 1; i >= 0; i--) {
+        const drawing = drawings[i];
+        const coords = getDrawingCoords(drawing);
+        if (!coords) continue;
+
+        if (coords.type === "horizontal") {
+          // Check if near the horizontal line
+          if (Math.abs(mouseY - coords.y) < HIT_THRESHOLD) {
+            return { drawingId: drawing.id, part: "price" };
+          }
+        } else if (coords.type === "horizontalRay") {
+          // Check anchor point first
+          if (Math.hypot(mouseX - coords.x, mouseY - coords.y) < ANCHOR_RADIUS + 4) {
+            return { drawingId: drawing.id, part: "anchor1" };
+          }
+          // Check if near the ray line (from anchor to right edge)
+          if (mouseX >= coords.x && Math.abs(mouseY - coords.y) < HIT_THRESHOLD) {
+            return { drawingId: drawing.id, part: "body" };
+          }
+        } else if (coords.type === "position") {
+          // Position drawing - check anchors for entry, TP, SL, and right edge
+          // Check entry anchor (left side)
+          if (Math.hypot(mouseX - coords.entryX, mouseY - coords.entryY) < ANCHOR_RADIUS + 4) {
+            return { drawingId: drawing.id, part: "entry" };
+          }
+          // Check TP anchor (left side of TP line)
+          if (Math.hypot(mouseX - coords.entryX, mouseY - coords.tpY) < ANCHOR_RADIUS + 4) {
+            return { drawingId: drawing.id, part: "tp" };
+          }
+          // Check SL anchor (left side of SL line)
+          if (Math.hypot(mouseX - coords.entryX, mouseY - coords.slY) < ANCHOR_RADIUS + 4) {
+            return { drawingId: drawing.id, part: "sl" };
+          }
+          // Check right edge anchor
+          if (Math.hypot(mouseX - coords.rightEdgeX, mouseY - coords.entryY) < ANCHOR_RADIUS + 4) {
+            return { drawingId: drawing.id, part: "rightEdge" };
+          }
+          // Check if inside the position body
+          const minX = coords.entryX;
+          const maxX = coords.rightEdgeX;
+          const minY = Math.min(coords.tpY, coords.slY);
+          const maxY = Math.max(coords.tpY, coords.slY);
+          if (mouseX >= minX - HIT_THRESHOLD && mouseX <= maxX + HIT_THRESHOLD &&
+              mouseY >= minY - HIT_THRESHOLD && mouseY <= maxY + HIT_THRESHOLD) {
+            return { drawingId: drawing.id, part: "body" };
+          }
+        } else if (coords.type === "twoPoint") {
+          // Check anchor1 first (higher priority)
+          if (Math.hypot(mouseX - coords.x1, mouseY - coords.y1) < ANCHOR_RADIUS + 4) {
+            return { drawingId: drawing.id, part: "anchor1" };
+          }
+          // Check anchor2
+          if (Math.hypot(mouseX - coords.x2, mouseY - coords.y2) < ANCHOR_RADIUS + 4) {
+            return { drawingId: drawing.id, part: "anchor2" };
+          }
+          // Check body (line or area)
+          if (isTrendlineDrawing(drawing)) {
+            if (distanceToLineSegment(mouseX, mouseY, coords.x1, coords.y1, coords.x2, coords.y2) < HIT_THRESHOLD) {
+              return { drawingId: drawing.id, part: "body" };
+            }
+          } else {
+            // Rectangle or Fibonacci - check bounding box
+            const minX = Math.min(coords.x1, coords.x2);
+            const maxX = Math.max(coords.x1, coords.x2);
+            const minY = Math.min(coords.y1, coords.y2);
+            const maxY = Math.max(coords.y1, coords.y2);
+            if (mouseX >= minX - HIT_THRESHOLD && mouseX <= maxX + HIT_THRESHOLD &&
+                mouseY >= minY - HIT_THRESHOLD && mouseY <= maxY + HIT_THRESHOLD) {
+              return { drawingId: drawing.id, part: "body" };
+            }
+          }
+        }
+      }
+      return null;
+    };
+
+    // Update cursor based on hover state
+    const updateCursor = (part: HoverPart | null) => {
+      if (activeDrawingTool) {
+        canvas.style.cursor = "crosshair";
+      } else if (part === "anchor1" || part === "anchor2" || part === "entry") {
+        canvas.style.cursor = "grab";
+      } else if (part === "tp" || part === "sl") {
+        canvas.style.cursor = "ns-resize"; // Vertical resize for TP/SL
+      } else if (part === "rightEdge") {
+        canvas.style.cursor = "ew-resize"; // Horizontal resize for width
+      } else if (part === "body" || part === "price") {
+        canvas.style.cursor = "move";
+      } else {
+        canvas.style.cursor = "default";
+      }
+    };
+
+    const handleMouseDown = (e: MouseEvent) => {
+      const rect = container.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+
+      // If drawing tool is active, start creating new drawing
+      if (activeDrawingTool) {
+        const coords = getCoordinatesFromMouse(e);
+        if (!coords) return;
+
+        const anchor: DrawingAnchor = { timestamp: coords.time, price: coords.price };
+
+        if (activeDrawingTool === "horizontalLine") {
+          if (onDrawingCreate) {
+            onDrawingCreate("horizontalLine", { anchor1: anchor }, { price: coords.price });
+          }
+          return;
+        }
+
+        if (activeDrawingTool === "horizontalRay") {
+          if (onDrawingCreate) {
+            onDrawingCreate("horizontalRay", { anchor1: anchor });
+          }
+          return;
+        }
+
+        drawingAnchor1Ref.current = anchor;
+        isDrawingRef.current = true;
+        pendingDrawingRef.current = { type: activeDrawingTool, anchor1: anchor };
+        return;
+      }
+
+      // Check if clicking on existing drawing for drag
+      const hoverInfo = getHoverInfo(mouseX, mouseY);
+      if (hoverInfo && drawings) {
+        const drawing = drawings.find(d => d.id === hoverInfo.drawingId);
+        if (drawing) {
+          // Select the drawing
+          if (onDrawingSelect) {
+            onDrawingSelect(drawing.id);
+          }
+
+          // Determine drag type based on part
+          let dragType: "anchor1" | "anchor2" | "price" | "move" | "entry" | "tp" | "sl" | "rightEdge" | null;
+          if (hoverInfo.part === "anchor1") dragType = "anchor1";
+          else if (hoverInfo.part === "anchor2") dragType = "anchor2";
+          else if (hoverInfo.part === "price") dragType = "price";
+          else if (hoverInfo.part === "entry") dragType = "entry";
+          else if (hoverInfo.part === "tp") dragType = "tp";
+          else if (hoverInfo.part === "sl") dragType = "sl";
+          else if (hoverInfo.part === "rightEdge") dragType = "rightEdge";
+          else if (isPositionDrawing(drawing)) {
+            // For position drawings, clicking on body should only select, not drag
+            // User must click on specific handles (entry/tp/sl/rightEdge) to drag
+            dragType = null;
+          }
+          else dragType = "move";
+
+          // Only start drag if we have a valid drag type (not just a body click on position)
+          if (dragType !== null) {
+            dragStateRef.current = {
+              type: dragType,
+              drawingId: drawing.id,
+              startX: mouseX,
+              startY: mouseY,
+              originalDrawing: { ...drawing } as Drawing,
+            };
+            canvas.style.cursor = "grabbing";
+          }
+
+          // Prevent both default and propagation to stop chart pan
+          e.preventDefault();
+          e.stopPropagation();
+          return; // Exit early to avoid any further processing
+        }
+      }
+    };
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const rect = container.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+
+      // Handle creating new drawing
+      if (isDrawingRef.current && pendingDrawingRef.current) {
+        pendingDrawingRef.current.currentPos = { x: mouseX, y: mouseY };
+        drawAllDrawings();
+        return;
+      }
+
+      // Handle dragging existing drawing
+      if (dragStateRef.current && onDrawingUpdate) {
+        const coords = getCoordinatesFromMouse(e, false); // Don't apply magnet during drag
+        if (!coords) return;
+
+        const { type, drawingId, originalDrawing, startX, startY } = dragStateRef.current;
+
+        // Dead zone: only process drag if mouse moved more than 3px (prevents accidental drag on click)
+        const moveDistance = Math.hypot(mouseX - startX, mouseY - startY);
+        if (moveDistance < 3) return;
+
+        // Safely compute time delta - protect against null coordinateToTime
+        const startTime = chart.timeScale().coordinateToTime(startX);
+        if (startTime === null) return; // Can't compute delta, abort drag
+        const timeDelta = coords.time - (startTime as number) * 1000;
+
+        const priceDelta = coords.price - (series.coordinateToPrice(startY) || 0);
+
+        if (isHorizontalLineDrawing(originalDrawing)) {
+          // Move horizontal line
+          const newPrice = (originalDrawing as { price: number }).price + priceDelta;
+          onDrawingUpdate(drawingId, { price: newPrice });
+        } else if (isHorizontalRayDrawing(originalDrawing)) {
+          // Move horizontal ray - has single anchor
+          const orig = originalDrawing as { anchor: DrawingAnchor };
+          onDrawingUpdate(drawingId, {
+            anchor: {
+              timestamp: orig.anchor.timestamp + timeDelta,
+              price: orig.anchor.price + priceDelta,
+            },
+          });
+        } else if (isTrendlineDrawing(originalDrawing) || isFibonacciDrawing(originalDrawing) || isRectangleDrawing(originalDrawing) || isCircleDrawing(originalDrawing)) {
+          const orig = originalDrawing as { anchor1: DrawingAnchor; anchor2: DrawingAnchor };
+
+          if (type === "anchor1") {
+            // Move only anchor1
+            onDrawingUpdate(drawingId, {
+              anchor1: {
+                timestamp: orig.anchor1.timestamp + timeDelta,
+                price: orig.anchor1.price + priceDelta,
+              },
+            });
+          } else if (type === "anchor2") {
+            // Move only anchor2
+            onDrawingUpdate(drawingId, {
+              anchor2: {
+                timestamp: orig.anchor2.timestamp + timeDelta,
+                price: orig.anchor2.price + priceDelta,
+              },
+            });
+          } else {
+            // Move entire drawing
+            onDrawingUpdate(drawingId, {
+              anchor1: {
+                timestamp: orig.anchor1.timestamp + timeDelta,
+                price: orig.anchor1.price + priceDelta,
+              },
+              anchor2: {
+                timestamp: orig.anchor2.timestamp + timeDelta,
+                price: orig.anchor2.price + priceDelta,
+              },
+            });
+          }
+        } else if (isPositionDrawing(originalDrawing)) {
+          // Handle position drawing drag
+          const orig = originalDrawing as PositionDrawing;
+
+          if (type === "tp") {
+            // Drag TP line - only adjust take profit price
+            onDrawingUpdate(drawingId, {
+              takeProfit: orig.takeProfit + priceDelta,
+              riskRewardRatio: Math.abs((orig.takeProfit + priceDelta) - orig.entry.price) / Math.abs(orig.entry.price - orig.stopLoss),
+            });
+          } else if (type === "sl") {
+            // Drag SL line - only adjust stop loss price
+            onDrawingUpdate(drawingId, {
+              stopLoss: orig.stopLoss + priceDelta,
+              riskRewardRatio: Math.abs(orig.takeProfit - orig.entry.price) / Math.abs(orig.entry.price - (orig.stopLoss + priceDelta)),
+            });
+          } else if (type === "rightEdge") {
+            // Drag right edge - adjust width (endTimestamp)
+            const newEndTimestamp = (orig.endTimestamp || orig.entry.timestamp + 3600000) + timeDelta;
+            // Don't let right edge go before entry
+            if (newEndTimestamp > orig.entry.timestamp) {
+              onDrawingUpdate(drawingId, {
+                endTimestamp: newEndTimestamp,
+              });
+            }
+          } else if (type === "entry") {
+            // Drag entry - move entry price only (keep TP/SL distances)
+            const tpDist = orig.takeProfit - orig.entry.price;
+            const slDist = orig.stopLoss - orig.entry.price;
+            onDrawingUpdate(drawingId, {
+              entry: {
+                timestamp: orig.entry.timestamp + timeDelta,
+                price: orig.entry.price + priceDelta,
+              },
+              takeProfit: orig.entry.price + priceDelta + tpDist,
+              stopLoss: orig.entry.price + priceDelta + slDist,
+              endTimestamp: orig.endTimestamp ? orig.endTimestamp + timeDelta : undefined,
+            });
+          } else {
+            // Move entire position
+            const tpDist = orig.takeProfit - orig.entry.price;
+            const slDist = orig.stopLoss - orig.entry.price;
+            onDrawingUpdate(drawingId, {
+              entry: {
+                timestamp: orig.entry.timestamp + timeDelta,
+                price: orig.entry.price + priceDelta,
+              },
+              takeProfit: orig.entry.price + priceDelta + tpDist,
+              stopLoss: orig.entry.price + priceDelta + slDist,
+              endTimestamp: orig.endTimestamp ? orig.endTimestamp + timeDelta : undefined,
+            });
+          }
+        }
+
+        drawAllDrawings();
+        return;
+      }
+
+      // Update hover state for cursor
+      const hoverInfo = getHoverInfo(mouseX, mouseY);
+      const prevHovered = hoveredDrawingIdRef.current;
+      hoveredDrawingIdRef.current = hoverInfo?.drawingId || null;
+      hoveredAnchorRef.current = hoverInfo?.part || null;
+
+      updateCursor(hoverInfo?.part || null);
+
+      // Redraw if hover state changed (for hover highlight)
+      if (prevHovered !== hoveredDrawingIdRef.current) {
+        drawAllDrawings();
+      }
+    };
+
+    const handleMouseUp = (e: MouseEvent) => {
+      // Complete new drawing creation
+      if (isDrawingRef.current && pendingDrawingRef.current && drawingAnchor1Ref.current) {
+        const coords = getCoordinatesFromMouse(e);
+        if (coords && onDrawingCreate) {
+          const drawingType = pendingDrawingRef.current.type;
+
+          // Special handling for position drawings
+          if (drawingType === "longPosition" || drawingType === "shortPosition") {
+            const isLong = drawingType === "longPosition";
+            const entryPrice = drawingAnchor1Ref.current.price;
+            const dragPrice = coords.price;
+            const priceDiff = Math.abs(dragPrice - entryPrice);
+
+            // Don't create if drag is too small
+            if (priceDiff < 0.00001) {
+              isDrawingRef.current = false;
+              pendingDrawingRef.current = null;
+              drawingAnchor1Ref.current = null;
+              drawAllDrawings();
+              return;
+            }
+
+            let takeProfit: number, stopLoss: number;
+            if (isLong) {
+              // For long: dragging UP sets TP, dragging DOWN sets SL
+              if (dragPrice > entryPrice) {
+                takeProfit = dragPrice;
+                stopLoss = entryPrice - priceDiff; // Mirror distance below
+              } else {
+                stopLoss = dragPrice;
+                takeProfit = entryPrice + priceDiff; // Mirror distance above
+              }
+            } else {
+              // For short: dragging DOWN sets TP, dragging UP sets SL
+              if (dragPrice < entryPrice) {
+                takeProfit = dragPrice;
+                stopLoss = entryPrice + priceDiff; // Mirror distance above
+              } else {
+                stopLoss = dragPrice;
+                takeProfit = entryPrice - priceDiff; // Mirror distance below
+              }
+            }
+
+            // Set initial width based on drag distance (or default to 20 candles worth)
+            const entryTime = drawingAnchor1Ref.current.timestamp;
+            const dragTime = coords.time;
+            // Use the horizontal drag distance, or default to 10 candles (assuming ~5min candles)
+            const timeDiff = Math.abs(dragTime - entryTime);
+            const defaultWidth = 50 * 60 * 1000; // Default 50 minutes
+            const endTimestamp = entryTime + Math.max(timeDiff, defaultWidth);
+
+            onDrawingCreate(drawingType, {
+              anchor1: drawingAnchor1Ref.current,
+            }, {
+              takeProfit,
+              stopLoss,
+              endTimestamp,
+            });
+          } else {
+            // Standard two-anchor drawings
+            const anchor2: DrawingAnchor = { timestamp: coords.time, price: coords.price };
+            onDrawingCreate(drawingType, {
+              anchor1: drawingAnchor1Ref.current,
+              anchor2,
+            });
+          }
+        }
+
+        isDrawingRef.current = false;
+        pendingDrawingRef.current = null;
+        drawingAnchor1Ref.current = null;
+        drawAllDrawings();
+        return;
+      }
+
+      // Complete drag operation
+      if (dragStateRef.current) {
+        dragStateRef.current = null;
+        updateCursor(hoveredAnchorRef.current);
+        drawAllDrawings();
+      }
+    };
+
+    const handleMouseLeave = () => {
+      // Reset hover state when mouse leaves canvas
+      if (hoveredDrawingIdRef.current) {
+        hoveredDrawingIdRef.current = null;
+        hoveredAnchorRef.current = null;
+        drawAllDrawings();
+      }
+      canvas.style.cursor = "default";
+    };
+
+    const handleClick = (e: MouseEvent) => {
+      // Only handle click for selection if not dragging and no tool active
+      if (activeDrawingTool || dragStateRef.current) return;
+
+      const rect = container.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+
+      const hoverInfo = getHoverInfo(mouseX, mouseY);
+      if (onDrawingSelect) {
+        onDrawingSelect(hoverInfo?.drawingId || null);
+      }
+    };
+
+    const handleDoubleClick = (e: MouseEvent) => {
+      // Don't open settings if a drawing tool is active
+      if (activeDrawingTool) return;
+
+      const rect = container.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+
+      const hoverInfo = getHoverInfo(mouseX, mouseY);
+      if (hoverInfo?.drawingId) {
+        // Open settings modal for this drawing
+        setSettingsDrawingId(hoverInfo.drawingId);
+      }
+    };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        isDrawingRef.current = false;
+        pendingDrawingRef.current = null;
+        drawingAnchor1Ref.current = null;
+        dragStateRef.current = null;
+        drawAllDrawings();
+      }
+      if ((e.key === "Delete" || e.key === "Backspace") && selectedDrawingId && onDrawingDelete) {
+        onDrawingDelete(selectedDrawingId);
+      }
+    };
+
+    // Drawing render function with hover highlight
+    const drawAllDrawings = () => {
+      const dpr = window.devicePixelRatio || 1;
+      const logicalWidth = container.clientWidth;
+      const logicalHeight = container.clientHeight;
+
+      // Setup DPI-aware canvas for crisp text
+      const needsResize = canvas.width !== logicalWidth * dpr || canvas.height !== logicalHeight * dpr;
+      if (needsResize) {
+        canvas.width = logicalWidth * dpr;
+        canvas.height = logicalHeight * dpr;
+        canvas.style.width = `${logicalWidth}px`;
+        canvas.style.height = `${logicalHeight}px`;
+      }
+
+      // Reset transform and clear with DPI-scaled dimensions
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, logicalWidth, logicalHeight);
+
+      const timeScale = chart.timeScale();
+
+      // Get chart area dimensions (exclude price axis on right and time axis on bottom)
+      const priceScaleWidth = chart.priceScale("right").width();
+      const timeScaleHeight = timeScale.height();
+      const chartAreaWidth = logicalWidth - priceScaleWidth;
+      const chartAreaHeight = logicalHeight - timeScaleHeight;
+
+      // Clip drawing area to exclude price axis and time axis
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(0, 0, chartAreaWidth, chartAreaHeight);
+      ctx.clip();
+
+      // Draw saved drawings
+      if (drawings) {
+        for (const drawing of drawings) {
+          const isSelected = drawing.id === selectedDrawingId;
+          const isHovered = drawing.id === hoveredDrawingIdRef.current;
+          drawSingleDrawing(ctx, drawing, timeScale, series, isSelected, isHovered, chartAreaWidth);
+        }
+      }
+
+      // Draw pending drawing
+      if (pendingDrawingRef.current && drawingAnchor1Ref.current && pendingDrawingRef.current.currentPos) {
+        drawPendingDrawing(ctx, pendingDrawingRef.current, timeScale, series);
+      }
+
+      ctx.restore();
+    };
+
+    const drawSingleDrawing = (
+      ctx: CanvasRenderingContext2D,
+      drawing: Drawing,
+      timeScale: ReturnType<IChartApi["timeScale"]>,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      series: any,
+      isSelected: boolean,
+      isHovered: boolean,
+      chartAreaWidth: number
+    ) => {
+      const highlight = isSelected || isHovered;
+      const showAnchors = isSelected || isHovered;
+
+      if (isHorizontalLineDrawing(drawing)) {
+        const y = series.priceToCoordinate(drawing.price);
+        if (y === null) return;
+
+        const labelColor = drawing.labelColor || drawing.color;
+        const labelPosition = drawing.labelPosition || "middle";
+        const labelText = drawing.label;
+
+        // Calculate label dimensions if we have a label
+        let labelWidth = 0;
+        let labelHeight = 0;
+        const labelPadding = 8;
+        const labelX = chartAreaWidth / 2; // Center of chart
+
+        if (labelText) {
+          ctx.font = "12px Inter, sans-serif";
+          labelWidth = ctx.measureText(labelText).width + labelPadding * 2;
+          labelHeight = 16;
+        }
+
+        // Draw hover glow
+        if (isHovered && !isSelected) {
+          ctx.beginPath();
+          ctx.strokeStyle = "rgba(255, 255, 255, 0.3)";
+          ctx.lineWidth = drawing.lineWidth + 4;
+          ctx.moveTo(0, y);
+          ctx.lineTo(chartAreaWidth, y);
+          ctx.stroke();
+        }
+
+        // Draw the line (with gap for middle label)
+        ctx.strokeStyle = drawing.color;
+        ctx.lineWidth = drawing.lineWidth + (highlight ? 1 : 0);
+        setLineStyle(ctx, drawing.lineStyle);
+
+        if (labelText && labelPosition === "middle") {
+          // Draw line with gap in middle for label
+          const gapStart = labelX - labelWidth / 2;
+          const gapEnd = labelX + labelWidth / 2;
+
+          ctx.beginPath();
+          ctx.moveTo(0, y);
+          ctx.lineTo(gapStart, y);
+          ctx.stroke();
+
+          ctx.beginPath();
+          ctx.moveTo(gapEnd, y);
+          ctx.lineTo(chartAreaWidth, y);
+          ctx.stroke();
+        } else {
+          // Draw continuous line
+          ctx.beginPath();
+          ctx.moveTo(0, y);
+          ctx.lineTo(chartAreaWidth, y);
+          ctx.stroke();
+        }
+
+        // Draw price label on left
+        if (drawing.showLabel) {
+          ctx.fillStyle = drawing.color;
+          ctx.font = "11px sans-serif";
+          ctx.fillText(drawing.price.toFixed(5), 5, y - 5);
+        }
+
+        // Draw user label (simple text, no background)
+        if (labelText) {
+          ctx.font = "12px Inter, sans-serif";
+          ctx.fillStyle = labelColor;
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+
+          let textY = y;
+          if (labelPosition === "above") {
+            textY = y - 10;
+          } else if (labelPosition === "below") {
+            textY = y + 12;
+          }
+          // "middle" stays at y
+
+          ctx.fillText(labelText, labelX, textY);
+          ctx.textAlign = "left";
+          ctx.textBaseline = "alphabetic";
+        }
+
+        // Draw drag handle on left edge when hovered/selected
+        if (showAnchors) {
+          ctx.fillStyle = "#fff";
+          ctx.beginPath();
+          ctx.arc(20, y, ANCHOR_RADIUS, 0, 2 * Math.PI);
+          ctx.fill();
+          ctx.strokeStyle = "#333";
+          ctx.lineWidth = 1;
+          ctx.stroke();
+        }
+      } else if (isHorizontalRayDrawing(drawing)) {
+        // Horizontal Ray - starts at anchor and extends to the right
+        const x = timeScale.timeToCoordinate((drawing.anchor.timestamp / 1000) as Time);
+        const y = series.priceToCoordinate(drawing.anchor.price);
+        if (x === null || y === null) return;
+
+        const labelColor = drawing.labelColor || drawing.color;
+        const labelPosition = drawing.labelPosition || "middle";
+        const labelText = drawing.label;
+
+        // Calculate label dimensions if we have a label
+        let labelWidth = 0;
+        const labelPadding = 8;
+
+        if (labelText && labelPosition === "middle") {
+          ctx.font = "12px Inter, sans-serif";
+          labelWidth = ctx.measureText(labelText).width + labelPadding * 2;
+        }
+
+        // Draw hover glow
+        if (isHovered && !isSelected) {
+          ctx.beginPath();
+          ctx.strokeStyle = "rgba(255, 255, 255, 0.3)";
+          ctx.lineWidth = drawing.lineWidth + 4;
+          ctx.moveTo(x, y);
+          ctx.lineTo(chartAreaWidth, y);
+          ctx.stroke();
+        }
+
+        // Draw the ray (with gap for middle label)
+        ctx.strokeStyle = drawing.color;
+        ctx.lineWidth = drawing.lineWidth + (highlight ? 1 : 0);
+        setLineStyle(ctx, drawing.lineStyle);
+
+        if (labelText && labelPosition === "middle") {
+          // Draw ray with gap for label
+          const labelX = x + 50; // Label positioned 50px from start
+          const gapStart = labelX - labelWidth / 2;
+          const gapEnd = labelX + labelWidth / 2;
+
+          ctx.beginPath();
+          ctx.moveTo(x, y);
+          ctx.lineTo(gapStart, y);
+          ctx.stroke();
+
+          ctx.beginPath();
+          ctx.moveTo(gapEnd, y);
+          ctx.lineTo(chartAreaWidth, y);
+          ctx.stroke();
+        } else {
+          // Draw continuous ray
+          ctx.beginPath();
+          ctx.moveTo(x, y);
+          ctx.lineTo(chartAreaWidth, y);
+          ctx.stroke();
+        }
+
+        // Draw user label (simple text, no background)
+        if (labelText) {
+          const labelX = x + 50;
+          ctx.font = "12px Inter, sans-serif";
+          ctx.fillStyle = labelColor;
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+
+          let textY = y;
+          if (labelPosition === "above") {
+            textY = y - 10;
+          } else if (labelPosition === "below") {
+            textY = y + 12;
+          }
+
+          ctx.fillText(labelText, labelX, textY);
+          ctx.textAlign = "left";
+          ctx.textBaseline = "alphabetic";
+        }
+
+        // Draw anchor point at start
+        if (showAnchors) {
+          ctx.fillStyle = "#fff";
+          ctx.beginPath();
+          ctx.arc(x, y, ANCHOR_RADIUS, 0, 2 * Math.PI);
+          ctx.fill();
+          ctx.strokeStyle = "#333";
+          ctx.lineWidth = 1;
+          ctx.stroke();
+        }
+      } else if (isTrendlineDrawing(drawing)) {
+        const x1 = timeScale.timeToCoordinate((drawing.anchor1.timestamp / 1000) as Time);
+        const y1 = series.priceToCoordinate(drawing.anchor1.price);
+        const x2 = timeScale.timeToCoordinate((drawing.anchor2.timestamp / 1000) as Time);
+        const y2 = series.priceToCoordinate(drawing.anchor2.price);
+
+        if (x1 === null || y1 === null || x2 === null || y2 === null) return;
+
+        // Draw hover glow
+        if (isHovered && !isSelected) {
+          ctx.beginPath();
+          ctx.strokeStyle = "rgba(255, 255, 255, 0.3)";
+          ctx.lineWidth = drawing.lineWidth + 4;
+          ctx.moveTo(x1, y1);
+          ctx.lineTo(x2, y2);
+          ctx.stroke();
+        }
+
+        ctx.beginPath();
+        ctx.strokeStyle = drawing.color;
+        ctx.lineWidth = drawing.lineWidth + (highlight ? 1 : 0);
+        setLineStyle(ctx, drawing.lineStyle);
+
+        if (drawing.type === "ray" || drawing.type === "extendedLine") {
+          const dx = x2 - x1;
+          const dy = y2 - y1;
+          const len = Math.sqrt(dx * dx + dy * dy);
+          const nx = dx / len;
+          const ny = dy / len;
+
+          if (drawing.type === "ray") {
+            ctx.moveTo(x1, y1);
+            ctx.lineTo(x2 + nx * 2000, y2 + ny * 2000);
+          } else {
+            ctx.moveTo(x1 - nx * 2000, y1 - ny * 2000);
+            ctx.lineTo(x2 + nx * 2000, y2 + ny * 2000);
+          }
+        } else {
+          ctx.moveTo(x1, y1);
+          ctx.lineTo(x2, y2);
+        }
+        ctx.stroke();
+
+        // Draw anchor points
+        if (showAnchors) {
+          const hoveredAnchor = hoveredAnchorRef.current;
+          // Anchor 1
+          ctx.fillStyle = hoveredAnchor === "anchor1" ? "#fff" : "#ccc";
+          ctx.beginPath();
+          ctx.arc(x1, y1, ANCHOR_RADIUS, 0, 2 * Math.PI);
+          ctx.fill();
+          ctx.strokeStyle = "#333";
+          ctx.lineWidth = 1;
+          ctx.stroke();
+          // Anchor 2
+          ctx.fillStyle = hoveredAnchor === "anchor2" ? "#fff" : "#ccc";
+          ctx.beginPath();
+          ctx.arc(x2, y2, ANCHOR_RADIUS, 0, 2 * Math.PI);
+          ctx.fill();
+          ctx.strokeStyle = "#333";
+          ctx.lineWidth = 1;
+          ctx.stroke();
+        }
+
+        // Draw user label at midpoint
+        if (drawing.label) {
+          const midX = (x1 + x2) / 2;
+          const midY = (y1 + y2) / 2;
+          const labelColor = drawing.labelColor || drawing.color;
+          drawLabel(ctx, drawing.label, midX, midY, labelColor, "above");
+        }
+      } else if (isFibonacciDrawing(drawing)) {
+        const x1 = timeScale.timeToCoordinate((drawing.anchor1.timestamp / 1000) as Time);
+        const y1 = series.priceToCoordinate(drawing.anchor1.price);
+        const x2 = timeScale.timeToCoordinate((drawing.anchor2.timestamp / 1000) as Time);
+        const y2 = series.priceToCoordinate(drawing.anchor2.price);
+
+        if (x1 === null || y1 === null || x2 === null || y2 === null) return;
+
+        const priceRange = drawing.anchor2.price - drawing.anchor1.price;
+
+        for (const level of drawing.levels) {
+          const levelPrice = drawing.anchor1.price + priceRange * level;
+          const levelY = series.priceToCoordinate(levelPrice);
+          if (levelY === null) continue;
+
+          const levelColor = drawing.levelColors?.[level] ||
+            DEFAULT_DRAWING_COLORS.fibonacci.levels[level as keyof typeof DEFAULT_DRAWING_COLORS.fibonacci.levels] ||
+            drawing.lineColor;
+
+          ctx.beginPath();
+          ctx.strokeStyle = levelColor;
+          ctx.lineWidth = 1 + (highlight ? 0.5 : 0);
+          ctx.setLineDash([]);
+
+          const startX = drawing.extendLeft ? 0 : Math.min(x1, x2);
+          const endX = drawing.extendRight ? canvas.width : Math.max(x1, x2);
+
+          ctx.moveTo(startX, levelY);
+          ctx.lineTo(endX, levelY);
+          ctx.stroke();
+
+          if (drawing.showLabels) {
+            ctx.fillStyle = levelColor;
+            ctx.font = "10px sans-serif";
+            ctx.fillText(`${(level * 100).toFixed(1)}%`, endX + 5, levelY + 4);
+          }
+          if (drawing.showPrices) {
+            ctx.fillStyle = levelColor;
+            ctx.font = "10px sans-serif";
+            ctx.fillText(levelPrice.toFixed(5), endX + 45, levelY + 4);
+          }
+        }
+
+        // Draw anchor points
+        if (showAnchors) {
+          const hoveredAnchor = hoveredAnchorRef.current;
+          ctx.fillStyle = hoveredAnchor === "anchor1" ? "#fff" : "#ccc";
+          ctx.beginPath();
+          ctx.arc(x1, y1, ANCHOR_RADIUS, 0, 2 * Math.PI);
+          ctx.fill();
+          ctx.strokeStyle = "#333";
+          ctx.lineWidth = 1;
+          ctx.stroke();
+
+          ctx.fillStyle = hoveredAnchor === "anchor2" ? "#fff" : "#ccc";
+          ctx.beginPath();
+          ctx.arc(x2, y2, ANCHOR_RADIUS, 0, 2 * Math.PI);
+          ctx.fill();
+          ctx.strokeStyle = "#333";
+          ctx.lineWidth = 1;
+          ctx.stroke();
+        }
+
+        // Draw user label at anchor1
+        if (drawing.label) {
+          const labelColor = drawing.labelColor || drawing.lineColor;
+          drawLabel(ctx, drawing.label, x1, y1, labelColor, "left");
+        }
+      } else if (isRectangleDrawing(drawing)) {
+        const x1 = timeScale.timeToCoordinate((drawing.anchor1.timestamp / 1000) as Time);
+        const y1 = series.priceToCoordinate(drawing.anchor1.price);
+        const x2 = timeScale.timeToCoordinate((drawing.anchor2.timestamp / 1000) as Time);
+        const y2 = series.priceToCoordinate(drawing.anchor2.price);
+
+        if (x1 === null || y1 === null || x2 === null || y2 === null) return;
+
+        const rectX = Math.min(x1, x2);
+        const rectY = Math.min(y1, y2);
+        const rectW = Math.abs(x2 - x1);
+        const rectH = Math.abs(y2 - y1);
+
+        ctx.fillStyle = drawing.fillColor;
+        ctx.fillRect(rectX, rectY, rectW, rectH);
+
+        ctx.strokeStyle = drawing.borderColor;
+        ctx.lineWidth = drawing.borderWidth + (highlight ? 1 : 0);
+        ctx.setLineDash([]);
+        ctx.strokeRect(rectX, rectY, rectW, rectH);
+
+        // Draw anchor points
+        if (showAnchors) {
+          const hoveredAnchor = hoveredAnchorRef.current;
+          ctx.fillStyle = hoveredAnchor === "anchor1" ? "#fff" : "#ccc";
+          ctx.beginPath();
+          ctx.arc(x1, y1, ANCHOR_RADIUS, 0, 2 * Math.PI);
+          ctx.fill();
+          ctx.strokeStyle = "#333";
+          ctx.lineWidth = 1;
+          ctx.stroke();
+
+          ctx.fillStyle = hoveredAnchor === "anchor2" ? "#fff" : "#ccc";
+          ctx.beginPath();
+          ctx.arc(x2, y2, ANCHOR_RADIUS, 0, 2 * Math.PI);
+          ctx.fill();
+          ctx.strokeStyle = "#333";
+          ctx.lineWidth = 1;
+          ctx.stroke();
+        }
+
+        // Draw user label centered in rectangle
+        if (drawing.label) {
+          const labelColor = drawing.labelColor || drawing.borderColor;
+          const centerX = rectX + rectW / 2;
+          const centerY = rectY + rectH / 2;
+          drawLabel(ctx, drawing.label, centerX, centerY, labelColor, "center", "simple");
+        }
+      } else if (isCircleDrawing(drawing)) {
+        const x1 = timeScale.timeToCoordinate((drawing.anchor1.timestamp / 1000) as Time);
+        const y1 = series.priceToCoordinate(drawing.anchor1.price);
+        const x2 = timeScale.timeToCoordinate((drawing.anchor2.timestamp / 1000) as Time);
+        const y2 = series.priceToCoordinate(drawing.anchor2.price);
+
+        if (x1 === null || y1 === null || x2 === null || y2 === null) return;
+
+        // Calculate circle center and radius (always perfect circle)
+        const centerX = (x1 + x2) / 2;
+        const centerY = (y1 + y2) / 2;
+        // Use distance from anchor1 to anchor2 as radius
+        const radius = Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2)) / 2;
+
+        // Draw filled circle
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI);
+        ctx.fillStyle = drawing.fillColor;
+        ctx.fill();
+
+        // Draw border
+        ctx.strokeStyle = drawing.borderColor;
+        ctx.lineWidth = drawing.borderWidth + (highlight ? 1 : 0);
+        ctx.setLineDash([]);
+        ctx.stroke();
+
+        // Draw anchor points
+        if (showAnchors) {
+          const hoveredAnchor = hoveredAnchorRef.current;
+          ctx.fillStyle = hoveredAnchor === "anchor1" ? "#fff" : "#ccc";
+          ctx.beginPath();
+          ctx.arc(x1, y1, ANCHOR_RADIUS, 0, 2 * Math.PI);
+          ctx.fill();
+          ctx.strokeStyle = "#333";
+          ctx.lineWidth = 1;
+          ctx.stroke();
+
+          ctx.fillStyle = hoveredAnchor === "anchor2" ? "#fff" : "#ccc";
+          ctx.beginPath();
+          ctx.arc(x2, y2, ANCHOR_RADIUS, 0, 2 * Math.PI);
+          ctx.fill();
+          ctx.strokeStyle = "#333";
+          ctx.lineWidth = 1;
+          ctx.stroke();
+        }
+
+        // Draw user label centered in circle
+        if (drawing.label) {
+          const labelColor = drawing.labelColor || drawing.borderColor;
+          drawLabel(ctx, drawing.label, centerX, centerY, labelColor, "center", "simple");
+        }
+      } else if (isPositionDrawing(drawing)) {
+        // Position Drawing - Entry, TP, SL with zones
+        const isLong = isLongPositionDrawing(drawing);
+        const entryX = timeScale.timeToCoordinate((drawing.entry.timestamp / 1000) as Time);
+        const entryY = series.priceToCoordinate(drawing.entry.price);
+        const tpY = series.priceToCoordinate(drawing.takeProfit);
+        const slY = series.priceToCoordinate(drawing.stopLoss);
+
+        if (entryX === null || entryY === null || tpY === null || slY === null) return;
+
+        // Calculate pip values (assuming 5-digit pricing for forex)
+        const pipMultiplier = drawing.entry.price < 10 ? 10000 : 100; // Forex vs indices
+        const tpPips = Math.abs(drawing.takeProfit - drawing.entry.price) * pipMultiplier;
+        const slPips = Math.abs(drawing.entry.price - drawing.stopLoss) * pipMultiplier;
+        const tpPercent = ((drawing.takeProfit - drawing.entry.price) / drawing.entry.price * 100);
+        const slPercent = ((drawing.entry.price - drawing.stopLoss) / drawing.entry.price * 100);
+        const rrRatio = drawing.riskRewardRatio || (tpPips / slPips);
+
+        // Calculate zone width - use endTimestamp if set, otherwise extend to chart edge
+        let actualZoneWidth: number;
+        let endX: number | null = null;
+        if (drawing.endTimestamp) {
+          endX = timeScale.timeToCoordinate((drawing.endTimestamp / 1000) as Time);
+          if (endX !== null) {
+            actualZoneWidth = Math.max(endX - entryX, 50); // Minimum 50px width
+          } else {
+            actualZoneWidth = Math.max(chartAreaWidth - entryX, 200);
+          }
+        } else {
+          actualZoneWidth = Math.max(chartAreaWidth - entryX, 200);
+          endX = entryX + actualZoneWidth;
+        }
+
+        // Get colors (use custom colors or defaults)
+        const tpColor = drawing.tpColor || "#26A69A";
+        const slColor = drawing.slColor || "#EF5350";
+
+        // Helper to convert hex to rgba with opacity
+        const hexToRgba = (hex: string, alpha: number) => {
+          const r = parseInt(hex.slice(1, 3), 16);
+          const g = parseInt(hex.slice(3, 5), 16);
+          const b = parseInt(hex.slice(5, 7), 16);
+          return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+        };
+
+        // Draw TP zone (fill color derived from line color)
+        ctx.fillStyle = hexToRgba(tpColor, 0.2);
+        const tpZoneTop = Math.min(entryY, tpY);
+        const tpZoneHeight = Math.abs(tpY - entryY);
+        ctx.fillRect(entryX, tpZoneTop, actualZoneWidth, tpZoneHeight);
+
+        // Draw SL zone (fill color derived from line color)
+        ctx.fillStyle = hexToRgba(slColor, 0.2);
+        const slZoneTop = Math.min(entryY, slY);
+        const slZoneHeight = Math.abs(slY - entryY);
+        ctx.fillRect(entryX, slZoneTop, actualZoneWidth, slZoneHeight);
+
+        // Calculate candle penetration into TP/SL zones (TradingView-style highlighting)
+        // IMPORTANT: Track penetration only until TP or SL is HIT for the first time
+        const entryTimeSec = drawing.entry.timestamp / 1000;
+        const endTimeSec = drawing.endTimestamp ? drawing.endTimestamp / 1000 : Date.now() / 1000;
+
+        // Find candles that penetrated TP zone
+        let tpPenetrationStart: number | null = null;
+        let tpPenetrationEnd: number | null = null;
+        let tpMaxPenetration: number = drawing.entry.price; // Track deepest penetration
+
+        // Find candles that penetrated SL zone
+        let slPenetrationStart: number | null = null;
+        let slPenetrationEnd: number | null = null;
+        let slMaxPenetration: number = drawing.entry.price; // Track deepest penetration
+
+        // Track if trade has been "closed" - use Convex trade data as source of truth
+        let tradeOutcome: "tp" | "sl" | "manual" | null = null;
+        let tradeClosedAt: number | null = null;
+        let tradeExitPrice: number | null = null;
+
+        // Check Convex trade data first (source of truth)
+        if (drawing.convexTradeId && tradesMap) {
+          const trade = tradesMap.get(drawing.convexTradeId);
+          if (trade && trade.status === "closed" && trade.exitPrice) {
+            tradeExitPrice = trade.exitPrice;
+            tradeClosedAt = trade.exitTime ? trade.exitTime / 1000 : null;
+            // Map Convex outcome to local outcome type
+            if (trade.outcome === "TP") tradeOutcome = "tp";
+            else if (trade.outcome === "SL") tradeOutcome = "sl";
+            else if (trade.outcome === "MW" || trade.outcome === "ML" || trade.outcome === "BE") tradeOutcome = "manual";
+          }
+        }
+
+        // Get candles sorted by time (chronologically) for penetration visualization
+        const sortedCandles = Array.from(candleDataRef.current.entries())
+          .filter(([timeSec]) => timeSec >= entryTimeSec && timeSec <= endTimeSec)
+          .sort((a, b) => a[0] - b[0]);
+
+        // Track penetration zones (for visualization only - outcome comes from Convex)
+        for (const [timeSec, candle] of sortedCandles) {
+          // Stop tracking once we reach the close time (from Convex)
+          if (tradeClosedAt !== null && timeSec > tradeClosedAt) break;
+
+          if (isLong) {
+            // Track TP zone penetration (above entry)
+            if (candle.high > drawing.entry.price) {
+              if (tpPenetrationStart === null) tpPenetrationStart = timeSec;
+              tpPenetrationEnd = timeSec;
+              tpMaxPenetration = Math.max(tpMaxPenetration, Math.min(candle.high, drawing.takeProfit));
+            }
+            // Track SL zone penetration (below entry)
+            if (candle.low < drawing.entry.price) {
+              if (slPenetrationStart === null) slPenetrationStart = timeSec;
+              slPenetrationEnd = timeSec;
+              slMaxPenetration = Math.min(slMaxPenetration, Math.max(candle.low, drawing.stopLoss));
+            }
+          } else {
+            // Short position
+            // Track TP zone penetration (below entry)
+            if (candle.low < drawing.entry.price) {
+              if (tpPenetrationStart === null) tpPenetrationStart = timeSec;
+              tpPenetrationEnd = timeSec;
+              tpMaxPenetration = Math.min(tpMaxPenetration, Math.max(candle.low, drawing.takeProfit));
+            }
+            // Track SL zone penetration (above entry)
+            if (candle.high > drawing.entry.price) {
+              if (slPenetrationStart === null) slPenetrationStart = timeSec;
+              slPenetrationEnd = timeSec;
+              slMaxPenetration = Math.max(slMaxPenetration, Math.min(candle.high, drawing.stopLoss));
+            }
+          }
+        }
+
+        // Estimate candle width from visible range (for penetration zones)
+        const visibleRange = timeScale.getVisibleLogicalRange();
+        const barsInView = visibleRange ? Math.abs(visibleRange.to - visibleRange.from) : 50;
+        const estimatedCandleWidth = Math.max(chartAreaWidth / barsInView, 4);
+
+        // Draw TP penetration zone (darker fill with dashed border)
+        if (tpPenetrationStart !== null && tpPenetrationEnd !== null) {
+          const tpPenStartXCoord = timeScale.timeToCoordinate(tpPenetrationStart as Time);
+          const tpPenEndXCoord = timeScale.timeToCoordinate(tpPenetrationEnd as Time);
+          const tpPenMaxYCoord = series.priceToCoordinate(tpMaxPenetration);
+
+          if (tpPenStartXCoord !== null && tpPenEndXCoord !== null && tpPenMaxYCoord !== null) {
+            // Clamp to position boundaries (convert to numbers for math operations)
+            const tpPenStartX = Math.max(tpPenStartXCoord as number, entryX);
+            const tpPenEndX = Math.min(tpPenEndXCoord as number, entryX + actualZoneWidth);
+            const tpPenMaxY = tpPenMaxYCoord as number;
+
+            // Add one candle width to include the last penetrating candle
+            const penWidth = Math.min(
+              tpPenEndX - tpPenStartX + estimatedCandleWidth,
+              entryX + actualZoneWidth - tpPenStartX
+            );
+
+            // Only draw if there's actually a visible area
+            if (penWidth > 0 && tpPenStartX < entryX + actualZoneWidth) {
+              // Darker fill for penetration area
+              ctx.fillStyle = hexToRgba(tpColor, 0.35);
+              const penTop = Math.min(entryY, tpPenMaxY);
+              const penHeight = Math.abs(tpPenMaxY - entryY);
+              ctx.fillRect(tpPenStartX, penTop, penWidth, penHeight);
+
+              // Dashed diagonal trend line from entry to max penetration
+              ctx.strokeStyle = tpColor;
+              ctx.lineWidth = 1;
+              ctx.setLineDash([4, 4]);
+              ctx.beginPath();
+              ctx.moveTo(entryX, entryY);
+              ctx.lineTo(tpPenStartX + penWidth, tpPenMaxY);
+              ctx.stroke();
+              ctx.setLineDash([]);
+            }
+          }
+        }
+
+        // Draw SL penetration zone (darker fill with dashed border)
+        if (slPenetrationStart !== null && slPenetrationEnd !== null) {
+          const slPenStartXCoord = timeScale.timeToCoordinate(slPenetrationStart as Time);
+          const slPenEndXCoord = timeScale.timeToCoordinate(slPenetrationEnd as Time);
+          const slPenMaxYCoord = series.priceToCoordinate(slMaxPenetration);
+
+          if (slPenStartXCoord !== null && slPenEndXCoord !== null && slPenMaxYCoord !== null) {
+            // Clamp to position boundaries (convert to numbers for math operations)
+            const slPenStartX = Math.max(slPenStartXCoord as number, entryX);
+            const slPenEndX = Math.min(slPenEndXCoord as number, entryX + actualZoneWidth);
+            const slPenMaxY = slPenMaxYCoord as number;
+
+            // Add one candle width to include the last penetrating candle
+            const penWidth = Math.min(
+              slPenEndX - slPenStartX + estimatedCandleWidth,
+              entryX + actualZoneWidth - slPenStartX
+            );
+
+            // Only draw if there's actually a visible area
+            if (penWidth > 0 && slPenStartX < entryX + actualZoneWidth) {
+              // Darker fill for penetration area
+              ctx.fillStyle = hexToRgba(slColor, 0.35);
+              const penTop = Math.min(entryY, slPenMaxY);
+              const penHeight = Math.abs(slPenMaxY - entryY);
+              ctx.fillRect(slPenStartX, penTop, penWidth, penHeight);
+
+              // Dashed diagonal trend line from entry to max penetration
+              ctx.strokeStyle = slColor;
+              ctx.lineWidth = 1;
+              ctx.setLineDash([4, 4]);
+              ctx.beginPath();
+              ctx.moveTo(entryX, entryY);
+              ctx.lineTo(slPenStartX + penWidth, slPenMaxY);
+              ctx.stroke();
+              ctx.setLineDash([]);
+            }
+          }
+        }
+
+        // Draw entry line
+        ctx.strokeStyle = "#2196F3";
+        ctx.lineWidth = 2 + (highlight ? 1 : 0);
+        ctx.setLineDash([]);
+        ctx.beginPath();
+        ctx.moveTo(entryX, entryY);
+        ctx.lineTo(entryX + actualZoneWidth, entryY);
+        ctx.stroke();
+
+        // Draw TP line
+        ctx.strokeStyle = tpColor;
+        ctx.lineWidth = 1 + (highlight ? 1 : 0);
+        ctx.beginPath();
+        ctx.moveTo(entryX, tpY);
+        ctx.lineTo(entryX + actualZoneWidth, tpY);
+        ctx.stroke();
+
+        // Draw SL line
+        ctx.strokeStyle = slColor;
+        ctx.lineWidth = 1 + (highlight ? 1 : 0);
+        ctx.beginPath();
+        ctx.moveTo(entryX, slY);
+        ctx.lineTo(entryX + actualZoneWidth, slY);
+        ctx.stroke();
+
+        // Draw vertical lines on left and right edges
+        ctx.strokeStyle = "#787B86";
+        ctx.lineWidth = 1;
+        ctx.setLineDash([2, 2]);
+        // Left edge
+        ctx.beginPath();
+        ctx.moveTo(entryX, Math.min(tpY, slY));
+        ctx.lineTo(entryX, Math.max(tpY, slY));
+        ctx.stroke();
+        // Right edge (if fixed width)
+        if (drawing.endTimestamp && endX !== null) {
+          ctx.beginPath();
+          ctx.moveTo(entryX + actualZoneWidth, Math.min(tpY, slY));
+          ctx.lineTo(entryX + actualZoneWidth, Math.max(tpY, slY));
+          ctx.stroke();
+        }
+        ctx.setLineDash([]);
+
+        // Draw TP label (with price) - OUTSIDE zone, centered horizontally
+        const tpLabelText = `TP @ ${drawing.takeProfit.toFixed(5)} | ${(tpPercent >= 0 ? "+" : "")}${tpPercent.toFixed(2)}% | ${tpPips.toFixed(1)} pips | ${rrRatio.toFixed(2)}R`;
+        ctx.font = "11px Inter, sans-serif";
+        const tpTextWidth = ctx.measureText(tpLabelText).width;
+        const labelPadding = 6;
+        const labelHeight = 18;
+        const labelGap = 4;
+        const labelMargin = 4; // Margin from chart edge
+
+        // TP label position - centered horizontally, clamped to chart bounds
+        const tpLabelWidth = tpTextWidth + labelPadding * 2;
+        const tpLabelXRaw = entryX + actualZoneWidth / 2 - tpLabelWidth / 2;
+        const tpLabelX = Math.max(labelMargin, Math.min(chartAreaWidth - tpLabelWidth - labelMargin, tpLabelXRaw));
+        const tpLabelY = isLong ? tpY - labelHeight - labelGap : tpY + labelGap;
+
+        ctx.fillStyle = tpColor;
+        ctx.beginPath();
+        ctx.roundRect(tpLabelX, tpLabelY, tpLabelWidth, labelHeight, 3);
+        ctx.fill();
+
+        ctx.fillStyle = "#fff";
+        ctx.textBaseline = "middle";
+        ctx.fillText(tpLabelText, tpLabelX + labelPadding, tpLabelY + labelHeight / 2);
+
+        // Draw SL label (with price) - OUTSIDE zone, centered horizontally
+        const slLabelText = `SL @ ${drawing.stopLoss.toFixed(5)} | -${Math.abs(slPercent).toFixed(2)}% | ${slPips.toFixed(1)} pips`;
+        const slTextWidth = ctx.measureText(slLabelText).width;
+
+        // SL label position - centered horizontally, clamped to chart bounds
+        const slLabelWidth = slTextWidth + labelPadding * 2;
+        const slLabelXRaw = entryX + actualZoneWidth / 2 - slLabelWidth / 2;
+        const slLabelX = Math.max(labelMargin, Math.min(chartAreaWidth - slLabelWidth - labelMargin, slLabelXRaw));
+        const slLabelY = isLong ? slY + labelGap : slY - labelHeight - labelGap;
+
+        ctx.fillStyle = slColor;
+        ctx.beginPath();
+        ctx.roundRect(slLabelX, slLabelY, slLabelWidth, labelHeight, 3);
+        ctx.fill();
+
+        ctx.fillStyle = "#fff";
+        ctx.fillText(slLabelText, slLabelX + labelPadding, slLabelY + labelHeight / 2);
+
+        // Draw entry label - clamped to chart bounds
+        const entryLabelText = `${isLong ? "LONG" : "SHORT"} @ ${drawing.entry.price.toFixed(5)}`;
+        const entryTextWidth = ctx.measureText(entryLabelText).width;
+        const entryLabelWidth = entryTextWidth + labelPadding * 2;
+        const entryLabelXRaw = entryX + actualZoneWidth / 2 - entryLabelWidth / 2;
+        const entryLabelX = Math.max(labelMargin, Math.min(chartAreaWidth - entryLabelWidth - labelMargin, entryLabelXRaw));
+        const entryLabelY = entryY - labelHeight / 2;
+
+        ctx.fillStyle = "#2196F3";
+        ctx.beginPath();
+        ctx.roundRect(entryLabelX, entryLabelY - labelHeight / 2, entryLabelWidth, labelHeight, 3);
+        ctx.fill();
+
+        ctx.fillStyle = "#fff";
+        ctx.fillText(entryLabelText, entryLabelX + labelPadding, entryLabelY);
+
+        // Draw candle count if available - clamped to chart bounds
+        if (drawing.candleCount && drawing.candleCount > 0) {
+          const candleText = `${drawing.candleCount} candles`;
+          const candleTextWidth = ctx.measureText(candleText).width;
+          const candleLabelWidth = candleTextWidth + labelPadding * 2;
+          const candleLabelXRaw = entryX + actualZoneWidth - candleLabelWidth - 10;
+          const candleLabelX = Math.max(labelMargin, Math.min(chartAreaWidth - candleLabelWidth - labelMargin, candleLabelXRaw));
+          const candleLabelY = entryY - labelHeight / 2;
+
+          ctx.fillStyle = "rgba(120, 123, 134, 0.8)";
+          ctx.beginPath();
+          ctx.roundRect(candleLabelX, candleLabelY - labelHeight / 2, candleLabelWidth, labelHeight, 3);
+          ctx.fill();
+
+          ctx.fillStyle = "#fff";
+          ctx.fillText(candleText, candleLabelX + labelPadding, candleLabelY);
+        }
+
+        // Draw EXIT line if trade was closed at a different price than TP/SL (manual exit)
+        if (tradeExitPrice !== null && tradeOutcome === "manual") {
+          const exitY = series.priceToCoordinate(tradeExitPrice);
+          if (exitY !== null) {
+            // Calculate P&L for the exit
+            const exitPnl = isLong
+              ? tradeExitPrice - drawing.entry.price
+              : drawing.entry.price - tradeExitPrice;
+            const exitPips = exitPnl * pipMultiplier;
+            const exitColor = exitPnl >= 0 ? "#FF9800" : "#FF5722"; // Orange for win, deep orange for loss
+
+            // Draw exit line (dashed)
+            ctx.strokeStyle = exitColor;
+            ctx.lineWidth = 2;
+            ctx.setLineDash([5, 3]);
+            ctx.beginPath();
+            ctx.moveTo(entryX, exitY);
+            ctx.lineTo(entryX + actualZoneWidth, exitY);
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            // Draw exit label
+            const exitLabel = `EXIT @ ${tradeExitPrice.toFixed(5)} | ${exitPnl >= 0 ? "+" : ""}${exitPips.toFixed(1)} pips`;
+            const exitTextWidth = ctx.measureText(exitLabel).width;
+            const exitLabelWidth = exitTextWidth + labelPadding * 2;
+            const exitLabelXRaw = entryX + actualZoneWidth / 2 - exitLabelWidth / 2;
+            const exitLabelX = Math.max(labelMargin, Math.min(chartAreaWidth - exitLabelWidth - labelMargin, exitLabelXRaw));
+            const exitLabelY = exitY + labelGap;
+
+            ctx.fillStyle = exitColor;
+            ctx.beginPath();
+            ctx.roundRect(exitLabelX, exitLabelY, exitLabelWidth, labelHeight, 3);
+            ctx.fill();
+
+            ctx.fillStyle = "#fff";
+            ctx.textBaseline = "middle";
+            ctx.fillText(exitLabel, exitLabelX + labelPadding, exitLabelY + labelHeight / 2);
+          }
+        }
+
+        ctx.textBaseline = "alphabetic";
+
+        // Draw anchor points when selected
+        if (showAnchors) {
+          // Entry anchor (left side, center)
+          ctx.fillStyle = "#fff";
+          ctx.beginPath();
+          ctx.arc(entryX, entryY, ANCHOR_RADIUS, 0, 2 * Math.PI);
+          ctx.fill();
+          ctx.strokeStyle = "#2196F3";
+          ctx.lineWidth = 2;
+          ctx.stroke();
+
+          // TP anchor (left side of TP line)
+          ctx.fillStyle = "#fff";
+          ctx.beginPath();
+          ctx.arc(entryX, tpY, ANCHOR_RADIUS, 0, 2 * Math.PI);
+          ctx.fill();
+          ctx.strokeStyle = "#26A69A";
+          ctx.lineWidth = 2;
+          ctx.stroke();
+
+          // SL anchor (left side of SL line)
+          ctx.fillStyle = "#fff";
+          ctx.beginPath();
+          ctx.arc(entryX, slY, ANCHOR_RADIUS, 0, 2 * Math.PI);
+          ctx.fill();
+          ctx.strokeStyle = "#EF5350";
+          ctx.lineWidth = 2;
+          ctx.stroke();
+
+          // Right edge anchor (for width adjustment)
+          if (endX !== null) {
+            ctx.fillStyle = "#fff";
+            ctx.beginPath();
+            ctx.arc(entryX + actualZoneWidth, entryY, ANCHOR_RADIUS, 0, 2 * Math.PI);
+            ctx.fill();
+            ctx.strokeStyle = "#787B86";
+            ctx.lineWidth = 2;
+            ctx.stroke();
+          }
+        }
+      }
+    };
+
+    const drawPendingDrawing = (
+      ctx: CanvasRenderingContext2D,
+      pending: { type: DrawingType; anchor1: DrawingAnchor; currentPos?: { x: number; y: number } },
+      timeScale: ReturnType<IChartApi["timeScale"]>,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      series: any
+    ) => {
+      if (!pending.currentPos) return;
+
+      const x1 = timeScale.timeToCoordinate((pending.anchor1.timestamp / 1000) as Time);
+      const y1 = series.priceToCoordinate(pending.anchor1.price);
+
+      if (x1 === null || y1 === null) return;
+
+      const x2 = pending.currentPos.x;
+      const y2 = pending.currentPos.y;
+
+      ctx.beginPath();
+      ctx.strokeStyle = "#2962FF";
+      ctx.lineWidth = 2;
+      ctx.setLineDash([5, 5]);
+
+      if (pending.type === "trendline" || pending.type === "ray" || pending.type === "arrow" || pending.type === "extendedLine") {
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+      } else if (pending.type === "fibonacci") {
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+      } else if (pending.type === "rectangle") {
+        const rectX = Math.min(x1, x2);
+        const rectY = Math.min(y1, y2);
+        const rectW = Math.abs(x2 - x1);
+        const rectH = Math.abs(y2 - y1);
+        ctx.strokeRect(rectX, rectY, rectW, rectH);
+      } else if (pending.type === "circle") {
+        const centerX = (x1 + x2) / 2;
+        const centerY = (y1 + y2) / 2;
+        // Use distance from anchor1 to anchor2 as radius (perfect circle)
+        const radius = Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2)) / 2;
+        ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI);
+      } else if (pending.type === "longPosition" || pending.type === "shortPosition") {
+        // Position preview - show entry, TP, and SL zones
+        const isLong = pending.type === "longPosition";
+        const entryPrice = pending.anchor1.price;
+        const dragPrice = series.coordinateToPrice(y2);
+
+        if (dragPrice === null) return;
+
+        // Calculate TP and SL from drag
+        const priceDiff = Math.abs(dragPrice - entryPrice);
+        let tpPrice: number, slPrice: number;
+
+        if (isLong) {
+          // Long: dragging UP sets TP directly, SL mirrors below
+          if (dragPrice > entryPrice) {
+            tpPrice = dragPrice;
+            slPrice = entryPrice - priceDiff;
+          } else {
+            slPrice = dragPrice;
+            tpPrice = entryPrice + priceDiff;
+          }
+        } else {
+          // Short: dragging DOWN sets TP directly, SL mirrors above
+          if (dragPrice < entryPrice) {
+            tpPrice = dragPrice;
+            slPrice = entryPrice + priceDiff;
+          } else {
+            slPrice = dragPrice;
+            tpPrice = entryPrice - priceDiff;
+          }
+        }
+
+        const tpY_pos = series.priceToCoordinate(tpPrice);
+        const slY_pos = series.priceToCoordinate(slPrice);
+
+        if (tpY_pos === null || slY_pos === null) return;
+
+        // Calculate zone width based on horizontal drag
+        const zoneWidth = Math.max(Math.abs(x2 - x1), 100);
+
+        // Draw TP zone (green)
+        ctx.fillStyle = "rgba(38, 166, 154, 0.2)";
+        const tpZoneTop = Math.min(y1, tpY_pos);
+        const tpZoneHeight = Math.abs(tpY_pos - y1);
+        ctx.fillRect(x1, tpZoneTop, zoneWidth, tpZoneHeight);
+
+        // Draw SL zone (red)
+        ctx.fillStyle = "rgba(239, 83, 80, 0.2)";
+        const slZoneTop = Math.min(y1, slY_pos);
+        const slZoneHeight = Math.abs(slY_pos - y1);
+        ctx.fillRect(x1, slZoneTop, zoneWidth, slZoneHeight);
+
+        // Draw entry line
+        ctx.strokeStyle = "#2196F3";
+        ctx.lineWidth = 2;
+        ctx.setLineDash([]);
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x1 + zoneWidth, y1);
+        ctx.stroke();
+
+        // Draw TP line (dashed)
+        ctx.strokeStyle = "#26A69A";
+        ctx.lineWidth = 1;
+        ctx.setLineDash([5, 5]);
+        ctx.beginPath();
+        ctx.moveTo(x1, tpY_pos);
+        ctx.lineTo(x1 + zoneWidth, tpY_pos);
+        ctx.stroke();
+
+        // Draw SL line (dashed)
+        ctx.strokeStyle = "#EF5350";
+        ctx.beginPath();
+        ctx.moveTo(x1, slY_pos);
+        ctx.lineTo(x1 + zoneWidth, slY_pos);
+        ctx.stroke();
+
+        ctx.setLineDash([]);
+        return;
+      }
+
+      ctx.stroke();
+      ctx.setLineDash([]);
+    };
+
+    const setLineStyle = (ctx: CanvasRenderingContext2D, style: "solid" | "dashed" | "dotted") => {
+      switch (style) {
+        case "dashed":
+          ctx.setLineDash([8, 4]);
+          break;
+        case "dotted":
+          ctx.setLineDash([2, 2]);
+          break;
+        default:
+          ctx.setLineDash([]);
+      }
+    };
+
+    /**
+     * Draw a label with background pill
+     */
+    const drawLabel = (
+      ctx: CanvasRenderingContext2D,
+      label: string,
+      x: number,
+      y: number,
+      color: string,
+      position: "above" | "below" | "left" | "right" | "center" = "above",
+      style: "pill" | "simple" = "pill"
+    ) => {
+      if (!label) return;
+
+      ctx.font = "12px Inter, sans-serif";
+      const metrics = ctx.measureText(label);
+      const textWidth = metrics.width;
+
+      // Simple style - just text, no background (for inside rectangles)
+      if (style === "simple") {
+        ctx.fillStyle = color;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(label, x, y);
+        ctx.textAlign = "left";
+        ctx.textBaseline = "alphabetic";
+        return;
+      }
+
+      // Pill style - text with background
+      const textHeight = 12;
+      const paddingX = 6;
+      const paddingY = 3;
+      const pillWidth = textWidth + paddingX * 2;
+      const pillHeight = textHeight + paddingY * 2;
+
+      // Calculate position based on placement
+      let pillX = x;
+      let pillY = y;
+
+      switch (position) {
+        case "above":
+          pillX = x - pillWidth / 2;
+          pillY = y - pillHeight - 4;
+          break;
+        case "below":
+          pillX = x - pillWidth / 2;
+          pillY = y + 4;
+          break;
+        case "left":
+          pillX = x - pillWidth - 4;
+          pillY = y - pillHeight / 2;
+          break;
+        case "right":
+          pillX = x + 4;
+          pillY = y - pillHeight / 2;
+          break;
+      }
+
+      // Draw background pill
+      ctx.fillStyle = "rgba(30, 30, 30, 0.9)";
+      ctx.beginPath();
+      ctx.roundRect(pillX, pillY, pillWidth, pillHeight, 4);
+      ctx.fill();
+
+      // Draw border
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      // Draw text
+      ctx.fillStyle = color;
+      ctx.textBaseline = "middle";
+      ctx.fillText(label, pillX + paddingX, pillY + pillHeight / 2);
+      ctx.textBaseline = "alphabetic"; // Reset
+    };
+
+    const distanceToLineSegment = (px: number, py: number, x1: number, y1: number, x2: number, y2: number): number => {
+      const dx = x2 - x1;
+      const dy = y2 - y1;
+      const len2 = dx * dx + dy * dy;
+      if (len2 === 0) return Math.sqrt((px - x1) ** 2 + (py - y1) ** 2);
+      let t = ((px - x1) * dx + (py - y1) * dy) / len2;
+      t = Math.max(0, Math.min(1, t));
+      const nearestX = x1 + t * dx;
+      const nearestY = y1 + t * dy;
+      return Math.sqrt((px - nearestX) ** 2 + (py - nearestY) ** 2);
+    };
+
+    // Initial draw
+    drawAllDrawings();
+
+    // Subscribe to visible range changes for redraw
+    const timeScale = chart.timeScale();
+    timeScale.subscribeVisibleLogicalRangeChange(drawAllDrawings);
+
+    // Track chart panning for continuous redraw (needed for vertical pan)
+    // The timeScale only notifies on horizontal changes, so we need to
+    // continuously redraw during any pan/drag to catch vertical movements
+    let isChartDragging = false;
+    let animationFrameId: number | null = null;
+
+    const animateDrawings = () => {
+      if (isChartDragging) {
+        drawAllDrawings();
+        animationFrameId = requestAnimationFrame(animateDrawings);
+      }
+    };
+
+    const handleChartDragStart = (e: MouseEvent) => {
+      // Only start animation if not dragging a drawing and no tool is active
+      if (!activeDrawingTool && !dragStateRef.current && !isDrawingRef.current) {
+        isChartDragging = true;
+        animateDrawings();
+      }
+    };
+
+    const handleChartDragEnd = () => {
+      isChartDragging = false;
+      if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
+        animationFrameId = null;
+      }
+      drawAllDrawings(); // Final redraw to ensure accuracy
+    };
+
+    // Listen on container for chart pan (separate from drawing interactions)
+    container.addEventListener("mousedown", handleChartDragStart);
+    window.addEventListener("mouseup", handleChartDragEnd);
+    window.addEventListener("mouseleave", handleChartDragEnd);
+
+    // Event listeners:
+    // - Canvas: mousedown/move/up for creating new drawings (when tool is active)
+    // - Container: for hover/select/drag of existing drawings (always)
+    // Use capture phase for mousedown to intercept before chart's internal handlers
+    canvas.addEventListener("mousedown", handleMouseDown, true);
+    canvas.addEventListener("mousemove", handleMouseMove);
+    canvas.addEventListener("mouseup", handleMouseUp);
+    canvas.addEventListener("mouseleave", handleMouseLeave);
+    canvas.addEventListener("click", handleClick);
+    canvas.addEventListener("dblclick", handleDoubleClick);
+
+    // Also attach to container for when canvas has pointer-events: none
+    // These handle hover/selection/drag of existing drawings
+    container.addEventListener("mousemove", handleMouseMove);
+    container.addEventListener("mousedown", handleMouseDown, true);
+    container.addEventListener("mouseup", handleMouseUp);
+    container.addEventListener("click", handleClick);
+    container.addEventListener("dblclick", handleDoubleClick);
+
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("resize", drawAllDrawings);
+    // Window-level mouseup ensures drag state is cleared even if mouse released outside chart
+    window.addEventListener("mouseup", handleMouseUp);
+
+    return () => {
+      // Stop any ongoing animation
+      isChartDragging = false;
+      if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
+      }
+
+      timeScale.unsubscribeVisibleLogicalRangeChange(drawAllDrawings);
+      canvas.removeEventListener("mousedown", handleMouseDown, true);
+      canvas.removeEventListener("mousemove", handleMouseMove);
+      canvas.removeEventListener("mouseup", handleMouseUp);
+      canvas.removeEventListener("mouseleave", handleMouseLeave);
+      canvas.removeEventListener("click", handleClick);
+      canvas.removeEventListener("dblclick", handleDoubleClick);
+      container.removeEventListener("mousemove", handleMouseMove);
+      container.removeEventListener("mousedown", handleMouseDown, true);
+      window.removeEventListener("mouseup", handleMouseUp);
+      container.removeEventListener("mouseup", handleMouseUp);
+      container.removeEventListener("click", handleClick);
+      container.removeEventListener("dblclick", handleDoubleClick);
+      container.removeEventListener("mousedown", handleChartDragStart);
+      window.removeEventListener("mouseup", handleChartDragEnd);
+      window.removeEventListener("mouseleave", handleChartDragEnd);
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("resize", drawAllDrawings);
+    };
+  }, [activeDrawingTool, drawings, selectedDrawingId, magnetMode, onDrawingCreate, onDrawingSelect, onDrawingUpdate, onDrawingDelete]);
+
+  // Compute selected drawing position for contextual toolbar
+  // Only run when selectedDrawingId changes (not on drawing updates like color changes)
+  useEffect(() => {
+    if (!selectedDrawingId || !chartRef.current || !seriesRef.current) {
+      setSelectedDrawingPosition(null);
+      return;
+    }
+
+    // Get the drawing from current drawings ref (not dependency)
+    const currentDrawings = drawings;
+    if (!currentDrawings) {
+      setSelectedDrawingPosition(null);
+      return;
+    }
+
+    const selectedDrawing = currentDrawings.find((d) => d.id === selectedDrawingId);
+    if (!selectedDrawing) {
+      setSelectedDrawingPosition(null);
+      return;
+    }
+
+    const chart = chartRef.current;
+    const series = seriesRef.current;
+    const timeScale = chart.timeScale();
+
+    // Calculate center position of the drawing
+    let x = 0;
+    let y = 0;
+
+    if (isFibonacciDrawing(selectedDrawing) || isTrendlineDrawing(selectedDrawing) || isRectangleDrawing(selectedDrawing)) {
+      const x1 = timeScale.timeToCoordinate(selectedDrawing.anchor1.timestamp / 1000 as Time);
+      const x2 = timeScale.timeToCoordinate(selectedDrawing.anchor2.timestamp / 1000 as Time);
+      const y1 = series.priceToCoordinate(selectedDrawing.anchor1.price);
+      const y2 = series.priceToCoordinate(selectedDrawing.anchor2.price);
+
+      if (x1 !== null && x2 !== null && y1 !== null && y2 !== null) {
+        x = (x1 + x2) / 2;
+        y = Math.min(y1, y2) - 10; // Position above the drawing
+      }
+    } else if (isHorizontalLineDrawing(selectedDrawing)) {
+      const yCoord = series.priceToCoordinate(selectedDrawing.price);
+      if (yCoord !== null) {
+        x = 100; // Left side of chart
+        y = yCoord - 10;
+      }
+    }
+
+    if (x > 0 && y > 0) {
+      setSelectedDrawingPosition({ x, y });
+    } else {
+      setSelectedDrawingPosition(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedDrawingId]); // Only re-run when selection changes, not on drawing updates
+
   // Draw session background colors (on background canvas)
   // LIVE - generates session windows from candle data, no DB dependency
   useEffect(() => {
@@ -749,7 +2847,10 @@ export function Chart({
       // Clear canvas if sessions disabled or no candles
       if (sessionBgCanvasRef.current) {
         const ctx = sessionBgCanvasRef.current.getContext("2d");
-        if (ctx) ctx.clearRect(0, 0, sessionBgCanvasRef.current.width, sessionBgCanvasRef.current.height);
+        if (ctx) {
+          ctx.setTransform(1, 0, 0, 1, 0, 0);
+          ctx.clearRect(0, 0, sessionBgCanvasRef.current.width, sessionBgCanvasRef.current.height);
+        }
       }
       return;
     }
@@ -765,13 +2866,21 @@ export function Chart({
     const liveSessions = generateSessionWindowsFromCandles(candles);
 
     const drawBackgrounds = () => {
-      // Update canvas size to match container
-      if (canvas.width !== container.clientWidth || canvas.height !== container.clientHeight) {
-        canvas.width = container.clientWidth;
-        canvas.height = container.clientHeight;
+      const dpr = window.devicePixelRatio || 1;
+      const logicalWidth = container.clientWidth;
+      const logicalHeight = container.clientHeight;
+
+      // Setup DPI-aware canvas
+      const needsResize = canvas.width !== logicalWidth * dpr || canvas.height !== logicalHeight * dpr;
+      if (needsResize) {
+        canvas.width = logicalWidth * dpr;
+        canvas.height = logicalHeight * dpr;
+        canvas.style.width = `${logicalWidth}px`;
+        canvas.style.height = `${logicalHeight}px`;
       }
 
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, logicalWidth, logicalHeight);
 
       const timeScale = chart.timeScale();
 
@@ -788,7 +2897,7 @@ export function Chart({
 
         // Draw background rectangle (full height)
         ctx.fillStyle = colors.bg;
-        ctx.fillRect(startX, 0, endX - startX, canvas.height);
+        ctx.fillRect(startX, 0, endX - startX, logicalHeight);
       }
     };
 
@@ -1058,6 +3167,51 @@ export function Chart({
     }
   }, [onResetViewReady, resetView]);
 
+  // Scroll to a specific timestamp - centers the view on that timestamp
+  const scrollToTimestamp = useCallback((timestamp: number) => {
+    if (!chartRef.current || !candles || candles.length === 0) return;
+
+    const chart = chartRef.current;
+    const timeScale = chart.timeScale();
+
+    // Convert timestamp to chart time (seconds)
+    const chartTime = timestamp / 1000;
+
+    // Find the bar index for this timestamp
+    // candleDataRef is a Map keyed by timestamp in seconds
+    let targetIndex = -1;
+    let idx = 0;
+    for (const [time] of candleDataRef.current) {
+      if (time >= chartTime) {
+        targetIndex = idx;
+        break;
+      }
+      idx++;
+    }
+
+    // If timestamp is before all candles, show the start
+    if (targetIndex === -1) {
+      targetIndex = 0;
+    }
+
+    // Center the view on the target index with ~50 bars on each side
+    const visibleBars = 100;
+    const halfVisible = visibleBars / 2;
+    const dataLength = candleDataRef.current.size;
+
+    const from = Math.max(0, targetIndex - halfVisible);
+    const to = Math.min(dataLength + 10, targetIndex + halfVisible);
+
+    timeScale.setVisibleLogicalRange({ from, to });
+  }, [candles]);
+
+  // Expose scrollToTimestamp to parent component
+  useEffect(() => {
+    if (onScrollToTimestampReady) {
+      onScrollToTimestampReady(scrollToTimestamp);
+    }
+  }, [onScrollToTimestampReady, scrollToTimestamp]);
+
   // Scroll-back detection: load more history when user scrolls to the left edge
   useEffect(() => {
     if (!chartRef.current || !candles || candles.length === 0) return;
@@ -1219,8 +3373,59 @@ export function Chart({
         style={{ zIndex: 1 }}
       />
 
+      {/* Strategy zone background canvas - on top of session bg, behind chart */}
+      <canvas
+        ref={zoneBgCanvasRef}
+        className="absolute inset-0 pointer-events-none"
+        style={{ zIndex: 1.5 }}
+      />
+
       {/* Chart with transparent background */}
       <div ref={containerRef} className="absolute inset-0" style={{ zIndex: 2 }} />
+
+      {/* Drawing canvas - renders drawings, captures events when tool active or drawing selected */}
+      <canvas
+        ref={drawingCanvasRef}
+        className="absolute inset-0"
+        style={{
+          zIndex: 3,
+          pointerEvents: activeDrawingTool || selectedDrawingId ? "auto" : "none",
+          cursor: activeDrawingTool ? "crosshair" : (selectedDrawingId ? "move" : "default"),
+        }}
+      />
+
+      {/* Contextual toolbar for selected drawing */}
+      {selectedDrawingId && selectedDrawingPosition && drawings && onDrawingUpdate && onDrawingDelete && (() => {
+        const selectedDrawing = drawings.find((d) => d.id === selectedDrawingId);
+        if (!selectedDrawing) return null;
+        return (
+          <ContextualToolbar
+            drawing={selectedDrawing}
+            position={selectedDrawingPosition}
+            onUpdate={(updates) => onDrawingUpdate(selectedDrawingId, updates)}
+            onDelete={() => onDrawingDelete(selectedDrawingId)}
+            containerBounds={containerRef.current?.getBoundingClientRect()}
+          />
+        );
+      })()}
+
+      {/* Drawing settings modal (opens on double-click) */}
+      {settingsDrawingId && drawings && onDrawingUpdate && (() => {
+        const settingsDrawing = drawings.find((d) => d.id === settingsDrawingId);
+        if (!settingsDrawing) return null;
+        // Get all position drawings for linking
+        const positionDrawings = drawings.filter(
+          (d): d is PositionDrawing => d.type === "longPosition" || d.type === "shortPosition"
+        );
+        return (
+          <DrawingSettings
+            drawing={settingsDrawing}
+            onUpdate={(updates) => onDrawingUpdate(settingsDrawingId, updates)}
+            onClose={() => setSettingsDrawingId(null)}
+            positions={positionDrawings}
+          />
+        );
+      })()}
 
       {/* Live price line + countdown are rendered by LivePricePrimitive directly on the chart canvas */}
 

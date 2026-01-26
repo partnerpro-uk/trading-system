@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BarChart3, LayoutDashboard, LineChart, ChevronDown } from "lucide-react";
+import { BarChart3, LayoutDashboard, LineChart, ChevronDown, BookOpen } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
+import { UserButton, SignedIn, SignedOut, SignInButton } from "@clerk/nextjs";
 
 const PAIRS = [
   { id: "DXY", name: "DXY", category: "indices" },
@@ -129,41 +130,56 @@ export function Navbar() {
 
   const isDashboard = pathname === "/";
   const isCharts = pathname.startsWith("/chart");
-  const isAnalysis = pathname.startsWith("/analysis");
+  const isTrades = pathname.startsWith("/trades");
 
-  // Hide navbar on chart pages - they have their own header
-  if (isCharts) {
+  // Hide navbar on chart and trades pages - they have their own header
+  if (isCharts || isTrades) {
     return null;
   }
 
+  // Only show navbar for signed-in users (landing page has its own header)
   return (
-    <nav className="bg-gray-900 border-b border-gray-800">
-      <div className="max-w-7xl mx-auto px-4">
-        <div className="flex items-center justify-between h-14">
-          {/* Logo / Brand */}
-          <Link href="/" className="flex items-center gap-2">
-            <BarChart3 className="w-6 h-6 text-blue-500" />
-            <span className="text-lg font-bold text-gray-100">Trading System</span>
-          </Link>
+    <SignedIn>
+      <nav className="bg-gray-900 border-b border-gray-800">
+        <div className="max-w-7xl mx-auto px-4">
+          <div className="flex items-center justify-between h-14">
+            {/* Logo / Brand */}
+            <Link href="/" className="flex items-center gap-2">
+              <BarChart3 className="w-6 h-6 text-blue-500" />
+              <span className="text-lg font-bold text-gray-100">Trading System</span>
+            </Link>
 
-          {/* Navigation Links */}
-          <div className="flex items-center gap-1">
-            <NavLink
-              href="/"
-              icon={<LayoutDashboard className="w-4 h-4" />}
-              label="Dashboard"
-              isActive={isDashboard}
-            />
-            <ChartsDropdown isActive={isCharts} />
-            <NavLink
-              href="/analysis"
-              icon={<BarChart3 className="w-4 h-4" />}
-              label="Analysis"
-              isActive={isAnalysis}
-            />
+            {/* Navigation Links */}
+            <div className="flex items-center gap-1">
+              <NavLink
+                href="/"
+                icon={<LayoutDashboard className="w-4 h-4" />}
+                label="Dashboard"
+                isActive={isDashboard}
+              />
+              <ChartsDropdown isActive={isCharts} />
+              <NavLink
+                href="/trades"
+                icon={<BookOpen className="w-4 h-4" />}
+                label="Trade Journal"
+                isActive={isTrades}
+              />
+            </div>
+
+            {/* User Menu */}
+            <div className="flex items-center gap-3">
+              <UserButton
+                afterSignOutUrl="/"
+                appearance={{
+                  elements: {
+                    avatarBox: "w-8 h-8",
+                  },
+                }}
+              />
+            </div>
           </div>
         </div>
-      </div>
-    </nav>
+      </nav>
+    </SignedIn>
   );
 }

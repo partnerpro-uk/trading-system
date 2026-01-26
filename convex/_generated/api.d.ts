@@ -9,6 +9,10 @@
  */
 
 import type * as crons from "../crons.js";
+import type * as drawings from "../drawings.js";
+import type * as lib_auth from "../lib/auth.js";
+import type * as trades from "../trades.js";
+import type * as users from "../users.js";
 
 import type {
   ApiFromModules,
@@ -18,6 +22,10 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   crons: typeof crons;
+  drawings: typeof drawings;
+  "lib/auth": typeof lib_auth;
+  trades: typeof trades;
+  users: typeof users;
 }>;
 
 /**

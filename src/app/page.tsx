@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useState, useEffect } from "react";
-import { BarChart2, LineChart, TrendingUp, ArrowRight } from "lucide-react";
+import { BarChart2, LineChart, TrendingUp, ArrowRight, Zap, Shield, BarChart3, BookOpen, Activity } from "lucide-react";
+import { SignedIn, SignedOut, SignInButton, SignUpButton } from "@clerk/nextjs";
 
 interface PriceData {
   price: number;
@@ -119,7 +120,144 @@ function QuickAccessCard({
   );
 }
 
-export default function Home() {
+// Landing page for unauthenticated users
+function LandingPage() {
+  return (
+    <div className="min-h-screen bg-gray-950">
+      {/* Hero Section */}
+      <div className="relative overflow-hidden">
+        {/* Background gradient */}
+        <div className="absolute inset-0 bg-gradient-to-br from-blue-600/10 via-transparent to-purple-600/10" />
+
+        <div className="relative max-w-7xl mx-auto px-4 py-20 sm:py-32">
+          <div className="text-center max-w-3xl mx-auto">
+            <div className="flex items-center justify-center gap-2 mb-6">
+              <BarChart3 className="w-10 h-10 text-blue-500" />
+              <span className="text-2xl font-bold text-gray-100">Trading System</span>
+            </div>
+
+            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-white mb-6 leading-tight">
+              Professional Trading
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500"> Analysis Platform</span>
+            </h1>
+
+            <p className="text-lg sm:text-xl text-gray-400 mb-10 max-w-2xl mx-auto">
+              Track your trades, analyze market sessions, and journal your trading journey with our comprehensive trading toolkit.
+            </p>
+
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+              <SignUpButton mode="modal">
+                <button className="w-full sm:w-auto px-8 py-3 text-lg font-semibold bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors">
+                  Get Started Free
+                </button>
+              </SignUpButton>
+              <SignInButton mode="modal">
+                <button className="w-full sm:w-auto px-8 py-3 text-lg font-semibold bg-gray-800 hover:bg-gray-700 text-gray-200 rounded-lg transition-colors border border-gray-700">
+                  Sign In
+                </button>
+              </SignInButton>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Features Section */}
+      <div className="max-w-7xl mx-auto px-4 py-16">
+        <h2 className="text-2xl font-bold text-center text-gray-200 mb-12">
+          Everything you need for serious trading
+        </h2>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <FeatureCard
+            icon={LineChart}
+            title="Advanced Charts"
+            description="Professional charting with session markers, news events, and drawing tools. Multiple timeframes from M5 to Monthly."
+            color="bg-blue-600"
+          />
+          <FeatureCard
+            icon={BookOpen}
+            title="Trade Journal"
+            description="Log and track your trades with automatic P&L calculation, win rate statistics, and performance metrics."
+            color="bg-green-600"
+          />
+          <FeatureCard
+            icon={Activity}
+            title="Session Tracking"
+            description="Visual markers for London, New York, and Asian trading sessions. Know exactly when markets are most active."
+            color="bg-purple-600"
+          />
+          <FeatureCard
+            icon={Zap}
+            title="Real-time Data"
+            description="Live price streaming from OANDA with automatic candle updates. Never miss a market move."
+            color="bg-yellow-600"
+          />
+          <FeatureCard
+            icon={TrendingUp}
+            title="Performance Tracking"
+            description="Track your win rate, P&L, and trading patterns. Know which setups work best for your style."
+            color="bg-pink-600"
+          />
+          <FeatureCard
+            icon={Shield}
+            title="Your Data, Private"
+            description="All your trades and drawings are private to your account. Nobody else can see your analysis."
+            color="bg-cyan-600"
+          />
+        </div>
+      </div>
+
+      {/* CTA Section */}
+      <div className="max-w-7xl mx-auto px-4 py-16">
+        <div className="bg-gradient-to-r from-blue-600/20 to-purple-600/20 rounded-2xl border border-gray-800 p-8 sm:p-12 text-center">
+          <h2 className="text-2xl sm:text-3xl font-bold text-white mb-4">
+            Ready to level up your trading?
+          </h2>
+          <p className="text-gray-400 mb-8 max-w-xl mx-auto">
+            Join now and start tracking your trades, analyzing your performance, and improving your results.
+          </p>
+          <SignUpButton mode="modal">
+            <button className="px-8 py-3 text-lg font-semibold bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors">
+              Create Free Account
+            </button>
+          </SignUpButton>
+        </div>
+      </div>
+
+      {/* Footer */}
+      <footer className="border-t border-gray-800 py-8">
+        <div className="max-w-7xl mx-auto px-4 text-center text-gray-500 text-sm">
+          Trading System - Professional analysis for serious traders
+        </div>
+      </footer>
+    </div>
+  );
+}
+
+function FeatureCard({
+  icon: Icon,
+  title,
+  description,
+  color,
+}: {
+  icon: React.ElementType;
+  title: string;
+  description: string;
+  color: string;
+}) {
+  return (
+    <div className="p-6 bg-gray-900 rounded-xl border border-gray-800">
+      <div className={`w-12 h-12 rounded-lg ${color} flex items-center justify-center mb-4`}>
+        <Icon className="w-6 h-6 text-white" />
+      </div>
+      <h3 className="text-lg font-semibold text-gray-100 mb-2">{title}</h3>
+      <p className="text-gray-500 text-sm">{description}</p>
+    </div>
+  );
+}
+
+// Dashboard for authenticated users
+function Dashboard() {
   const [prices, setPrices] = useState<Record<string, PriceData>>({});
 
   useEffect(() => {
@@ -161,10 +299,10 @@ export default function Home() {
               color="bg-blue-600"
             />
             <QuickAccessCard
-              href="/analysis"
-              icon={TrendingUp}
-              title="Analysis"
-              description="Run cluster analysis on historical data"
+              href="/trades"
+              icon={BookOpen}
+              title="Trade Journal"
+              description="Track and review your trades"
               color="bg-purple-600"
             />
           </div>
@@ -208,17 +346,29 @@ export default function Home() {
             <BarChart2 className="w-5 h-5 text-blue-500 mt-0.5" />
             <div>
               <h3 className="text-sm font-semibold text-gray-300 mb-1">
-                AI-Augmented Trading
+                Professional Trading Tools
               </h3>
               <p className="text-sm text-gray-500">
-                Use the Analysis module to run cluster analysis, pattern recognition, and
-                statistical backtesting on your historical data. Click on any pair to view
-                its live chart with session tracking and news events.
+                Click on any pair to view its live chart with session tracking and news events.
+                Use the Trade Journal to log and review your trades.
               </p>
             </div>
           </div>
         </section>
       </main>
     </div>
+  );
+}
+
+export default function Home() {
+  return (
+    <>
+      <SignedOut>
+        <LandingPage />
+      </SignedOut>
+      <SignedIn>
+        <Dashboard />
+      </SignedIn>
+    </>
   );
 }
