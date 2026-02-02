@@ -19,6 +19,7 @@ export interface FCRDetectorParams {
   timezone: string;             // Default: "America/New_York"
   fcrCandleCount: number;       // Default: 5 (first 5 M1 candles)
   riskRewardRatio: number;      // Default: 3
+  timeframeMinutes?: number;    // Auto-detected if not provided
 }
 
 export const FCR_DETECTOR_DEFAULTS: FCRDetectorParams = {
@@ -89,9 +90,34 @@ interface DayState {
 }
 
 /**
- * Check if candle is within the FCR formation window (9:30-9:35 AM ET)
+ * Detect timeframe from candle spacing (in minutes)
  */
-function isInFCRFormationWindow(timestamp: number, params: FCRDetectorParams): boolean {
+function detectTimeframeMinutes(candles: CandleInput[]): number {
+  if (candles.length < 2) return 1; // Default to M1
+
+  // Check spacing between first few candles
+  const diffs: number[] = [];
+  for (let i = 1; i < Math.min(5, candles.length); i++) {
+    const diff = (candles[i].timestamp - candles[i - 1].timestamp) / 60000; // ms to minutes
+    if (diff > 0 && diff < 50000) { // Sanity check (< 1 month)
+      diffs.push(diff);
+    }
+  }
+
+  if (diffs.length === 0) return 1;
+
+  // Use median to avoid gaps
+  diffs.sort((a, b) => a - b);
+  return Math.round(diffs[Math.floor(diffs.length / 2)]);
+}
+
+/**
+ * Check if candle is the FCR candle (first candle at/after 9:30 AM ET)
+ * For M1: checks 9:30-9:34 (5 candles)
+ * For M5: checks 9:30 (1 candle)
+ * For M15: checks 9:30 (1 candle, but covers 9:30-9:45)
+ */
+function isInFCRFormationWindow(timestamp: number, params: FCRDetectorParams, tfMinutes: number): boolean {
   const date = new Date(timestamp);
   // Approximate ET offset (EDT: UTC-4, EST: UTC-5)
   const month = date.getUTCMonth();
@@ -101,12 +127,18 @@ function isInFCRFormationWindow(timestamp: number, params: FCRDetectorParams): b
   const etHour = (date.getUTCHours() - offsetHours + 24) % 24;
   const etMinute = date.getUTCMinutes();
 
-  // 9:30-9:34 (first 5 minutes, inclusive of 9:30, 9:31, 9:32, 9:33, 9:34)
-  return (
-    etHour === params.marketOpenHour &&
-    etMinute >= params.marketOpenMinute &&
-    etMinute < params.marketOpenMinute + params.fcrCandleCount
-  );
+  // For M1: 9:30-9:34 (first 5 minutes)
+  // For M5+: 9:30 candle only (covers the FCR window)
+  if (tfMinutes === 1) {
+    return (
+      etHour === params.marketOpenHour &&
+      etMinute >= params.marketOpenMinute &&
+      etMinute < params.marketOpenMinute + params.fcrCandleCount
+    );
+  } else {
+    // For M5, M15, etc: the candle starting at 9:30 is the FCR candle
+    return etHour === params.marketOpenHour && etMinute === params.marketOpenMinute;
+  }
 }
 
 /**
@@ -231,7 +263,7 @@ function createEmptyOutputs(candles: CandleInput[]): FCRDetectorOutput {
 /**
  * Compute FCR detector values
  *
- * @param candles - Array of M1 candle data
+ * @param candles - Array of candle data (M1, M5, M15, etc.)
  * @param params - Detection parameters
  * @returns Object containing all FCR signals and levels
  */
@@ -243,6 +275,12 @@ export function computeFCRDetector(
   const output = createEmptyOutputs(candles);
 
   if (candles.length === 0) return output;
+
+  // Detect timeframe from candle spacing
+  const tfMinutes = params.timeframeMinutes ?? detectTimeframeMinutes(candles);
+
+  // For M5+, we use 1 candle as FCR instead of 5
+  const fcrCandlesNeeded = tfMinutes >= 5 ? 1 : fullParams.fcrCandleCount;
 
   // Track state per trading day
   const dayStates = new Map<string, DayState>();
@@ -285,18 +323,24 @@ export function computeFCRDetector(
     // State machine processing
     switch (day.state) {
       case "waiting_for_open":
-        if (isInFCRFormationWindow(candle.timestamp, fullParams)) {
+        if (isInFCRFormationWindow(candle.timestamp, fullParams, tfMinutes)) {
           day.state = "building_fcr";
           day.fcrCandles = [candle];
+          // For M5+, FCR is complete with 1 candle
+          if (fcrCandlesNeeded === 1) {
+            day.fcrHigh = candle.high;
+            day.fcrLow = candle.low;
+            day.state = "watching_breakout";
+          }
         }
         break;
 
       case "building_fcr":
-        if (isInFCRFormationWindow(candle.timestamp, fullParams)) {
+        if (isInFCRFormationWindow(candle.timestamp, fullParams, tfMinutes)) {
           day.fcrCandles.push(candle);
 
-          // Check if FCR is complete (5 candles)
-          if (day.fcrCandles.length >= fullParams.fcrCandleCount) {
+          // Check if FCR is complete
+          if (day.fcrCandles.length >= fcrCandlesNeeded) {
             day.fcrHigh = Math.max(...day.fcrCandles.map((c) => c.high));
             day.fcrLow = Math.min(...day.fcrCandles.map((c) => c.low));
             day.state = "watching_breakout";

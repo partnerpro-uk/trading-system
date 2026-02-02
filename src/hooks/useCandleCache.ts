@@ -15,7 +15,7 @@ export interface CandleData {
 }
 
 // All available timeframes in order
-const ALL_TIMEFRAMES = ["M5", "M15", "M30", "H1", "H4", "D", "W", "M"] as const;
+const ALL_TIMEFRAMES = ["M1", "M5", "M15", "M30", "H1", "H4", "D", "W", "M"] as const;
 
 // Batch sizes for fetching
 const INITIAL_CANDLES = 500;

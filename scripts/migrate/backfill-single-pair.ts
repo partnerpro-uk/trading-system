@@ -16,9 +16,9 @@ if (!PAIR) {
   process.exit(1);
 }
 
-const TIMEFRAMES = ["M5", "M15", "M30", "H1", "H4", "D", "W", "M"] as const;
+const TIMEFRAMES = ["M1", "M5", "M15", "M30", "H1", "H4", "D", "W", "M"] as const;
 const OANDA_GRANULARITY: Record<string, string> = {
-  M5: "M5", M15: "M15", M30: "M30", H1: "H1", H4: "H4", D: "D", W: "W", M: "M",
+  M1: "M1", M5: "M5", M15: "M15", M30: "M30", H1: "H1", H4: "H4", D: "D", W: "W", M: "M",
 };
 const MAX_CANDLES = 5000;
 const DELAY_MS = 150; // Slightly slower to avoid conflicts with main backfill
