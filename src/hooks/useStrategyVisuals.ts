@@ -584,7 +584,7 @@ export function useStrategyVisuals({
               entryPrice,
               stopLoss,
               takeProfit,
-              strategyId: visuals.strategyId,
+              strategyId: strategyId || visuals.strategyId, // Use folder name (strategyId prop) for consistency
             });
           }
         }
@@ -602,7 +602,7 @@ export function useStrategyVisuals({
               entryPrice,
               stopLoss,
               takeProfit,
-              strategyId: visuals.strategyId,
+              strategyId: strategyId || visuals.strategyId, // Use folder name (strategyId prop) for consistency
             });
           }
         }
@@ -610,7 +610,7 @@ export function useStrategyVisuals({
     }
 
     return result;
-  }, [visuals, candles, customIndicatorOutputs]);
+  }, [visuals, candles, customIndicatorOutputs, strategyId]);
 
   return {
     visuals,
