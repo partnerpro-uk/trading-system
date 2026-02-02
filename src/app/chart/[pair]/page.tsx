@@ -42,7 +42,7 @@ export default function ChartPage() {
   // Chart control states (lifted from Chart component)
   const [magnetMode, setMagnetMode] = useState<boolean>(false); // Off by default
   const [showSessionBgs, setShowSessionBgs] = useState<boolean>(true);
-  const [showSessionLines, setShowSessionLines] = useState<boolean>(true);
+  const [showSessionLines, setShowSessionLines] = useState<boolean>(false); // Off by default (less clutter)
   const [showSessionLabels, setShowSessionLabels] = useState<boolean>(false); // Off by default (less clutter)
   const [showNews, setShowNews] = useState<boolean>(true);
 
