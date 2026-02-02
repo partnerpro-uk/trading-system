@@ -15,6 +15,10 @@ import {
   getIndicatorSnapshot,
 } from "@/lib/indicators";
 import { computeSpikeDetector, SpikeDetectorOutput } from "@/strategies/echo-strategy/custom/spike-detector";
+import { computeFCRDetector, FCRDetectorOutput } from "@/strategies/first-candle-strategy/custom/fcr-detector";
+
+/** Union type for all custom indicator outputs */
+type CustomIndicatorOutput = SpikeDetectorOutput | FCRDetectorOutput;
 
 /** Marker configuration from visuals.json */
 interface MarkerConfig {
@@ -259,32 +263,35 @@ export function useStrategyVisuals({
     return visuals?.indicators || [];
   }, [visuals]);
 
-  // Compute custom indicators (spike detector)
+  // Compute custom indicators (spike detector, fcr detector, etc.)
   const customIndicatorOutputs = useMemo(() => {
     if (!visuals?.customIndicators || !candles || candles.length === 0) {
-      return new Map<string, SpikeDetectorOutput>();
+      return new Map<string, CustomIndicatorOutput>();
     }
 
-    const outputs = new Map<string, SpikeDetectorOutput>();
+    const outputs = new Map<string, CustomIndicatorOutput>();
+
+    // Convert candles to CandleInput format (shared for all custom indicators)
+    const candleInputs: CandleInput[] = candles.map((c) => ({
+      timestamp: c.timestamp,
+      open: c.open,
+      high: c.high,
+      low: c.low,
+      close: c.close,
+      volume: c.volume,
+    }));
 
     for (const customConfig of visuals.customIndicators) {
-      if (customConfig.module.includes("spike-detector")) {
-        // Convert candles to CandleInput format
-        const candleInputs: CandleInput[] = candles.map((c) => ({
-          timestamp: c.timestamp,
-          open: c.open,
-          high: c.high,
-          low: c.low,
-          close: c.close,
-          volume: c.volume,
-        }));
-
-        try {
+      try {
+        if (customConfig.module.includes("spike-detector")) {
           const output = computeSpikeDetector(candleInputs, customConfig.params as Record<string, number>);
           outputs.set(customConfig.id, output);
-        } catch (err) {
-          console.error(`Error computing ${customConfig.id}:`, err);
+        } else if (customConfig.module.includes("fcr-detector")) {
+          const output = computeFCRDetector(candleInputs, customConfig.params as Record<string, number>);
+          outputs.set(customConfig.id, output);
         }
+      } catch (err) {
+        console.error(`Error computing ${customConfig.id}:`, err);
       }
     }
 
@@ -313,13 +320,15 @@ export function useStrategyVisuals({
     const customMaps = new Map<string, Map<string, Map<number, number>>>();
     for (const [id, output] of customIndicatorOutputs) {
       const fieldMaps = new Map<string, Map<number, number>>();
-      // upSpike, downSpike, spikeStrength
-      for (const fieldName of ["upSpike", "downSpike", "spikeStrength"] as const) {
-        const valueMap = new Map<number, number>();
-        for (const v of output[fieldName]) {
-          valueMap.set(v.timestamp, v.value);
+      // Dynamically extract all fields from the output object
+      for (const [fieldName, values] of Object.entries(output)) {
+        if (Array.isArray(values) && values.length > 0 && typeof values[0]?.timestamp === "number") {
+          const valueMap = new Map<number, number>();
+          for (const v of values as Array<{ timestamp: number; value: number }>) {
+            valueMap.set(v.timestamp, v.value);
+          }
+          fieldMaps.set(fieldName, valueMap);
         }
-        fieldMaps.set(fieldName, valueMap);
       }
       customMaps.set(id, fieldMaps);
     }

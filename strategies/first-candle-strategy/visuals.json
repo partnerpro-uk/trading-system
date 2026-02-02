@@ -1,0 +1,110 @@
+{
+  "strategyId": "fcr-strategy",
+  "name": "First Candle Range (FCR)",
+  "version": "1.0",
+
+  "indicators": [],
+
+  "customIndicators": [
+    {
+      "id": "fcr_detector",
+      "module": "./custom/fcr-detector",
+      "params": {
+        "marketOpenHour": 9,
+        "marketOpenMinute": 30,
+        "timezone": "America/New_York",
+        "fcrCandleCount": 5,
+        "riskRewardRatio": 3
+      }
+    }
+  ],
+
+  "markers": {
+    "breakout_long": {
+      "condition": "fcr_detector.breakoutUp === 1",
+      "shape": "arrowUp",
+      "color": "#22C55E",
+      "position": "belowBar",
+      "text": "Breakout"
+    },
+    "breakout_short": {
+      "condition": "fcr_detector.breakoutDown === 1",
+      "shape": "arrowDown",
+      "color": "#EF5350",
+      "position": "aboveBar",
+      "text": "Breakout"
+    },
+    "fvg_formed": {
+      "condition": "fcr_detector.fvgFormed === 1",
+      "shape": "circle",
+      "color": "#9E9E9E",
+      "position": "inBar",
+      "text": "FVG"
+    },
+    "retest": {
+      "condition": "fcr_detector.retest === 1",
+      "shape": "circle",
+      "color": "#FFA726",
+      "position": "inBar",
+      "text": "Retest"
+    },
+    "entry_long": {
+      "condition": "fcr_detector.entryLong === 1",
+      "shape": "arrowUp",
+      "color": "#22C55E",
+      "position": "belowBar",
+      "text": "Entry",
+      "size": 1.5
+    },
+    "entry_short": {
+      "condition": "fcr_detector.entryShort === 1",
+      "shape": "arrowDown",
+      "color": "#EF5350",
+      "position": "aboveBar",
+      "text": "Entry",
+      "size": 1.5
+    }
+  },
+
+  "zones": {
+    "fcr_range_active": {
+      "condition": "fcr_detector.inFcrWindow === 1",
+      "color": "rgba(33, 150, 243, 0.03)"
+    }
+  },
+
+  "levels": {
+    "fcr_high": {
+      "source": "fcr_detector.fcrHigh",
+      "color": "rgba(255, 255, 255, 0.5)",
+      "lineWidth": 1,
+      "lineStyle": "dashed",
+      "label": "FCR High"
+    },
+    "fcr_low": {
+      "source": "fcr_detector.fcrLow",
+      "color": "rgba(255, 255, 255, 0.5)",
+      "lineWidth": 1,
+      "lineStyle": "dashed",
+      "label": "FCR Low"
+    },
+    "fvg_top": {
+      "source": "fcr_detector.fvgTop",
+      "color": "rgba(158, 158, 158, 0.3)",
+      "lineWidth": 1,
+      "lineStyle": "dotted"
+    },
+    "fvg_bottom": {
+      "source": "fcr_detector.fvgBottom",
+      "color": "rgba(158, 158, 158, 0.3)",
+      "lineWidth": 1,
+      "lineStyle": "dotted"
+    }
+  },
+
+  "description": {
+    "fcr_detector": "Detects FCR setups: first candle range, breakout, FVG formation, retest, and engulfing entry confirmation"
+  },
+
+  "notes": "This strategy runs on M1 timeframe. The first 5 M1 candles (9:30-9:35 AM ET) are aggregated to form the FCR range. Breakouts, FVGs, retests, and entries are all detected on the M1 chart."
+}

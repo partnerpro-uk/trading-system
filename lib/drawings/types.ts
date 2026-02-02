@@ -66,7 +66,11 @@ export type DrawingType =
   | "circle"
   | "parallelChannel"
   | "longPosition"
-  | "shortPosition";
+  | "shortPosition"
+  | "markerArrowUp"
+  | "markerArrowDown"
+  | "markerCircle"
+  | "markerSquare";
 
 /**
  * Fibonacci Retracement Drawing
@@ -227,6 +231,25 @@ export interface ShortPositionDrawing extends BasePositionDrawing {
 export type PositionDrawing = LongPositionDrawing | ShortPositionDrawing;
 
 /**
+ * Marker shape types (for single-point candle markers)
+ */
+export type MarkerShape = "arrowUp" | "arrowDown" | "circle" | "square";
+
+/**
+ * Marker Drawing
+ * Single-point markers placed on specific candles
+ */
+export interface MarkerDrawing extends BaseDrawing {
+  type: "markerArrowUp" | "markerArrowDown" | "markerCircle" | "markerSquare";
+  anchor: DrawingAnchor;         // The candle to place marker on
+  shape: MarkerShape;            // Visual shape
+  color: string;                 // Marker color
+  position: "aboveBar" | "belowBar" | "inBar";  // Position relative to candle
+  size?: number;                 // Size multiplier (default: 1)
+  text?: string;                 // Optional label text
+}
+
+/**
  * Union of all drawing types
  */
 export type Drawing =
@@ -239,7 +262,8 @@ export type Drawing =
   | CircleDrawing
   | ParallelChannelDrawing
   | LongPositionDrawing
-  | ShortPositionDrawing;
+  | ShortPositionDrawing
+  | MarkerDrawing;
 
 /**
  * Drawing state for a specific chart view
@@ -308,6 +332,12 @@ export const DEFAULT_DRAWING_COLORS = {
       loss: "#EF5350",
     },
   },
+  marker: {
+    arrowUp: "#22C55E",    // Green for bullish
+    arrowDown: "#EF5350",  // Red for bearish
+    circle: "#3B82F6",     // Blue
+    square: "#F59E0B",     // Amber
+  },
 };
 
 /**
@@ -351,4 +381,8 @@ export function isLongPositionDrawing(drawing: Drawing): drawing is LongPosition
 
 export function isShortPositionDrawing(drawing: Drawing): drawing is ShortPositionDrawing {
   return drawing.type === "shortPosition";
+}
+
+export function isMarkerDrawing(drawing: Drawing): drawing is MarkerDrawing {
+  return ["markerArrowUp", "markerArrowDown", "markerCircle", "markerSquare"].includes(drawing.type);
 }

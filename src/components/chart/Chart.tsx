@@ -27,6 +27,8 @@ import {
   isRectangleDrawing,
   isCircleDrawing,
   isPositionDrawing,
+  isMarkerDrawing,
+  MarkerDrawing,
   isLongPositionDrawing,
   DEFAULT_FIB_LEVELS,
   DEFAULT_DRAWING_COLORS,
@@ -1094,6 +1096,10 @@ export function Chart({
           rightEdgeX,
           drawing,
         };
+      } else if (isMarkerDrawing(drawing)) {
+        const x = timeScale.timeToCoordinate((drawing.anchor.timestamp / 1000) as Time);
+        const y = series.priceToCoordinate(drawing.anchor.price);
+        return x !== null && y !== null ? { type: "marker" as const, x, y, anchor: drawing.anchor } : null;
       } else if (isTrendlineDrawing(drawing) || isFibonacciDrawing(drawing) || isRectangleDrawing(drawing) || isCircleDrawing(drawing)) {
         const d = drawing as { anchor1: DrawingAnchor; anchor2: DrawingAnchor };
         const x1 = timeScale.timeToCoordinate((d.anchor1.timestamp / 1000) as Time);
@@ -1155,6 +1161,12 @@ export function Chart({
           const maxY = Math.max(coords.tpY, coords.slY);
           if (mouseX >= minX - HIT_THRESHOLD && mouseX <= maxX + HIT_THRESHOLD &&
               mouseY >= minY - HIT_THRESHOLD && mouseY <= maxY + HIT_THRESHOLD) {
+            return { drawingId: drawing.id, part: "body" };
+          }
+        } else if (coords.type === "marker") {
+          // Marker drawing - single point, use larger hit area for easier selection
+          const markerSize = 15; // Match visual size
+          if (Math.hypot(mouseX - coords.x, mouseY - coords.y) < markerSize + 5) {
             return { drawingId: drawing.id, part: "body" };
           }
         } else if (coords.type === "twoPoint") {
@@ -1226,6 +1238,15 @@ export function Chart({
         if (activeDrawingTool === "horizontalRay") {
           if (onDrawingCreate) {
             onDrawingCreate("horizontalRay", { anchor1: anchor });
+          }
+          return;
+        }
+
+        // Marker drawings are single-click
+        if (activeDrawingTool === "markerArrowUp" || activeDrawingTool === "markerArrowDown" ||
+            activeDrawingTool === "markerCircle" || activeDrawingTool === "markerSquare") {
+          if (onDrawingCreate) {
+            onDrawingCreate(activeDrawingTool, { anchor1: anchor });
           }
           return;
         }
@@ -1409,6 +1430,15 @@ export function Chart({
               endTimestamp: orig.endTimestamp ? orig.endTimestamp + timeDelta : undefined,
             });
           }
+        } else if (isMarkerDrawing(originalDrawing)) {
+          // Move marker drawing - has single anchor
+          const orig = originalDrawing as MarkerDrawing;
+          onDrawingUpdate(drawingId, {
+            anchor: {
+              timestamp: orig.anchor.timestamp + timeDelta,
+              price: orig.anchor.price + priceDelta,
+            },
+          });
         }
 
         drawAllDrawings();
@@ -2460,6 +2490,86 @@ export function Chart({
             ctx.lineWidth = 2;
             ctx.stroke();
           }
+        }
+      } else if (isMarkerDrawing(drawing)) {
+        // Marker Drawing - single-point marker on candle
+        const marker = drawing as MarkerDrawing;
+        const x = timeScale.timeToCoordinate((marker.anchor.timestamp / 1000) as Time);
+        const y = series.priceToCoordinate(marker.anchor.price);
+
+        if (x === null || y === null) return;
+
+        const size = (marker.size || 1) * 12;
+        const color = marker.color;
+
+        ctx.fillStyle = color;
+        ctx.strokeStyle = isSelected ? "#2962FF" : color;
+        ctx.lineWidth = isSelected ? 2 : 1;
+
+        // Adjust y position based on marker position
+        let adjustedY = y;
+        if (marker.position === "aboveBar") {
+          adjustedY = y - size - 5;
+        } else if (marker.position === "belowBar") {
+          adjustedY = y + size + 5;
+        }
+
+        if (marker.shape === "arrowUp") {
+          // Draw upward arrow
+          ctx.beginPath();
+          ctx.moveTo(x, adjustedY - size);
+          ctx.lineTo(x - size * 0.6, adjustedY);
+          ctx.lineTo(x - size * 0.2, adjustedY);
+          ctx.lineTo(x - size * 0.2, adjustedY + size * 0.5);
+          ctx.lineTo(x + size * 0.2, adjustedY + size * 0.5);
+          ctx.lineTo(x + size * 0.2, adjustedY);
+          ctx.lineTo(x + size * 0.6, adjustedY);
+          ctx.closePath();
+          ctx.fill();
+          if (isSelected) ctx.stroke();
+        } else if (marker.shape === "arrowDown") {
+          // Draw downward arrow
+          ctx.beginPath();
+          ctx.moveTo(x, adjustedY + size);
+          ctx.lineTo(x - size * 0.6, adjustedY);
+          ctx.lineTo(x - size * 0.2, adjustedY);
+          ctx.lineTo(x - size * 0.2, adjustedY - size * 0.5);
+          ctx.lineTo(x + size * 0.2, adjustedY - size * 0.5);
+          ctx.lineTo(x + size * 0.2, adjustedY);
+          ctx.lineTo(x + size * 0.6, adjustedY);
+          ctx.closePath();
+          ctx.fill();
+          if (isSelected) ctx.stroke();
+        } else if (marker.shape === "circle") {
+          // Draw circle
+          ctx.beginPath();
+          ctx.arc(x, adjustedY, size * 0.5, 0, 2 * Math.PI);
+          ctx.fill();
+          if (isSelected) ctx.stroke();
+        } else if (marker.shape === "square") {
+          // Draw square
+          const halfSize = size * 0.5;
+          ctx.fillRect(x - halfSize, adjustedY - halfSize, size, size);
+          if (isSelected) {
+            ctx.strokeRect(x - halfSize, adjustedY - halfSize, size, size);
+          }
+        }
+
+        // Draw text label if present
+        if (marker.text) {
+          ctx.font = "11px Inter, sans-serif";
+          ctx.fillStyle = color;
+          ctx.textAlign = "center";
+          const textY = marker.position === "aboveBar" ? adjustedY - size - 5 : adjustedY + size + 15;
+          ctx.fillText(marker.text, x, textY);
+          ctx.textAlign = "left";
+        }
+
+        // Draw user label
+        if (marker.label) {
+          const labelColor = marker.labelColor || color;
+          const labelY = marker.position === "belowBar" ? adjustedY + size + 25 : adjustedY - size - 15;
+          drawLabel(ctx, marker.label, x, labelY, labelColor, "above", "pill");
         }
       }
     };

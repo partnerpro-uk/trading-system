@@ -58,6 +58,10 @@ const DRAWING_TYPE_MAP: Record<DrawingType, LineToolType | null> = {
   parallelChannel: "ParallelChannel",
   longPosition: null, // Position uses custom rendering
   shortPosition: null, // Position uses custom rendering
+  markerArrowUp: null, // Markers use custom canvas rendering
+  markerArrowDown: null,
+  markerCircle: null,
+  markerSquare: null,
 };
 
 /**

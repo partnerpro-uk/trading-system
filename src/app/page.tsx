@@ -16,6 +16,7 @@ const PAIRS = [
   // Indices
   { id: "DXY", name: "DXY", description: "US Dollar Index", category: "indices" },
   { id: "SPX500_USD", name: "S&P 500", description: "S&P 500 Index", category: "indices" },
+  { id: "NAS100_USD", name: "Nasdaq 100", description: "Nasdaq 100 Index", category: "indices" },
   // Forex Majors
   { id: "EUR_USD", name: "EUR/USD", description: "Euro / US Dollar", category: "forex" },
   { id: "GBP_USD", name: "GBP/USD", description: "British Pound / US Dollar", category: "forex" },
@@ -33,7 +34,7 @@ function formatPrice(pair: string, price: number): string {
   if (pair === "USD_JPY") return price.toFixed(3);
   if (pair === "XAU_USD") return price.toFixed(2);
   if (pair === "BTC_USD") return price.toFixed(0);
-  if (pair === "SPX500_USD") return price.toFixed(1);
+  if (pair === "SPX500_USD" || pair === "NAS100_USD") return price.toFixed(1);
   if (pair === "DXY") return price.toFixed(3);
   return price.toFixed(5);
 }

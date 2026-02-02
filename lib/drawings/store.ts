@@ -20,6 +20,8 @@ import {
   CircleDrawing,
   LongPositionDrawing,
   ShortPositionDrawing,
+  MarkerDrawing,
+  MarkerShape,
   DrawingCreator,
   DEFAULT_FIB_LEVELS,
   DEFAULT_DRAWING_COLORS,
@@ -122,6 +124,13 @@ interface DrawingStore {
     takeProfit: number,
     stopLoss: number,
     options?: Partial<ShortPositionDrawing>
+  ) => string;
+  createMarker: (
+    pair: string,
+    timeframe: string,
+    anchor: DrawingAnchor,
+    markerType: "markerArrowUp" | "markerArrowDown" | "markerCircle" | "markerSquare",
+    options?: Partial<MarkerDrawing>
   ) => string;
 
   // Persistence
@@ -480,6 +489,46 @@ export const useDrawingStore = create<DrawingStore>()(
         return get().addDrawing(pair, timeframe, drawing);
       },
 
+      // Create Marker (arrow, circle, square on candle)
+      createMarker: (pair, timeframe, anchor, markerType, options = {}) => {
+        // Map drawing type to marker shape
+        const shapeMap: Record<string, MarkerShape> = {
+          markerArrowUp: "arrowUp",
+          markerArrowDown: "arrowDown",
+          markerCircle: "circle",
+          markerSquare: "square",
+        };
+
+        // Default colors per marker type
+        const colorMap: Record<string, string> = {
+          markerArrowUp: DEFAULT_DRAWING_COLORS.marker.arrowUp,
+          markerArrowDown: DEFAULT_DRAWING_COLORS.marker.arrowDown,
+          markerCircle: DEFAULT_DRAWING_COLORS.marker.circle,
+          markerSquare: DEFAULT_DRAWING_COLORS.marker.square,
+        };
+
+        // Default position per marker type
+        const positionMap: Record<string, "aboveBar" | "belowBar" | "inBar"> = {
+          markerArrowUp: "belowBar",
+          markerArrowDown: "aboveBar",
+          markerCircle: "inBar",
+          markerSquare: "inBar",
+        };
+
+        const drawing: Omit<MarkerDrawing, "id" | "createdAt"> = {
+          type: markerType,
+          anchor,
+          shape: shapeMap[markerType],
+          color: options.color || colorMap[markerType],
+          position: options.position || positionMap[markerType],
+          size: options.size || 1,
+          createdBy: options.createdBy || "user",
+          ...options,
+        };
+
+        return get().addDrawing(pair, timeframe, drawing);
+      },
+
       // Save to server (Convex)
       saveToServer: async (pair, timeframe) => {
         const drawings = get().getDrawings(pair, timeframe);
@@ -559,6 +608,7 @@ export function useChartDrawings(pair: string, timeframe: string) {
     createCircle,
     createLongPosition,
     createShortPosition,
+    createMarker,
     pushToUndoStack,
     undo,
     canUndo,
@@ -598,6 +648,11 @@ export function useChartDrawings(pair: string, timeframe: string) {
       stopLoss: number,
       options?: Partial<ShortPositionDrawing>
     ) => createShortPosition(pair, timeframe, entry, takeProfit, stopLoss, options),
+    createMarker: (
+      anchor: DrawingAnchor,
+      markerType: "markerArrowUp" | "markerArrowDown" | "markerCircle" | "markerSquare",
+      options?: Partial<MarkerDrawing>
+    ) => createMarker(pair, timeframe, anchor, markerType, options),
     // Undo
     pushToUndoStack: () => pushToUndoStack(pair, timeframe),
     undo: () => undo(pair, timeframe),

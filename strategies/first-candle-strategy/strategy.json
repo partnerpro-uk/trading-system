@@ -1,0 +1,522 @@
+{
+  "strategy": {
+    "name": "First Candle Rule (FCR)",
+    "version": "1.0",
+    "source": "caspersmcwisdom Instagram Reel",
+    "market": "US Equities / Indices",
+
+    "thesis": {
+      "summary": "Trade breakouts from the first 5-minute candle of the trading day, using Fair Value Gaps and engulfing candles to confirm re-entry after a pullback.",
+      "reasoning": "The first 5-minute candle after market open captures the initial battle between buyers and sellers. Its high and low represent the first consensus range of the day. When price breaks out of this range, it signals which side has taken control. However, rather than chasing the breakout, we wait for price to pull back into a gap left behind by the breakout move, then enter when a strong candle confirms the pullback is over. This gives a better entry price and a tighter stop loss."
+    },
+
+    "timeframes": {
+      "setup_timeframe": {
+        "period": "5 minutes",
+        "purpose": "Used only for the first candle of the trading day. This single candle defines the high and low levels that the entire strategy is built around."
+      },
+      "execution_timeframe": {
+        "period": "1 minute",
+        "purpose": "After the first 5-minute candle completes, switch to the 1-minute chart for all remaining steps: watching for breakout, identifying the Fair Value Gap, spotting the retest, and confirming the engulfing candle entry."
+      }
+    },
+
+    "data_requirements": {
+      "candle_data": {
+        "description": "Each time period (candle) provides four price points",
+        "fields": {
+          "open": "The first price when this time period began",
+          "high": "The highest price reached during this time period",
+          "low": "The lowest price reached during this time period",
+          "close": "The final price when this time period ended"
+        }
+      },
+      "candle_reference": {
+        "description": "How to reference candles in sequence",
+        "current": "The candle that is currently forming (incomplete)",
+        "previous_1": "The most recently completed candle (1 candle ago)",
+        "previous_2": "The candle that completed 2 candles ago",
+        "previous_3": "The candle that completed 3 candles ago"
+      },
+      "time_data": {
+        "description": "The strategy requires knowing the exact time each candle represents",
+        "market_open": "9:30 AM Eastern Time (US market open)",
+        "first_candle_window": "9:30 AM to 9:35 AM Eastern Time"
+      }
+    },
+
+    "conditions": {
+
+      "step_1_first_candle_range": {
+        "sequence": 1,
+        "purpose": "Establish the reference range for the day",
+        "timing": "Wait for the 9:30 AM to 9:35 AM five-minute candle to fully complete",
+
+        "literal_explanation": {
+          "what_to_do": "At exactly 9:30 AM Eastern Time, one 5-minute candle begins forming. This candle will finish at 9:35 AM. Do nothing until this candle is fully complete. Once it closes, record two values.",
+          "fcr_high": "The highest price that was reached at any point during this 5-minute candle. This is the upper wick tip of the candle.",
+          "fcr_low": "The lowest price that was reached at any point during this 5-minute candle. This is the lower wick tip of the candle.",
+          "what_these_become": "These two price levels become horizontal lines extending to the right on your chart. They act as breakout levels for the rest of the session."
+        },
+
+        "visual_explanation": {
+          "appearance": "A single large candle on the 5-minute chart at market open. On the 1-minute chart, this corresponds to five smaller candles between 9:30 and 9:35.",
+          "chart_markings": "Two horizontal dashed lines extend from this candle to the right. The upper line sits at the candle's highest wick price. The lower line sits at the candle's lowest wick price. All subsequent price action is measured against these two lines.",
+          "fcr_label": "The 5-minute candle itself can be highlighted with a box labeled 'FCR' to identify it as the reference candle."
+        }
+      },
+
+      "step_2_breakout": {
+        "sequence": 2,
+        "purpose": "Determine trade direction based on which level price breaks first",
+        "timing": "After the first 5-minute candle completes, switch to the 1-minute chart and watch",
+
+        "literal_explanation": {
+          "what_to_watch": "On the 1-minute chart, observe each new candle as it forms. We are waiting for a candle to CLOSE beyond one of the two FCR lines.",
+          "bullish_breakout": "A 1-minute candle's closing price is above the FCR high line. The entire candle body (from open to close) has moved above the high. This tells us buyers have taken control.",
+          "bearish_breakout": "A 1-minute candle's closing price is below the FCR low line. The entire candle body has moved below the low. This tells us sellers have taken control.",
+          "important_distinction": "We require the candle to CLOSE beyond the line, not just poke through with a wick. A wick touching the line but closing back inside does NOT count as a breakout. The close represents commitment - traders held their positions through the end of that candle.",
+          "direction_lock": "Once a breakout occurs in one direction, we only look for trades in that direction. If price breaks above the high, we only look for buy setups. If price breaks below the low, we only look for sell setups."
+        },
+
+        "visual_explanation": {
+          "bullish_breakout_appearance": "You will see one or more 1-minute candles pushing upward. The candle that breaks out will have its body (the thick colored portion) positioned above the upper horizontal line. There should be clear space between the line and the bottom of the candle body.",
+          "bearish_breakout_appearance": "You will see one or more 1-minute candles pushing downward. The candle that breaks out will have its body positioned below the lower horizontal line.",
+          "chart_marking": "An arrow marker appears on the candle that confirms the breakout. Upward arrow below the candle for bullish breakout, downward arrow above the candle for bearish breakout."
+        }
+      },
+
+      "step_3_fair_value_gap": {
+        "sequence": 3,
+        "purpose": "Identify an imbalance zone left behind by the breakout move",
+        "timing": "Forms during or shortly after the breakout move",
+
+        "literal_explanation": {
+          "what_it_is": "A Fair Value Gap (FVG) is a price zone where trading was so one-sided that a gap was left between candle wicks. It requires exactly three consecutive candles.",
+
+          "bullish_fvg_detection": {
+            "step_1": "Take three consecutive 1-minute candles: call them Candle A, Candle B, and Candle C (A is oldest, C is newest)",
+            "step_2": "Candle B should be a strong upward candle - its body is large relative to nearby candles and it closes significantly higher than it opened",
+            "step_3": "Compare Candle A's highest price (the tip of its upper wick) to Candle C's lowest price (the tip of its lower wick)",
+            "step_4": "If Candle C's low is HIGHER than Candle A's high, a bullish FVG exists",
+            "step_5": "The FVG zone is the price range between Candle A's high (bottom of gap) and Candle C's low (top of gap)",
+            "meaning": "Candle B moved up so aggressively that the candle after it (C) started higher than where the candle before it (A) ended. There is a vertical gap on the chart where no wick-to-wick overlap exists."
+          },
+
+          "bearish_fvg_detection": {
+            "step_1": "Take three consecutive 1-minute candles: Candle A, Candle B, and Candle C",
+            "step_2": "Candle B should be a strong downward candle - large body closing significantly lower than it opened",
+            "step_3": "Compare Candle A's lowest price (the tip of its lower wick) to Candle C's highest price (the tip of its upper wick)",
+            "step_4": "If Candle C's high is LOWER than Candle A's low, a bearish FVG exists",
+            "step_5": "The FVG zone is the price range between Candle A's low (top of gap) and Candle C's high (bottom of gap)",
+            "meaning": "Candle B moved down so aggressively that the candle after it started lower than where the candle before it ended."
+          },
+
+          "no_fvg_rule": "If the breakout move happens gradually with overlapping wicks (candle A's wick and candle C's wick overlap in price), then no Fair Value Gap has formed. In this case, there is NO trade. Walk away and wait for the next day.",
+
+          "why_it_matters": "The gap represents a price zone where one side (buyers or sellers) was completely dominant. Markets tend to revisit these zones before continuing in the breakout direction. This creates our entry opportunity."
+        },
+
+        "visual_explanation": {
+          "appearance": "On the chart, you will see a strong candle (Candle B) that is noticeably larger than its neighbors. Between the candle before it and the candle after it, there is a visible vertical space where no wicks overlap.",
+          "chart_marking": "A semi-transparent rectangle is drawn in this gap zone. The rectangle's top edge sits at the upper boundary of the gap and its bottom edge sits at the lower boundary. The rectangle is labeled 'FVG' in its center.",
+          "bullish_example": "After an upward breakout, the rectangle appears above or near the FCR high line. It looks like a shaded band floating in the space between the wicks of candle A and candle C.",
+          "bearish_example": "After a downward breakout, the rectangle appears below or near the FCR low line."
+        }
+      },
+
+      "step_4_retest": {
+        "sequence": 4,
+        "purpose": "Wait for price to pull back into the Fair Value Gap zone",
+        "timing": "After the FVG has formed, watch for price to return to that zone",
+
+        "literal_explanation": {
+          "what_to_watch": "After the breakout creates the FVG, price will often continue in the breakout direction for a few more candles. Then it pulls back.",
+
+          "bullish_retest": {
+            "what_happens": "After breaking above the FCR high and forming a bullish FVG, price drops back down",
+            "condition": "At least one 1-minute candle's low price enters the FVG zone. Meaning: the low of that candle is at or below the top of the FVG rectangle (Candle C's low from the FVG detection), AND the low is at or above the bottom of the FVG rectangle (Candle A's high from the FVG detection)",
+            "meaning": "Price has revisited the imbalance zone. Buyers who missed the initial breakout now have a chance to enter at a better price."
+          },
+
+          "bearish_retest": {
+            "what_happens": "After breaking below the FCR low and forming a bearish FVG, price rises back up",
+            "condition": "At least one 1-minute candle's high price enters the FVG zone. Meaning: the high is at or above the bottom of the FVG rectangle, AND at or below the top of the FVG rectangle",
+            "meaning": "Price has revisited the imbalance zone. Sellers who missed the initial breakdown now have a chance to enter."
+          },
+
+          "retest_candle": "The candle (or candles) that dip into the FVG zone are called 'retest candles'. We note the deepest point of the retest: for a bullish setup, the lowest low among all retest candles. For a bearish setup, the highest high among all retest candles. This deepest point determines our stop loss placement."
+        },
+
+        "visual_explanation": {
+          "appearance": "After the breakout pushes price away from the FVG zone, you see candles start moving back toward it. One or more candles dip into the shaded FVG rectangle. Their wicks or bodies enter the highlighted zone.",
+          "chart_marking": "A small circle marker appears on the candle that first enters the FVG zone, indicating the retest has begun."
+        }
+      },
+
+      "step_5_engulfing_confirmation": {
+        "sequence": 5,
+        "purpose": "Confirm that the pullback is over and the breakout direction is resuming",
+        "timing": "During or immediately after the retest into the FVG",
+
+        "literal_explanation": {
+          "what_it_is": "An engulfing candle is a candle whose body completely covers (engulfs) the body of the previous candle, in the direction of our trade.",
+
+          "bullish_engulfing": {
+            "step_1": "Look at the current completed 1-minute candle and the one before it",
+            "step_2": "The current candle must close HIGHER than it opened (it is a bullish/up candle)",
+            "step_3": "The current candle's close must be above the previous candle's open",
+            "step_4": "The current candle's open must be at or below the previous candle's close",
+            "step_5": "This means the current candle's body (from its open to its close) completely wraps around the previous candle's body",
+            "meaning": "The previous candle showed selling pressure (part of the retest pullback). The engulfing candle shows buyers have overwhelmed the sellers in a single candle. The pullback is over."
+          },
+
+          "bearish_engulfing": {
+            "step_1": "Look at the current completed 1-minute candle and the one before it",
+            "step_2": "The current candle must close LOWER than it opened (it is a bearish/down candle)",
+            "step_3": "The current candle's close must be below the previous candle's open",
+            "step_4": "The current candle's open must be at or above the previous candle's close",
+            "step_5": "This means the current candle's body completely wraps around the previous candle's body",
+            "meaning": "The previous candle showed buying pressure (part of the retest pullback). The engulfing candle shows sellers have overwhelmed the buyers."
+          },
+
+          "location_requirement": "The engulfing candle must form at or near the FVG zone during the retest. An engulfing candle that forms far away from the FVG is not a valid signal for this strategy.",
+
+          "this_is_the_entry": "When a valid engulfing candle completes, this is our trade entry. We enter the trade at the closing price of the engulfing candle."
+        },
+
+        "visual_explanation": {
+          "appearance": "On the chart, you see a candle that is noticeably wider (taller body) than the one before it, and it moves in the opposite direction of the retest. For a bullish setup: a small red/down candle followed by a larger green/up candle whose body covers the red candle entirely. For a bearish setup: a small green/up candle followed by a larger red/down candle.",
+          "chart_marking": "An arrow marker appears on the engulfing candle. Upward arrow for bullish entry, downward arrow for bearish entry. This is the entry signal."
+        }
+      }
+    },
+
+    "entry_logic": {
+      "bullish_trade": {
+        "all_conditions_in_sequence": [
+          "The 9:30 AM five-minute candle has completed. Its high and low are recorded.",
+          "On the 1-minute chart, a candle has CLOSED above the FCR high price.",
+          "During the breakout move upward, a bullish Fair Value Gap has formed (gap between Candle A's upper wick and Candle C's lower wick in a 3-candle sequence).",
+          "Price has pulled back and at least one candle's low has entered the FVG zone.",
+          "A bullish engulfing candle has formed at or near the FVG zone.",
+          "Enter BUY at the closing price of the engulfing candle."
+        ]
+      },
+      "bearish_trade": {
+        "all_conditions_in_sequence": [
+          "The 9:30 AM five-minute candle has completed. Its high and low are recorded.",
+          "On the 1-minute chart, a candle has CLOSED below the FCR low price.",
+          "During the breakout move downward, a bearish Fair Value Gap has formed (gap between Candle A's lower wick and Candle C's upper wick in a 3-candle sequence).",
+          "Price has pulled back and at least one candle's high has entered the FVG zone.",
+          "A bearish engulfing candle has formed at or near the FVG zone.",
+          "Enter SELL at the closing price of the engulfing candle."
+        ]
+      },
+      "no_trade_conditions": [
+        "If no breakout occurs (price stays within FCR high and low all day), there is no trade.",
+        "If price breaks out but no Fair Value Gap forms (gradual breakout with overlapping wicks), there is no trade.",
+        "If an FVG forms but price never retests it (continues without pulling back), there is no trade.",
+        "If the retest occurs but no engulfing candle forms, there is no trade.",
+        "Maximum one trade per day. Once a trade is entered or conditions fail, wait for the next trading day."
+      ]
+    },
+
+    "exit_logic": {
+      "stop_loss": {
+        "bullish_trade": {
+          "placement": "One tick below the lowest low of all retest candles",
+          "literal_explanation": "Look at every candle that dipped into the FVG zone during the retest. Find the one that reached the lowest price (its low wick). Place the stop loss one tick (the smallest possible price increment) below that price.",
+          "reasoning": "If price drops below the deepest point of the retest, the pullback is no longer a retest - it is a reversal. The trade thesis is invalidated."
+        },
+        "bearish_trade": {
+          "placement": "One tick above the highest high of all retest candles",
+          "literal_explanation": "Look at every candle that pushed into the FVG zone during the retest. Find the one that reached the highest price (its high wick). Place the stop loss one tick above that price.",
+          "reasoning": "If price rises above the deepest point of the retest, the pullback is no longer a retest - it is a reversal."
+        }
+      },
+
+      "take_profit": {
+        "method": "Fixed 3:1 risk-to-reward ratio",
+        "literal_explanation": {
+          "step_1": "Calculate the distance from entry price to stop loss price. This is your 'risk' in price units.",
+          "step_2": "Multiply that distance by 3. This is your 'reward' in price units.",
+          "step_3": "For a buy trade: Take Profit = Entry Price + (3 × risk distance). For a sell trade: Take Profit = Entry Price - (3 × risk distance).",
+          "example": "If you entered a buy at 100.00 and stop loss is at 99.50, your risk is 0.50. Your take profit is 100.00 + (3 × 0.50) = 101.50."
+        }
+      },
+
+      "management_rules": {
+        "rule_1": "Once the trade is entered, do not move the stop loss or take profit.",
+        "rule_2": "Do not close the trade early, whether in profit or loss.",
+        "rule_3": "Let price hit either the take profit or the stop loss. No manual intervention."
+      }
+    },
+
+    "trade_outcomes": {
+      "TP": {
+        "label": "Take Profit",
+        "meaning": "Price reached 3× the risk distance in the trade direction. Trade closed automatically with profit."
+      },
+      "SL": {
+        "label": "Stop Loss",
+        "meaning": "Price moved beyond the retest extreme against the trade direction. Trade closed automatically with a loss."
+      },
+      "NO_TRADE": {
+        "label": "No Setup",
+        "meaning": "One or more conditions in the sequence did not occur. No trade was taken today."
+      }
+    },
+
+    "parameters": {
+      "market_open_time": {
+        "value": "09:30",
+        "timezone": "US/Eastern",
+        "description": "The exact time the market opens. The first 5-minute candle begins at this time."
+      },
+      "fcr_timeframe": {
+        "value": "5m",
+        "description": "The timeframe for the first candle that establishes the range."
+      },
+      "execution_timeframe": {
+        "value": "1m",
+        "description": "The timeframe used for all trade execution steps after the FCR candle."
+      },
+      "risk_reward_ratio": {
+        "value": 3,
+        "description": "Take profit distance is 3 times the stop loss distance."
+      },
+      "trades_per_day": {
+        "value": 1,
+        "description": "Maximum one trade setup per trading day."
+      }
+    }
+  },
+
+  "visuals": {
+
+    "fcr_candle_highlight": {
+      "type": "rectangle",
+      "purpose": "Highlight the first 5-minute candle as the reference candle",
+      "anchor1": {
+        "price": "fcr_candle.high",
+        "timestamp": "fcr_candle.open_time"
+      },
+      "anchor2": {
+        "price": "fcr_candle.low",
+        "timestamp": "fcr_candle.close_time"
+      },
+      "fillColor": "rgba(33, 150, 243, 0.15)",
+      "borderColor": "#2196F3",
+      "borderWidth": 1,
+      "showLabel": true,
+      "labelText": "FCR"
+    },
+
+    "fcr_high_line": {
+      "type": "horizontalRay",
+      "purpose": "Mark the upper breakout level from the first candle's high",
+      "anchor1": {
+        "price": "fcr_candle.high",
+        "timestamp": "fcr_candle.close_time"
+      },
+      "color": "rgba(255, 255, 255, 0.5)",
+      "lineWidth": 1,
+      "lineStyle": "dashed",
+      "label": "FCR High",
+      "notes": "Upper boundary of the first 5-minute candle range"
+    },
+
+    "fcr_low_line": {
+      "type": "horizontalRay",
+      "purpose": "Mark the lower breakout level from the first candle's low",
+      "anchor1": {
+        "price": "fcr_candle.low",
+        "timestamp": "fcr_candle.close_time"
+      },
+      "color": "rgba(255, 255, 255, 0.5)",
+      "lineWidth": 1,
+      "lineStyle": "dashed",
+      "label": "FCR Low",
+      "notes": "Lower boundary of the first 5-minute candle range"
+    },
+
+    "breakout_marker": {
+      "type": "marker",
+      "purpose": "Arrow on the candle that confirms the breakout beyond FCR high or low",
+      "bullish": {
+        "condition": "candle.close > fcr_candle.high AND previous_candle.close <= fcr_candle.high",
+        "shape": "arrowUp",
+        "color": "#22C55E",
+        "position": "belowBar",
+        "text": "Breakout"
+      },
+      "bearish": {
+        "condition": "candle.close < fcr_candle.low AND previous_candle.close >= fcr_candle.low",
+        "shape": "arrowDown",
+        "color": "#EF5350",
+        "position": "aboveBar",
+        "text": "Breakout"
+      }
+    },
+
+    "fvg_zone": {
+      "type": "rectangle",
+      "purpose": "Highlight the Fair Value Gap zone left behind by the breakout move",
+      "bullish_fvg": {
+        "anchor1": {
+          "price": "fvg_candle_a.high",
+          "timestamp": "fvg_candle_a.close_time"
+        },
+        "anchor2": {
+          "price": "fvg_candle_c.low",
+          "timestamp": "retest_end_time"
+        },
+        "fillColor": "rgba(158, 158, 158, 0.25)",
+        "borderColor": "rgba(158, 158, 158, 0.5)",
+        "borderWidth": 1,
+        "showLabel": true,
+        "labelText": "FVG"
+      },
+      "bearish_fvg": {
+        "anchor1": {
+          "price": "fvg_candle_a.low",
+          "timestamp": "fvg_candle_a.close_time"
+        },
+        "anchor2": {
+          "price": "fvg_candle_c.high",
+          "timestamp": "retest_end_time"
+        },
+        "fillColor": "rgba(158, 158, 158, 0.25)",
+        "borderColor": "rgba(158, 158, 158, 0.5)",
+        "borderWidth": 1,
+        "showLabel": true,
+        "labelText": "FVG"
+      }
+    },
+
+    "retest_marker": {
+      "type": "marker",
+      "purpose": "Mark the candle where price first re-enters the FVG zone",
+      "bullish": {
+        "condition": "candle.low <= fvg_upper_boundary AND candle.low >= fvg_lower_boundary",
+        "shape": "circle",
+        "color": "#FFA726",
+        "position": "belowBar",
+        "text": "Retest"
+      },
+      "bearish": {
+        "condition": "candle.high >= fvg_lower_boundary AND candle.high <= fvg_upper_boundary",
+        "shape": "circle",
+        "color": "#FFA726",
+        "position": "aboveBar",
+        "text": "Retest"
+      }
+    },
+
+    "engulfing_entry_marker": {
+      "type": "marker",
+      "purpose": "Mark the engulfing candle that triggers the trade entry",
+      "bullish": {
+        "condition": "candle.close > candle.open AND candle.close > previous_candle.open AND candle.open <= previous_candle.close",
+        "shape": "arrowUp",
+        "color": "#22C55E",
+        "position": "belowBar",
+        "text": "Entry",
+        "size": 1.5
+      },
+      "bearish": {
+        "condition": "candle.close < candle.open AND candle.close < previous_candle.open AND candle.open >= previous_candle.close",
+        "shape": "arrowDown",
+        "color": "#EF5350",
+        "position": "aboveBar",
+        "text": "Entry",
+        "size": 1.5
+      }
+    },
+
+    "trade_position": {
+      "bullish": {
+        "type": "longPosition",
+        "entry": {
+          "price": "engulfing_candle.close",
+          "timestamp": "engulfing_candle.close_time"
+        },
+        "stopLoss": "retest_lowest_low - one_tick",
+        "takeProfit": "entry_price + (3 * (entry_price - stop_loss))",
+        "riskRewardRatio": 3,
+        "tpColor": "rgba(34, 197, 94, 0.3)",
+        "slColor": "rgba(239, 83, 80, 0.3)"
+      },
+      "bearish": {
+        "type": "shortPosition",
+        "entry": {
+          "price": "engulfing_candle.close",
+          "timestamp": "engulfing_candle.close_time"
+        },
+        "stopLoss": "retest_highest_high + one_tick",
+        "takeProfit": "entry_price - (3 * (stop_loss - entry_price))",
+        "riskRewardRatio": 3,
+        "tpColor": "rgba(34, 197, 94, 0.3)",
+        "slColor": "rgba(239, 83, 80, 0.3)"
+      }
+    }
+  },
+
+  "visual_representations": {
+
+    "chart_basics": {
+      "description": "A price chart displays price movement over time",
+      "x_axis": "Time moves from left to right. Each unit represents one candle/time period.",
+      "y_axis": "Price levels increase going upward, decrease going downward.",
+      "candles": "Each candle is a vertical shape showing the Open, High, Low, Close for that time period. The body (thick part) shows the Open-to-Close range. If close is above open, the candle is bullish (typically green or blue). If close is below open, the candle is bearish (typically red or white). The wicks (thin lines extending above and below the body) show the High and Low."
+    },
+
+    "fcr_candle_visual": {
+      "what_it_looks_like": "On a 5-minute chart, this is a single candle at 9:30 AM. It is highlighted with a blue-tinted rectangle around it and labeled 'FCR'. On a 1-minute chart, this same time period is represented by five individual candles between 9:30 and 9:35.",
+      "the_lines": "Two horizontal dashed lines extend from the right edge of the FCR candle into the future. The upper line sits at the highest wick of the FCR candle. The lower line sits at the lowest wick. These lines are white/grey and extend across the rest of the chart."
+    },
+
+    "breakout_visual": {
+      "bullish": "After the FCR candle, you see 1-minute candles moving upward. At some point, a candle's body (not just its wick) is entirely above the upper dashed line. An upward arrow appears below this candle labeled 'Breakout'.",
+      "bearish": "After the FCR candle, you see 1-minute candles moving downward. A candle's body is entirely below the lower dashed line. A downward arrow appears above this candle labeled 'Breakout'."
+    },
+
+    "fvg_visual": {
+      "what_it_looks_like": "During the breakout move, you see three candles in sequence. The middle one is large and strong. Between the first candle's wick and the third candle's wick, there is a visible vertical gap - the wicks don't overlap in price. A grey semi-transparent rectangle fills this gap and is labeled 'FVG'.",
+      "bullish_example": "Three candles pushing up. The first candle's upper wick ends at, say, 101.50. The large middle candle jumps. The third candle's lower wick starts at 102.00. The gap between 101.50 and 102.00 is shaded grey and labeled 'FVG'.",
+      "bearish_example": "Three candles pushing down. The first candle's lower wick ends at 99.00. The large middle candle drops. The third candle's upper wick starts at 98.50. The gap between 98.50 and 99.00 is shaded grey and labeled 'FVG'."
+    },
+
+    "retest_visual": {
+      "what_it_looks_like": "After the breakout and FVG form, price moves further in the breakout direction then starts pulling back. You see candles moving back toward the shaded FVG rectangle. When a candle's wick or body enters the shaded zone, an orange circle appears labeled 'Retest'.",
+      "bullish_example": "Price broke upward, created the FVG, then continued up for a few candles. Then candles start dropping. One candle's lower wick dips into the grey FVG rectangle. Orange circle appears.",
+      "bearish_example": "Price broke downward, created the FVG, then continued down. Then candles start rising. One candle's upper wick pushes into the grey FVG rectangle. Orange circle appears."
+    },
+
+    "engulfing_visual": {
+      "what_it_looks_like": "At the FVG zone during the retest, you see a small candle followed by a larger candle that moves in the breakout direction. The larger candle's body completely covers the smaller candle's body.",
+      "bullish_example": "A small red (down) candle at the FVG zone, followed by a larger green (up) candle whose body starts below the red candle's body and ends above it. The green candle 'swallows' the red one. An upward arrow appears labeled 'Entry'.",
+      "bearish_example": "A small green (up) candle at the FVG zone, followed by a larger red (down) candle whose body starts above the green candle's body and ends below it. A downward arrow appears labeled 'Entry'."
+    },
+
+    "trade_position_visual": {
+      "what_it_looks_like": "Once the entry is confirmed, a trade position overlay appears on the chart.",
+      "bullish_trade": "A green shaded rectangle extends upward from the entry price to the take profit level. A red shaded rectangle extends downward from the entry price to the stop loss level. The green zone is exactly 3 times the height of the red zone. As candles progress rightward, price will eventually reach one of these zones.",
+      "bearish_trade": "A red shaded rectangle extends upward from the entry price to the stop loss level. A green shaded rectangle extends downward from the entry price to the take profit level.",
+      "outcome": "When price reaches the green zone, the trade was a win. When price reaches the red zone, the trade was a loss."
+    },
+
+    "complete_sequence_visual": {
+      "description": "Reading the chart from left to right, a complete bullish setup looks like this:",
+      "sequence": [
+        "1. A highlighted candle labeled 'FCR' at 9:30 with two dashed lines extending right from its high and low",
+        "2. Several 1-minute candles after, with an upward arrow on the candle that closes above the upper line, labeled 'Breakout'",
+        "3. A grey rectangle labeled 'FVG' appearing in the gap left by the strong breakout candle",
+        "4. Candles pulling back toward the grey rectangle, with an orange circle on the candle that enters it, labeled 'Retest'",
+        "5. A strong green candle that engulfs the previous candle at the FVG zone, with an upward arrow labeled 'Entry'",
+        "6. A large green zone above entry and small red zone below entry, showing the 3:1 take profit and stop loss"
+      ]
+    }
+  }
+}

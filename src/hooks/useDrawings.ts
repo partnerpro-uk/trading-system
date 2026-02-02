@@ -18,6 +18,7 @@ import {
   isRectangleDrawing,
   isCircleDrawing,
   isFibonacciDrawing,
+  isMarkerDrawing,
 } from "@/lib/drawings/types";
 import { getQuickColor, useUserPreferences } from "@/lib/drawings/userPreferences";
 
@@ -45,6 +46,7 @@ export function useDrawings({ pair, timeframe }: UseDrawingsOptions) {
     createCircle,
     createLongPosition,
     createShortPosition,
+    createMarker,
     undo,
     canUndo,
   } = useChartDrawings(pair, timeframe);
@@ -118,6 +120,12 @@ export function useDrawings({ pair, timeframe }: UseDrawingsOptions) {
             );
           }
           break;
+        case "markerArrowUp":
+        case "markerArrowDown":
+        case "markerCircle":
+        case "markerSquare":
+          createMarker(anchors.anchor1, type);
+          break;
       }
 
       // Reset tool after creation (return to select mode)
@@ -132,6 +140,7 @@ export function useDrawings({ pair, timeframe }: UseDrawingsOptions) {
       createCircle,
       createLongPosition,
       createShortPosition,
+      createMarker,
       setActiveDrawingTool,
     ]
   );
@@ -187,6 +196,7 @@ export function useDrawings({ pair, timeframe }: UseDrawingsOptions) {
     createCircle,
     createLongPosition,
     createShortPosition,
+    createMarker,
   };
 }
 
@@ -206,7 +216,8 @@ export function useDrawings({ pair, timeframe }: UseDrawingsOptions) {
  * - O: Short Position
  * - Delete/Backspace: Delete selected
  * - Ctrl+Z: Undo
- * - 1-9: Quick color (when drawing selected)
+ * - 1-4: Marker tools (when nothing selected) / Quick color (when drawing selected)
+ * - 5-9: Quick color (when drawing selected)
  * - Arrow Up/Down: Move selected drawing up/down (micro adjustment)
  */
 export function useDrawingKeyboardShortcuts(
@@ -264,6 +275,19 @@ export function useDrawingKeyboardShortcuts(
           setLastLineColor(color);
           return;
         }
+      }
+
+      // Marker shortcuts (1-4) when NO drawing is selected
+      if (!selectedDrawing && /^[1-4]$/.test(event.key)) {
+        event.preventDefault();
+        const markerMap: Record<string, DrawingType> = {
+          "1": "markerArrowUp",
+          "2": "markerArrowDown",
+          "3": "markerCircle",
+          "4": "markerSquare",
+        };
+        setActiveDrawingTool(markerMap[event.key]);
+        return;
       }
 
       // Arrow key micro-adjustments for position drawings
@@ -341,6 +365,8 @@ function applyColorToDrawing(
   } else if (isPositionDrawing(drawing)) {
     // For positions, color affects TP (profit) color
     updateDrawing(drawing.id, { tpColor: color });
+  } else if (isMarkerDrawing(drawing)) {
+    updateDrawing(drawing.id, { color });
   }
 }
 

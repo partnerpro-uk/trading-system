@@ -9,6 +9,7 @@ import { UserButton, SignedIn, SignedOut, SignInButton } from "@clerk/nextjs";
 const PAIRS = [
   { id: "DXY", name: "DXY", category: "indices" },
   { id: "SPX500_USD", name: "S&P 500", category: "indices" },
+  { id: "NAS100_USD", name: "Nasdaq 100", category: "indices" },
   { id: "EUR_USD", name: "EUR/USD", category: "forex" },
   { id: "GBP_USD", name: "GBP/USD", category: "forex" },
   { id: "USD_JPY", name: "USD/JPY", category: "forex" },
