@@ -27,12 +27,14 @@ const PAIRS = [
   { id: "NZD_USD", name: "NZD/USD", description: "New Zealand Dollar / US Dollar", category: "forex" },
   // Commodities & Crypto
   { id: "XAU_USD", name: "Gold", description: "Gold / US Dollar", category: "commodities" },
+  { id: "XAG_USD", name: "Silver", description: "Silver / US Dollar", category: "commodities" },
   { id: "BTC_USD", name: "Bitcoin", description: "Bitcoin / US Dollar", category: "crypto" },
 ];
 
 function formatPrice(pair: string, price: number): string {
   if (pair === "USD_JPY") return price.toFixed(3);
   if (pair === "XAU_USD") return price.toFixed(2);
+  if (pair === "XAG_USD") return price.toFixed(4);
   if (pair === "BTC_USD") return price.toFixed(0);
   if (pair === "SPX500_USD" || pair === "NAS100_USD") return price.toFixed(1);
   if (pair === "DXY") return price.toFixed(3);

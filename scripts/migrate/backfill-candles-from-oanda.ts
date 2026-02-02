@@ -23,7 +23,7 @@ config({ path: ".env.local" });
 
 const PAIRS = [
   "EUR_USD", "GBP_USD", "USD_JPY", "USD_CHF", "AUD_USD", "USD_CAD", "NZD_USD",
-  "XAU_USD", "SPX500_USD", // Added commodities & indices
+  "XAU_USD", "XAG_USD", "SPX500_USD", // Commodities & indices
 ] as const;
 const TIMEFRAMES = ["M5", "M15", "M30", "H1", "H4", "D", "W", "M"] as const;
 

@@ -58,3 +58,4 @@ worker/src/**/progress-*.json
 
 # clerk configuration (can include secrets)
 /.clerk/
+*.log

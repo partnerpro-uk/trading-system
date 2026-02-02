@@ -37,6 +37,7 @@ const PAIRS = [
   "USD_CAD",
   "NZD_USD",
   "XAU_USD",
+  "XAG_USD",
   "SPX500_USD",
 ] as const;
 

@@ -13,6 +13,7 @@ const PAIRS = [
   "USD_CAD",
   "NZD_USD",
   "XAU_USD",
+  "XAG_USD",
   "BTC_USD",
 ];
 
