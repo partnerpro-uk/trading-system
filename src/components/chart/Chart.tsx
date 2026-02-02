@@ -1078,13 +1078,14 @@ export function Chart({
         const slY = series.priceToCoordinate(drawing.stopLoss);
         if (entryX === null || entryY === null || tpY === null || slY === null) return null;
 
-        // Calculate right edge
+        // Calculate right edge - use fixed default width (250px), not infinite
+        const DEFAULT_POSITION_WIDTH = 250;
         let rightEdgeX: number;
         if (drawing.endTimestamp) {
           const endX = timeScale.timeToCoordinate((drawing.endTimestamp / 1000) as Time);
-          rightEdgeX = endX !== null ? endX : entryX + 200;
+          rightEdgeX = endX !== null ? endX : entryX + DEFAULT_POSITION_WIDTH;
         } else {
-          rightEdgeX = entryX + 200; // Default width for new positions
+          rightEdgeX = entryX + DEFAULT_POSITION_WIDTH;
         }
 
         return {
@@ -2108,7 +2109,9 @@ export function Chart({
         const slPercent = ((drawing.entry.price - drawing.stopLoss) / drawing.entry.price * 100);
         const rrRatio = drawing.riskRewardRatio || (tpPips / slPips);
 
-        // Calculate zone width - use endTimestamp if set, otherwise extend to chart edge
+        // Calculate zone width - use endTimestamp if set, otherwise use fixed width
+        // Positions should NOT extend forever - use sensible defaults
+        const DEFAULT_POSITION_WIDTH = 250; // Fixed width in pixels for positions without endTimestamp
         let actualZoneWidth: number;
         let endX: number | null = null;
         if (drawing.endTimestamp) {
@@ -2116,10 +2119,11 @@ export function Chart({
           if (endX !== null) {
             actualZoneWidth = Math.max(endX - entryX, 50); // Minimum 50px width
           } else {
-            actualZoneWidth = Math.max(chartAreaWidth - entryX, 200);
+            actualZoneWidth = DEFAULT_POSITION_WIDTH;
           }
         } else {
-          actualZoneWidth = Math.max(chartAreaWidth - entryX, 200);
+          // No endTimestamp - use fixed width, NOT chart edge
+          actualZoneWidth = DEFAULT_POSITION_WIDTH;
           endX = entryX + actualZoneWidth;
         }
 
