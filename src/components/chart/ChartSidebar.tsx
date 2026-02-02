@@ -24,11 +24,15 @@ interface UpcomingEvent {
   datetimeLondon: string | null;
 }
 
+// Pair categories with display order
+const PAIR_CATEGORIES = [
+  { key: "forex", label: "Forex" },
+  { key: "indices", label: "Indices" },
+  { key: "commodities", label: "Commodities" },
+  { key: "crypto", label: "Crypto" },
+] as const;
+
 const PAIRS = [
-  // Indices
-  { id: "DXY", name: "DXY", category: "indices" },
-  { id: "SPX500_USD", name: "S&P 500", category: "indices" },
-  { id: "NAS100_USD", name: "Nasdaq 100", category: "indices" },
   // Forex Majors
   { id: "EUR_USD", name: "EUR/USD", category: "forex" },
   { id: "GBP_USD", name: "GBP/USD", category: "forex" },
@@ -37,10 +41,21 @@ const PAIRS = [
   { id: "AUD_USD", name: "AUD/USD", category: "forex" },
   { id: "USD_CAD", name: "USD/CAD", category: "forex" },
   { id: "NZD_USD", name: "NZD/USD", category: "forex" },
-  // Commodities & Crypto
+  // Indices
+  { id: "DXY", name: "DXY", category: "indices" },
+  { id: "SPX500_USD", name: "S&P 500", category: "indices" },
+  { id: "NAS100_USD", name: "Nasdaq 100", category: "indices" },
+  // Commodities
   { id: "XAU_USD", name: "Gold", category: "commodities" },
+  // Crypto
   { id: "BTC_USD", name: "Bitcoin", category: "crypto" },
 ];
+
+// Group pairs by category
+const PAIRS_BY_CATEGORY = PAIR_CATEGORIES.map(cat => ({
+  ...cat,
+  pairs: PAIRS.filter(p => p.category === cat.key),
+})).filter(cat => cat.pairs.length > 0);
 
 interface Strategy {
   id: string;
@@ -517,51 +532,60 @@ export function ChartSidebar({
               <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
                 Pairs
               </h3>
-              <div className="space-y-0.5">
-                {PAIRS.map((pair) => {
-                  const priceData = prices[pair.id];
-                  const isActive = currentPair === pair.id;
-                  const isPositive = priceData && priceData.changePercent > 0;
-                  const isNegative = priceData && priceData.changePercent < 0;
+              <div className="space-y-3">
+                {PAIRS_BY_CATEGORY.map((category) => (
+                  <div key={category.key}>
+                    <h4 className="text-[10px] font-semibold text-gray-600 uppercase tracking-wider mb-1 px-2">
+                      {category.label}
+                    </h4>
+                    <div className="space-y-0.5">
+                      {category.pairs.map((pair) => {
+                        const priceData = prices[pair.id];
+                        const isActive = currentPair === pair.id;
+                        const isPositive = priceData && priceData.changePercent > 0;
+                        const isNegative = priceData && priceData.changePercent < 0;
 
-                  return (
-                    <Link
-                      key={pair.id}
-                      href={`/chart/${pair.id}`}
-                      className={`flex items-center justify-between px-2 py-1.5 text-sm rounded transition-colors ${
-                        isActive
-                          ? "bg-blue-600 text-white"
-                          : "text-gray-400 hover:text-gray-200 hover:bg-gray-800"
-                      }`}
-                    >
-                      <span className="font-medium">{pair.name}</span>
-                      {priceData && (
-                        <div className="flex items-center gap-1.5 text-xs">
-                          <span className={`font-mono ${isActive ? "text-white" : "text-gray-300"}`}>
-                            {formatPrice(pair.id, priceData.price)}
-                          </span>
-                          <span
-                            className={`${
+                        return (
+                          <Link
+                            key={pair.id}
+                            href={`/chart/${pair.id}`}
+                            className={`flex items-center justify-between px-2 py-1.5 text-sm rounded transition-colors ${
                               isActive
-                                ? isPositive
-                                  ? "text-green-300"
-                                  : isNegative
-                                  ? "text-red-300"
-                                  : "text-gray-300"
-                                : isPositive
-                                ? "text-green-500"
-                                : isNegative
-                                ? "text-red-500"
-                                : "text-gray-500"
+                                ? "bg-blue-600 text-white"
+                                : "text-gray-400 hover:text-gray-200 hover:bg-gray-800"
                             }`}
                           >
-                            {isPositive ? "▲" : isNegative ? "▼" : "─"}
-                          </span>
-                        </div>
-                      )}
-                    </Link>
-                  );
-                })}
+                            <span className="font-medium">{pair.name}</span>
+                            {priceData && (
+                              <div className="flex items-center gap-1.5 text-xs">
+                                <span className={`font-mono ${isActive ? "text-white" : "text-gray-300"}`}>
+                                  {formatPrice(pair.id, priceData.price)}
+                                </span>
+                                <span
+                                  className={`${
+                                    isActive
+                                      ? isPositive
+                                        ? "text-green-300"
+                                        : isNegative
+                                        ? "text-red-300"
+                                        : "text-gray-300"
+                                      : isPositive
+                                      ? "text-green-500"
+                                      : isNegative
+                                      ? "text-red-500"
+                                      : "text-gray-500"
+                                  }`}
+                                >
+                                  {isPositive ? "▲" : isNegative ? "▼" : "─"}
+                                </span>
+                              </div>
+                            )}
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
 
