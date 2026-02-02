@@ -578,9 +578,38 @@ export const useDrawingStore = create<DrawingStore>()(
     }),
     {
       name: "trading-drawings",
+      version: 1, // Bump this to trigger migration
       partialize: (state) => ({
         drawings: state.drawings,
       }),
+      // Migrate old data to fix strategyId mismatches
+      migrate: (persistedState, version) => {
+        const state = persistedState as { drawings: Record<string, Drawing[]> };
+
+        // Migration from version 0 to 1: Fix strategyId mismatches
+        if (version === 0 && state.drawings) {
+          // Known strategyId mappings (old visuals.json ID -> folder name)
+          const strategyIdMappings: Record<string, string> = {
+            "fcr-strategy": "first-candle-strategy",
+            // Add more mappings as needed
+          };
+
+          for (const chartKey of Object.keys(state.drawings)) {
+            state.drawings[chartKey] = state.drawings[chartKey].map((drawing) => {
+              // Only migrate strategy-created drawings
+              if (drawing.createdBy === "strategy" && drawing.strategyId) {
+                const newStrategyId = strategyIdMappings[drawing.strategyId];
+                if (newStrategyId) {
+                  return { ...drawing, strategyId: newStrategyId };
+                }
+              }
+              return drawing;
+            });
+          }
+        }
+
+        return state;
+      },
       // Skip hydration on server to prevent SSR issues
       skipHydration: true,
     }

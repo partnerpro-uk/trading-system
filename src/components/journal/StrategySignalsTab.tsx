@@ -163,6 +163,25 @@ function SignalStatusBadge({ status }: { status?: string }) {
 }
 
 /**
+ * Signal outcome badge (hypothetical - what would have happened)
+ */
+function SignalOutcomeBadge({ outcome }: { outcome?: "tp" | "sl" | "pending" | "open" | null }) {
+  const config: Record<string, { bg: string; text: string; label: string }> = {
+    tp: { bg: "bg-green-900/50", text: "text-green-400", label: "TP Hit" },
+    sl: { bg: "bg-red-900/50", text: "text-red-400", label: "SL Hit" },
+    pending: { bg: "bg-gray-800", text: "text-gray-400", label: "Open" },
+    open: { bg: "bg-blue-900/50", text: "text-blue-400", label: "Open" },
+  };
+
+  const { bg, text, label } = config[outcome || "pending"] || config.pending;
+  return (
+    <span className={`px-2 py-0.5 text-xs font-medium rounded ${bg} ${text}`}>
+      {label}
+    </span>
+  );
+}
+
+/**
  * Signal row component
  */
 function SignalRow({
@@ -236,7 +255,7 @@ function SignalRow({
         </span>
       </td>
       <td className="px-2 py-2.5">
-        <SignalStatusBadge status={signal.status} />
+        <SignalOutcomeBadge outcome={signal.outcome as "tp" | "sl" | "pending" | "open" | null} />
       </td>
       <td className="px-2 py-2.5">
         <div className="flex items-center gap-1">
@@ -354,6 +373,15 @@ export function StrategySignalsTab({ onSignalTaken }: StrategySignalsTabProps) {
     const longs = filteredSignals.filter((s) => s.signal.type === "longPosition").length;
     const shorts = filteredSignals.filter((s) => s.signal.type === "shortPosition").length;
 
+    // Count outcomes
+    const tpHits = filteredSignals.filter((s) => s.signal.outcome === "tp").length;
+    const slHits = filteredSignals.filter((s) => s.signal.outcome === "sl").length;
+    const resolved = tpHits + slHits;
+    const openSignals = total - resolved;
+
+    // Calculate win rate (only from resolved signals)
+    const winRate = resolved > 0 ? (tpHits / resolved) * 100 : null;
+
     // Calculate average R:R
     let totalRR = 0;
     let totalPotentialPips = 0;
@@ -375,26 +403,21 @@ export function StrategySignalsTab({ onSignalTaken }: StrategySignalsTabProps) {
     const avgPotentialPips = total > 0 ? totalPotentialPips / total : 0;
     const avgRiskPips = total > 0 ? totalRisk / total : 0;
 
-    // Get unique strategies in filtered set
-    const uniqueStrategies = new Set(filteredSignals.map((s) => s.signal.strategyId || "manual"));
-
-    // Hypothetical stats (assuming 50% win rate as baseline)
-    const hypotheticalWinRate = 50;
-    const hypotheticalWins = Math.round(total * (hypotheticalWinRate / 100));
-    const hypotheticalLosses = total - hypotheticalWins;
-    const hypotheticalPnL = (hypotheticalWins * avgPotentialPips) - (hypotheticalLosses * avgRiskPips);
+    // Calculate actual P&L from resolved signals
+    const actualPnL = (tpHits * avgPotentialPips) - (slHits * avgRiskPips);
 
     return {
       total,
       longs,
       shorts,
-      strategies: uniqueStrategies.size,
+      tpHits,
+      slHits,
+      openSignals,
+      winRate,
       avgRR,
       avgPotentialPips,
       avgRiskPips,
-      totalPotentialPips,
-      hypotheticalWinRate,
-      hypotheticalPnL,
+      actualPnL,
     };
   }, [filteredSignals]);
 
@@ -433,23 +456,31 @@ export function StrategySignalsTab({ onSignalTaken }: StrategySignalsTabProps) {
   return (
     <div className="space-y-4">
       {/* Stats Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
         <StatCard
           label="Total Signals"
           value={stats.total}
+          subValue={stats.openSignals > 0 ? `${stats.openSignals} open` : undefined}
           icon={<BarChart3 className="w-4 h-4" />}
         />
         <StatCard
-          label="Long"
-          value={stats.longs}
-          subValue={stats.total > 0 ? `${((stats.longs / stats.total) * 100).toFixed(0)}%` : undefined}
+          label="Win Rate"
+          value={stats.winRate !== null ? `${stats.winRate.toFixed(0)}%` : "-"}
+          subValue={stats.winRate !== null ? `${stats.tpHits}W / ${stats.slHits}L` : "no data yet"}
+          trend={stats.winRate !== null ? (stats.winRate >= 50 ? "up" : "down") : undefined}
+          icon={<Target className="w-4 h-4" />}
+        />
+        <StatCard
+          label="TP Hits"
+          value={stats.tpHits}
+          subValue="winners"
           trend="up"
           icon={<TrendingUp className="w-4 h-4" />}
         />
         <StatCard
-          label="Short"
-          value={stats.shorts}
-          subValue={stats.total > 0 ? `${((stats.shorts / stats.total) * 100).toFixed(0)}%` : undefined}
+          label="SL Hits"
+          value={stats.slHits}
+          subValue="losers"
           trend="down"
           icon={<TrendingDown className="w-4 h-4" />}
         />
@@ -458,18 +489,18 @@ export function StrategySignalsTab({ onSignalTaken }: StrategySignalsTabProps) {
           value={`1:${stats.avgRR.toFixed(1)}`}
           subValue={stats.avgRR >= 2 ? "Good" : stats.avgRR >= 1.5 ? "Fair" : "Low"}
           trend={stats.avgRR >= 2 ? "up" : stats.avgRR >= 1.5 ? "neutral" : "down"}
-          icon={<Target className="w-4 h-4" />}
+          icon={<Percent className="w-4 h-4" />}
         />
         <StatCard
-          label="Avg TP Distance"
+          label="Avg Reward"
           value={`${stats.avgPotentialPips.toFixed(0)}p`}
-          subValue="potential reward"
-          icon={<Percent className="w-4 h-4" />}
+          subValue="TP distance"
+          icon={<TrendingUp className="w-4 h-4" />}
         />
         <StatCard
           label="Avg Risk"
           value={`${stats.avgRiskPips.toFixed(0)}p`}
-          subValue="stop loss"
+          subValue="SL distance"
           trend="down"
           icon={<AlertCircle className="w-4 h-4" />}
         />
@@ -574,7 +605,7 @@ export function StrategySignalsTab({ onSignalTaken }: StrategySignalsTabProps) {
                   <th className="px-2 py-3 font-medium">Stop Loss</th>
                   <th className="px-2 py-3 font-medium">Take Profit</th>
                   <th className="px-2 py-3 font-medium">R:R</th>
-                  <th className="px-2 py-3 font-medium">Status</th>
+                  <th className="px-2 py-3 font-medium">Outcome</th>
                   <th className="px-2 py-3 font-medium w-36">Actions</th>
                 </tr>
               </thead>

@@ -176,6 +176,84 @@ export default function ChartPage() {
     }
   }, [entrySignals, pair, timeframe, drawings]);
 
+  // Calculate hypothetical outcomes for strategy signals based on candle data
+  // Check if price hit TP or SL first after signal entry
+  useEffect(() => {
+    if (!candles || candles.length === 0) return;
+
+    const signalPositions = drawings.filter((d) => {
+      if (d.type !== "longPosition" && d.type !== "shortPosition") return false;
+      const position = d as PositionDrawing;
+      // Only process signals without an outcome calculated yet
+      return position.status === "signal" && !position.outcome;
+    }) as PositionDrawing[];
+
+    if (signalPositions.length === 0) return;
+
+    for (const position of signalPositions) {
+      const entryTimestamp = position.entry.timestamp;
+      const entryPrice = position.entry.price;
+      const tp = position.takeProfit;
+      const sl = position.stopLoss;
+
+      // Need both TP and SL to calculate outcome
+      if (!tp || !sl) continue;
+
+      // Get candles after the entry timestamp
+      const subsequentCandles = candles.filter((c) => c.timestamp > entryTimestamp);
+      if (subsequentCandles.length === 0) continue;
+
+      let outcome: "tp" | "sl" | null = null;
+
+      // Check each subsequent candle to see if TP or SL was hit
+      for (const candle of subsequentCandles) {
+        if (position.type === "longPosition") {
+          // Long: TP hit if high >= TP, SL hit if low <= SL
+          const tpHit = candle.high >= tp;
+          const slHit = candle.low <= sl;
+
+          if (tpHit && slHit) {
+            // Both hit in same candle - check which price was closer to entry
+            // If open is closer to TP side, assume TP hit first; otherwise SL
+            const distanceToTp = Math.abs(candle.open - tp);
+            const distanceToSl = Math.abs(candle.open - sl);
+            outcome = distanceToTp < distanceToSl ? "tp" : "sl";
+            break;
+          } else if (tpHit) {
+            outcome = "tp";
+            break;
+          } else if (slHit) {
+            outcome = "sl";
+            break;
+          }
+        } else {
+          // Short: TP hit if low <= TP, SL hit if high >= SL
+          const tpHit = candle.low <= tp;
+          const slHit = candle.high >= sl;
+
+          if (tpHit && slHit) {
+            // Both hit in same candle
+            const distanceToTp = Math.abs(candle.open - tp);
+            const distanceToSl = Math.abs(candle.open - sl);
+            outcome = distanceToTp < distanceToSl ? "tp" : "sl";
+            break;
+          } else if (tpHit) {
+            outcome = "tp";
+            break;
+          } else if (slHit) {
+            outcome = "sl";
+            break;
+          }
+        }
+      }
+
+      // Update the drawing with the calculated outcome
+      if (outcome) {
+        updateDrawing(position.id, { outcome });
+      }
+    }
+  }, [candles, drawings, updateDrawing]);
+
   // Create horizontal ray drawings from strategy levels (FCR high/low, FVG lines)
   useEffect(() => {
     if (!levels || levels.length === 0) return;
