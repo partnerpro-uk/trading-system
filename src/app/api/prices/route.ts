@@ -1,21 +1,6 @@
 import { NextResponse } from "next/server";
 import { getLatestPrices } from "@/lib/db/candles";
-
-// All tradeable pairs
-const PAIRS = [
-  "DXY",
-  "SPX500_USD",
-  "EUR_USD",
-  "GBP_USD",
-  "USD_JPY",
-  "USD_CHF",
-  "AUD_USD",
-  "USD_CAD",
-  "NZD_USD",
-  "XAU_USD",
-  "XAG_USD",
-  "BTC_USD",
-];
+import { PAIR_IDS } from "@/lib/pairs";
 
 /**
  * GET /api/prices
@@ -32,7 +17,7 @@ const PAIRS = [
  */
 export async function GET() {
   try {
-    const prices = await getLatestPrices(PAIRS);
+    const prices = await getLatestPrices(PAIR_IDS);
 
     return NextResponse.json(prices, {
       headers: {

@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import Link from "next/link";
 import { useDrawingStore } from "@/lib/drawings/store";
 import { Drawing, isPositionDrawing, isFibonacciDrawing, isRectangleDrawing, isTrendlineDrawing, isHorizontalLineDrawing, isHorizontalRayDrawing, isVerticalLineDrawing, isCircleDrawing } from "@/lib/drawings/types";
+import { PAIRS_BY_CATEGORY, formatPrice } from "@/lib/pairs";
 
 // Stable empty array to prevent infinite re-renders with Zustand SSR
 const EMPTY_DRAWINGS: Drawing[] = [];
@@ -23,39 +24,6 @@ interface UpcomingEvent {
   timestamp: number;
   datetimeLondon: string | null;
 }
-
-// Pair categories with display order
-const PAIR_CATEGORIES = [
-  { key: "forex", label: "Forex" },
-  { key: "indices", label: "Indices" },
-  { key: "commodities", label: "Commodities" },
-  { key: "crypto", label: "Crypto" },
-] as const;
-
-const PAIRS = [
-  // Forex Majors
-  { id: "EUR_USD", name: "EUR/USD", category: "forex" },
-  { id: "GBP_USD", name: "GBP/USD", category: "forex" },
-  { id: "USD_JPY", name: "USD/JPY", category: "forex" },
-  { id: "USD_CHF", name: "USD/CHF", category: "forex" },
-  { id: "AUD_USD", name: "AUD/USD", category: "forex" },
-  { id: "USD_CAD", name: "USD/CAD", category: "forex" },
-  { id: "NZD_USD", name: "NZD/USD", category: "forex" },
-  // Indices
-  { id: "DXY", name: "DXY", category: "indices" },
-  { id: "SPX500_USD", name: "S&P 500", category: "indices" },
-  { id: "NAS100_USD", name: "Nasdaq 100", category: "indices" },
-  // Commodities
-  { id: "XAU_USD", name: "Gold", category: "commodities" },
-  // Crypto
-  { id: "BTC_USD", name: "Bitcoin", category: "crypto" },
-];
-
-// Group pairs by category
-const PAIRS_BY_CATEGORY = PAIR_CATEGORIES.map(cat => ({
-  ...cat,
-  pairs: PAIRS.filter(p => p.category === cat.key),
-})).filter(cat => cat.pairs.length > 0);
 
 interface Strategy {
   id: string;
@@ -97,16 +65,6 @@ interface ChartSidebarProps {
   onDrawingSelect?: (drawingId: string) => void;
   // Scroll chart to timestamp
   onScrollToTimestamp?: (timestamp: number) => void;
-}
-
-// Format price based on pair type
-function formatPrice(pair: string, price: number): string {
-  if (pair === "USD_JPY") return price.toFixed(3);
-  if (pair === "XAU_USD") return price.toFixed(2);
-  if (pair === "BTC_USD") return price.toFixed(0);
-  if (pair === "SPX500_USD" || pair === "NAS100_USD") return price.toFixed(1);
-  if (pair === "DXY") return price.toFixed(3);
-  return price.toFixed(5);
 }
 
 // Format countdown until event

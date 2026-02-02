@@ -5,21 +5,7 @@ import { usePathname } from "next/navigation";
 import { BarChart3, LayoutDashboard, LineChart, ChevronDown, BookOpen } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { UserButton, SignedIn, SignedOut, SignInButton } from "@clerk/nextjs";
-
-const PAIRS = [
-  { id: "DXY", name: "DXY", category: "indices" },
-  { id: "SPX500_USD", name: "S&P 500", category: "indices" },
-  { id: "NAS100_USD", name: "Nasdaq 100", category: "indices" },
-  { id: "EUR_USD", name: "EUR/USD", category: "forex" },
-  { id: "GBP_USD", name: "GBP/USD", category: "forex" },
-  { id: "USD_JPY", name: "USD/JPY", category: "forex" },
-  { id: "USD_CHF", name: "USD/CHF", category: "forex" },
-  { id: "AUD_USD", name: "AUD/USD", category: "forex" },
-  { id: "USD_CAD", name: "USD/CAD", category: "forex" },
-  { id: "NZD_USD", name: "NZD/USD", category: "forex" },
-  { id: "XAU_USD", name: "Gold", category: "commodities" },
-  { id: "BTC_USD", name: "Bitcoin", category: "crypto" },
-];
+import { PAIRS } from "@/lib/pairs";
 
 interface NavLinkProps {
   href: string;
