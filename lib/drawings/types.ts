@@ -48,6 +48,9 @@ export interface BaseDrawing {
 
   // Semantic context
   priceLevel?: PriceLevelContext;
+
+  // Lock status (prevents user editing/moving)
+  locked?: boolean;         // If true, drawing cannot be moved or edited by user
 }
 
 /**
@@ -401,4 +404,11 @@ export function isShortPositionDrawing(drawing: Drawing): drawing is ShortPositi
 
 export function isMarkerDrawing(drawing: Drawing): drawing is MarkerDrawing {
   return ["markerArrowUp", "markerArrowDown", "markerCircle", "markerSquare"].includes(drawing.type);
+}
+
+/**
+ * Check if a drawing is locked (either explicitly or because it's strategy-generated)
+ */
+export function isDrawingLocked(drawing: Drawing): boolean {
+  return drawing.locked === true || drawing.createdBy === "strategy";
 }

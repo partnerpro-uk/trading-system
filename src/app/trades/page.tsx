@@ -82,23 +82,36 @@ function OutcomeBadge({ outcome, status }: { outcome?: TradeOutcome; status: str
   );
 }
 
-// Stats card
+// Stats card - compact
 function StatCard({
   label,
   value,
   subValue,
   trend,
+  size = "normal",
 }: {
   label: string;
   value: string | number;
   subValue?: string;
   trend?: "up" | "down" | "neutral";
+  size?: "small" | "normal" | "large";
 }) {
+  const sizeClasses = {
+    small: "p-2",
+    normal: "p-3",
+    large: "p-4",
+  };
+  const valueClasses = {
+    small: "text-lg",
+    normal: "text-xl",
+    large: "text-2xl",
+  };
+
   return (
-    <div className="bg-gray-900/50 rounded-lg p-3 border border-gray-800">
+    <div className={`bg-gray-900/50 rounded-lg border border-gray-800 ${sizeClasses[size]}`}>
       <div className="text-gray-500 text-xs uppercase tracking-wide">{label}</div>
       <div
-        className={`text-xl font-bold mt-1 ${
+        className={`font-bold mt-1 ${valueClasses[size]} ${
           trend === "up"
             ? "text-green-400"
             : trend === "down"
@@ -109,6 +122,42 @@ function StatCard({
         {value}
       </div>
       {subValue && <div className="text-gray-500 text-xs mt-0.5">{subValue}</div>}
+    </div>
+  );
+}
+
+// Large stat card for key metrics
+function KeyStatCard({
+  label,
+  value,
+  subLabel,
+  trend,
+  icon,
+}: {
+  label: string;
+  value: string | number;
+  subLabel?: string;
+  trend?: "up" | "down" | "neutral";
+  icon?: React.ReactNode;
+}) {
+  return (
+    <div className="bg-gray-900/70 rounded-xl p-4 border border-gray-700">
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-gray-400 text-sm font-medium">{label}</span>
+        {icon}
+      </div>
+      <div
+        className={`text-3xl font-bold ${
+          trend === "up"
+            ? "text-green-400"
+            : trend === "down"
+              ? "text-red-400"
+              : "text-gray-100"
+        }`}
+      >
+        {value}
+      </div>
+      {subLabel && <div className="text-gray-500 text-xs mt-1">{subLabel}</div>}
     </div>
   );
 }

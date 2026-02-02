@@ -30,6 +30,7 @@ import {
   isMarkerDrawing,
   MarkerDrawing,
   isLongPositionDrawing,
+  isDrawingLocked,
   DEFAULT_FIB_LEVELS,
   DEFAULT_DRAWING_COLORS,
 } from "@/lib/drawings/types";
@@ -1201,10 +1202,23 @@ export function Chart({
     };
 
     // Update cursor based on hover state
-    const updateCursor = (part: HoverPart | null) => {
+    const updateCursor = (part: HoverPart | null, drawingId?: string | null) => {
       if (activeDrawingTool) {
         canvas.style.cursor = "crosshair";
-      } else if (part === "anchor1" || part === "anchor2" || part === "entry") {
+        return;
+      }
+
+      // Check if the hovered drawing is locked
+      if (drawingId && drawings) {
+        const drawing = drawings.find(d => d.id === drawingId);
+        if (drawing && isDrawingLocked(drawing)) {
+          // Locked drawings show pointer cursor (can select but not move)
+          canvas.style.cursor = part ? "pointer" : "default";
+          return;
+        }
+      }
+
+      if (part === "anchor1" || part === "anchor2" || part === "entry") {
         canvas.style.cursor = "grab";
       } else if (part === "tp" || part === "sl") {
         canvas.style.cursor = "ns-resize"; // Vertical resize for TP/SL
@@ -1266,6 +1280,14 @@ export function Chart({
           // Select the drawing
           if (onDrawingSelect) {
             onDrawingSelect(drawing.id);
+          }
+
+          // Check if drawing is locked (strategy-generated drawings cannot be moved)
+          if (isDrawingLocked(drawing)) {
+            // Allow selection but prevent dragging
+            e.preventDefault();
+            e.stopPropagation();
+            return;
           }
 
           // Determine drag type based on part
@@ -1452,7 +1474,7 @@ export function Chart({
       hoveredDrawingIdRef.current = hoverInfo?.drawingId || null;
       hoveredAnchorRef.current = hoverInfo?.part || null;
 
-      updateCursor(hoverInfo?.part || null);
+      updateCursor(hoverInfo?.part || null, hoverInfo?.drawingId);
 
       // Redraw if hover state changed (for hover highlight)
       if (prevHovered !== hoveredDrawingIdRef.current) {
@@ -1591,8 +1613,12 @@ export function Chart({
         dragStateRef.current = null;
         drawAllDrawings();
       }
-      if ((e.key === "Delete" || e.key === "Backspace") && selectedDrawingId && onDrawingDelete) {
-        onDrawingDelete(selectedDrawingId);
+      if ((e.key === "Delete" || e.key === "Backspace") && selectedDrawingId && onDrawingDelete && drawings) {
+        // Don't allow deleting locked drawings
+        const drawingToDelete = drawings.find(d => d.id === selectedDrawingId);
+        if (drawingToDelete && !isDrawingLocked(drawingToDelete)) {
+          onDrawingDelete(selectedDrawingId);
+        }
       }
     };
 

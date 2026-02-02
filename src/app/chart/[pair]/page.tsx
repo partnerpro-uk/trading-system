@@ -161,12 +161,14 @@ export default function ChartPage() {
           createdBy: "strategy",
           strategyId: signal.strategyId,
           status: "signal",
+          locked: true, // Strategy signals are locked until taken
         });
       } else {
         createShortPosition(pair, timeframe, entry, signal.takeProfit, signal.stopLoss, {
           createdBy: "strategy",
           strategyId: signal.strategyId,
           status: "signal",
+          locked: true, // Strategy signals are locked until taken
         });
       }
 
@@ -217,6 +219,8 @@ export default function ChartPage() {
         lineStyle: level.lineStyle,
         label: level.label,
         createdBy: "strategy",
+        strategyId: selectedStrategy || undefined,
+        locked: true, // Strategy-generated levels are locked
       });
 
       createdLevelsRef.current.add(levelKey);
@@ -263,6 +267,36 @@ export default function ChartPage() {
   const visibleIndicatorConfigs = useMemo(() => {
     return indicatorConfigs.filter((config) => indicatorVisibility[config.id] === true);
   }, [indicatorConfigs, indicatorVisibility]);
+
+  // Filter drawings: strategy signals only show when that strategy is selected
+  // Taken trades (status !== "signal") persist regardless of strategy selection
+  const filteredDrawings = useMemo(() => {
+    if (!drawings) return [];
+
+    return drawings.filter((drawing) => {
+      // Non-strategy drawings always show
+      if (drawing.createdBy !== "strategy") return true;
+
+      // For strategy-created drawings:
+      // Check if it's a position with status
+      const isPosition = drawing.type === "longPosition" || drawing.type === "shortPosition";
+      if (isPosition) {
+        const position = drawing as PositionDrawing;
+        // Taken trades (not signals) always show
+        if (position.status !== "signal") return true;
+        // Signals only show if their strategy is selected
+        return position.strategyId === selectedStrategy;
+      }
+
+      // Horizontal rays (levels) only show when their strategy is selected
+      if (drawing.type === "horizontalRay") {
+        return drawing.strategyId === selectedStrategy;
+      }
+
+      // Other strategy drawings: only show when strategy is selected
+      return drawing.strategyId === selectedStrategy;
+    });
+  }, [drawings, selectedStrategy]);
 
   // Format pair for display (EUR_USD -> EUR/USD)
   const displayPair = pair.replace("_", "/");
@@ -407,7 +441,7 @@ export default function ChartPage() {
                 strategyZones={zones}
                 // Drawing tools
                 activeDrawingTool={activeDrawingTool}
-                drawings={drawings}
+                drawings={filteredDrawings}
                 selectedDrawingId={selectedDrawingId}
                 onDrawingCreate={createDrawing}
                 onDrawingSelect={selectDrawing}
