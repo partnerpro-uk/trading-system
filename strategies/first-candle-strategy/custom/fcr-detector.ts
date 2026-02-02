@@ -279,7 +279,14 @@ export function computeFCRDetector(
   // Detect timeframe from candle spacing
   const tfMinutes = params.timeframeMinutes ?? detectTimeframeMinutes(candles);
 
-  // For M5+, we use 1 candle as FCR instead of 5
+  // FCR strategy only works on M1 and M5 timeframes
+  // On higher timeframes, return empty outputs (no signals)
+  // Taken trades persist via the drawing store regardless
+  if (tfMinutes > 5) {
+    return output;
+  }
+
+  // For M5, we use 1 candle as FCR instead of 5 (for M1)
   const fcrCandlesNeeded = tfMinutes >= 5 ? 1 : fullParams.fcrCandleCount;
 
   // Track state per trading day
