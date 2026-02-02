@@ -453,6 +453,11 @@ export const useDrawingStore = create<DrawingStore>()(
       createLongPosition: (pair, timeframe, entry, takeProfit, stopLoss, options = {}) => {
         const riskRewardRatio = Math.abs(takeProfit - entry.price) / Math.abs(entry.price - stopLoss);
 
+        // Determine default status based on creator:
+        // - User-created positions: "open" (already in a trade)
+        // - Strategy-generated: "signal" (needs confirmation)
+        const defaultStatus = options.createdBy === "strategy" ? "signal" : "open";
+
         const drawing: Omit<LongPositionDrawing, "id" | "createdAt"> = {
           type: "longPosition",
           entry,
@@ -463,6 +468,7 @@ export const useDrawingStore = create<DrawingStore>()(
           tpColor: options.tpColor || "#26A69A",
           slColor: options.slColor || "#EF5350",
           createdBy: options.createdBy || "user",
+          status: options.status || defaultStatus,
           ...options,
         };
 
@@ -472,6 +478,11 @@ export const useDrawingStore = create<DrawingStore>()(
       // Create Short Position
       createShortPosition: (pair, timeframe, entry, takeProfit, stopLoss, options = {}) => {
         const riskRewardRatio = Math.abs(takeProfit - entry.price) / Math.abs(entry.price - stopLoss);
+
+        // Determine default status based on creator:
+        // - User-created positions: "open" (already in a trade)
+        // - Strategy-generated: "signal" (needs confirmation)
+        const defaultStatus = options.createdBy === "strategy" ? "signal" : "open";
 
         const drawing: Omit<ShortPositionDrawing, "id" | "createdAt"> = {
           type: "shortPosition",
@@ -483,6 +494,7 @@ export const useDrawingStore = create<DrawingStore>()(
           tpColor: options.tpColor || "#26A69A",
           slColor: options.slColor || "#EF5350",
           createdBy: options.createdBy || "user",
+          status: options.status || defaultStatus,
           ...options,
         };
 

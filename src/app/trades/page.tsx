@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { useTrades, useTradeStats, Trade, TradeOutcome } from "@/hooks/useTrades";
 import { useStrategies } from "@/hooks/useStrategies";
+import { StrategySignalsTab } from "@/components/journal/StrategySignalsTab";
 import {
   detectSession,
   getSessionColor,
@@ -23,6 +24,9 @@ import {
   calculateRMultiple,
 } from "@/lib/trading/sessions";
 import { Id } from "../../../convex/_generated/dataModel";
+
+// Main tab options
+type MainTab = "trades" | "signals";
 
 // Period options
 type Period = "today" | "week" | "month" | "all";
@@ -513,6 +517,9 @@ export default function TradesPage() {
   const { stats } = useTradeStats({});
   const { strategies } = useStrategies();
 
+  // Main tab (Trades vs Signals)
+  const [mainTab, setMainTab] = useState<MainTab>("trades");
+
   // Filters
   const [period, setPeriod] = useState<Period>("all");
   const [pairFilter, setPairFilter] = useState("");
@@ -605,30 +612,62 @@ export default function TradesPage() {
               <ArrowLeft className="w-4 h-4" />
             </Link>
             <h1 className="text-xl font-semibold">Trade Journal</h1>
-          </div>
 
-          {/* Period tabs */}
-          <div className="flex gap-1 bg-gray-900 rounded-lg p-1">
-            {PERIOD_OPTIONS.map((opt) => (
+            {/* Main tabs */}
+            <div className="flex gap-1 bg-gray-900 rounded-lg p-1 ml-4">
               <button
-                key={opt.value}
-                onClick={() => setPeriod(opt.value)}
+                onClick={() => setMainTab("trades")}
                 className={`px-3 py-1.5 text-sm font-medium rounded transition-colors ${
-                  period === opt.value
+                  mainTab === "trades"
                     ? "bg-blue-600 text-white"
                     : "text-gray-400 hover:text-gray-200"
                 }`}
               >
-                {opt.label}
+                Trades
               </button>
-            ))}
+              <button
+                onClick={() => setMainTab("signals")}
+                className={`px-3 py-1.5 text-sm font-medium rounded transition-colors ${
+                  mainTab === "signals"
+                    ? "bg-purple-600 text-white"
+                    : "text-gray-400 hover:text-gray-200"
+                }`}
+              >
+                Strategy Signals
+              </button>
+            </div>
           </div>
+
+          {/* Period tabs - only show for trades tab */}
+          {mainTab === "trades" && (
+            <div className="flex gap-1 bg-gray-900 rounded-lg p-1">
+              {PERIOD_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  onClick={() => setPeriod(opt.value)}
+                  className={`px-3 py-1.5 text-sm font-medium rounded transition-colors ${
+                    period === opt.value
+                      ? "bg-blue-600 text-white"
+                      : "text-gray-400 hover:text-gray-200"
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </header>
 
       <main className="max-w-[1800px] mx-auto px-6 py-4">
-        {/* Stats row */}
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3 mb-4">
+        {/* Strategy Signals Tab */}
+        {mainTab === "signals" && <StrategySignalsTab />}
+
+        {/* Trades Tab */}
+        {mainTab === "trades" && (
+          <>
+            {/* Stats row */}
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3 mb-4">
           <StatCard label="Total" value={periodStats.total} />
           <StatCard
             label="Open"
@@ -749,6 +788,8 @@ export default function TradesPage() {
               </table>
             </div>
           </div>
+        )}
+          </>
         )}
       </main>
     </div>

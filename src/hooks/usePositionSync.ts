@@ -59,6 +59,10 @@ export function usePositionSync(
     const positionDrawings = drawingsRef.current;
 
     for (const position of positionDrawings) {
+      // Skip signal positions - they're visual indicators, not actual trades
+      // Only sync when user confirms the trade (status !== "signal")
+      if (position.status === "signal") continue;
+
       // Only sync new positions that don't have a Convex trade ID yet
       if (!position.convexTradeId && !processedIds.current.has(position.id)) {
         if (syncingIds.current.has(position.id)) continue;

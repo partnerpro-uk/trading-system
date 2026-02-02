@@ -185,6 +185,15 @@ export interface ParallelChannelDrawing extends BaseDrawing {
 }
 
 /**
+ * Position status for signal/trade lifecycle
+ * - signal: Strategy-generated, not yet traded (visual only)
+ * - pending: User confirmed intent to trade, waiting for fill
+ * - open: Trade is active with entry filled
+ * - closed: Trade completed (hit TP, SL, or manually closed)
+ */
+export type PositionStatus = "signal" | "pending" | "open" | "closed";
+
+/**
  * Base Position Drawing (shared properties)
  */
 interface BasePositionDrawing extends BaseDrawing {
@@ -209,6 +218,13 @@ interface BasePositionDrawing extends BaseDrawing {
   // Convex sync
   convexTradeId?: string;      // ID of linked trade in Convex
   syncedToConvex?: boolean;    // Whether this position has been synced
+
+  // Signal/Trade lifecycle status
+  status?: PositionStatus;     // Signal lifecycle state (default: "open" for backwards compat)
+  confirmedAt?: number;        // When user clicked "Take Trade" (signal → pending/open)
+  entryFilledAt?: number;      // When entry was filled (pending → open)
+  closedAt?: number;           // When trade closed
+  closedReason?: "tp" | "sl" | "manual" | "timeout";  // Why the trade closed
 }
 
 /**

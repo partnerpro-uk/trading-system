@@ -79,6 +79,27 @@ interface UseStrategyVisualsOptions {
   candles: CandleInput[] | null;
 }
 
+/** Horizontal level for chart rendering */
+export interface ChartLevel {
+  price: number;
+  color: string;
+  lineWidth: number;
+  lineStyle: "solid" | "dashed" | "dotted";
+  label?: string;
+  startTime?: number;
+  endTime?: number;
+}
+
+/** Entry signal for position drawing creation */
+export interface EntrySignal {
+  timestamp: number;
+  direction: "long" | "short";
+  entryPrice: number;
+  stopLoss: number;
+  takeProfit: number;
+  strategyId: string;
+}
+
 interface UseStrategyVisualsReturn {
   /** Strategy visuals configuration */
   visuals: StrategyVisuals | null;
@@ -90,6 +111,10 @@ interface UseStrategyVisualsReturn {
   markers: ChartMarker[];
   /** Zones to render on chart */
   zones: ChartZone[];
+  /** Horizontal levels to render (FCR high/low, FVG, etc.) */
+  levels: ChartLevel[];
+  /** Entry signals for creating position drawings */
+  entrySignals: EntrySignal[];
   /** Loading state */
   isLoading: boolean;
   /** Error message if any */
@@ -454,12 +479,147 @@ export function useStrategyVisuals({
     [getSnapshot]
   );
 
+  // Generate horizontal levels from custom indicator outputs
+  const levels = useMemo((): ChartLevel[] => {
+    if (!visuals || !candles || candles.length === 0) {
+      return [];
+    }
+
+    const result: ChartLevel[] = [];
+
+    // Check if visuals has levels configuration
+    const levelConfigs = (visuals as StrategyVisuals & { levels?: Record<string, { source: string; color: string; lineWidth: number; lineStyle: string; label?: string }> }).levels;
+    if (!levelConfigs) return result;
+
+    // Build lookup maps for custom indicator values
+    const customMaps = new Map<string, Map<string, Map<number, number>>>();
+    for (const [id, output] of customIndicatorOutputs) {
+      const fieldMaps = new Map<string, Map<number, number>>();
+      for (const [fieldName, values] of Object.entries(output)) {
+        if (Array.isArray(values) && values.length > 0 && typeof values[0]?.timestamp === "number") {
+          const valueMap = new Map<number, number>();
+          for (const v of values as Array<{ timestamp: number; value: number }>) {
+            if (!isNaN(v.value)) {
+              valueMap.set(v.timestamp, v.value);
+            }
+          }
+          fieldMaps.set(fieldName, valueMap);
+        }
+      }
+      customMaps.set(id, fieldMaps);
+    }
+
+    // Process each level config
+    for (const [levelId, config] of Object.entries(levelConfigs)) {
+      // Parse source like "fcr_detector.fcrHigh"
+      const match = config.source.match(/^(\w+)\.(\w+)$/);
+      if (!match) continue;
+
+      const [, indicatorId, field] = match;
+      const fieldMaps = customMaps.get(indicatorId);
+      if (!fieldMaps) continue;
+
+      const valueMap = fieldMaps.get(field);
+      if (!valueMap || valueMap.size === 0) continue;
+
+      // Find the first valid value and its time range
+      let firstTime: number | undefined;
+      let lastTime: number | undefined;
+      let price: number | undefined;
+
+      for (const candle of candles) {
+        const val = valueMap.get(candle.timestamp);
+        if (val !== undefined && !isNaN(val)) {
+          if (price === undefined) {
+            price = val;
+            firstTime = candle.timestamp;
+          }
+          lastTime = candle.timestamp;
+        }
+      }
+
+      if (price !== undefined && firstTime !== undefined) {
+        result.push({
+          price,
+          color: config.color,
+          lineWidth: config.lineWidth || 1,
+          lineStyle: (config.lineStyle as "solid" | "dashed" | "dotted") || "dashed",
+          label: config.label,
+          startTime: firstTime,
+          endTime: lastTime,
+        });
+      }
+    }
+
+    return result;
+  }, [visuals, candles, customIndicatorOutputs]);
+
+  // Extract entry signals for position drawing creation
+  const entrySignals = useMemo((): EntrySignal[] => {
+    if (!visuals || !candles || candles.length === 0 || customIndicatorOutputs.size === 0) {
+      return [];
+    }
+
+    const result: EntrySignal[] = [];
+
+    // Look for FCR detector output
+    for (const [id, output] of customIndicatorOutputs) {
+      // Check if this is FCR detector (has entryLong, entryShort, entryPrice, stopLoss, takeProfit)
+      const fcrOutput = output as FCRDetectorOutput;
+      if (!fcrOutput.entryLong || !fcrOutput.entryShort) continue;
+
+      for (let i = 0; i < candles.length; i++) {
+        const timestamp = candles[i].timestamp;
+
+        // Check for long entry
+        if (fcrOutput.entryLong[i]?.value === 1) {
+          const entryPrice = fcrOutput.entryPrice[i]?.value;
+          const stopLoss = fcrOutput.stopLoss[i]?.value;
+          const takeProfit = fcrOutput.takeProfit[i]?.value;
+
+          if (entryPrice && stopLoss && takeProfit && !isNaN(entryPrice) && !isNaN(stopLoss) && !isNaN(takeProfit)) {
+            result.push({
+              timestamp,
+              direction: "long",
+              entryPrice,
+              stopLoss,
+              takeProfit,
+              strategyId: visuals.strategyId,
+            });
+          }
+        }
+
+        // Check for short entry
+        if (fcrOutput.entryShort[i]?.value === 1) {
+          const entryPrice = fcrOutput.entryPrice[i]?.value;
+          const stopLoss = fcrOutput.stopLoss[i]?.value;
+          const takeProfit = fcrOutput.takeProfit[i]?.value;
+
+          if (entryPrice && stopLoss && takeProfit && !isNaN(entryPrice) && !isNaN(stopLoss) && !isNaN(takeProfit)) {
+            result.push({
+              timestamp,
+              direction: "short",
+              entryPrice,
+              stopLoss,
+              takeProfit,
+              strategyId: visuals.strategyId,
+            });
+          }
+        }
+      }
+    }
+
+    return result;
+  }, [visuals, candles, customIndicatorOutputs]);
+
   return {
     visuals,
     indicatorSeries,
     indicatorConfigs,
     markers,
     zones,
+    levels,
+    entrySignals,
     isLoading,
     error,
     getSnapshot,

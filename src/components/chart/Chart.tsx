@@ -2087,6 +2087,19 @@ export function Chart({
 
         if (entryX === null || entryY === null || tpY === null || slY === null) return;
 
+        // Status-based styling
+        const positionStatus = drawing.status || "open"; // Default to "open" for backwards compat
+        const isSignal = positionStatus === "signal";
+        const isLive = positionStatus === "pending" || positionStatus === "open";
+        const isClosed = positionStatus === "closed";
+
+        // Opacity based on status
+        const zoneOpacity = isSignal ? 0.1 : isClosed ? 0.15 : 0.2;
+        const lineOpacity = isSignal ? 0.5 : isClosed ? 0.6 : 1.0;
+
+        // Line style: dashed for signals, solid for others
+        const lineDash = isSignal ? [6, 4] : [];
+
         // Calculate pip values (assuming 5-digit pricing for forex)
         const pipMultiplier = drawing.entry.price < 10 ? 10000 : 100; // Forex vs indices
         const tpPips = Math.abs(drawing.takeProfit - drawing.entry.price) * pipMultiplier;
@@ -2122,17 +2135,35 @@ export function Chart({
           return `rgba(${r}, ${g}, ${b}, ${alpha})`;
         };
 
-        // Draw TP zone (fill color derived from line color)
-        ctx.fillStyle = hexToRgba(tpColor, 0.2);
+        // Draw TP zone (fill color derived from line color, opacity based on status)
+        ctx.fillStyle = hexToRgba(tpColor, zoneOpacity);
         const tpZoneTop = Math.min(entryY, tpY);
         const tpZoneHeight = Math.abs(tpY - entryY);
         ctx.fillRect(entryX, tpZoneTop, actualZoneWidth, tpZoneHeight);
 
-        // Draw SL zone (fill color derived from line color)
-        ctx.fillStyle = hexToRgba(slColor, 0.2);
+        // For signals, draw dashed border around TP zone
+        if (isSignal) {
+          ctx.strokeStyle = hexToRgba(tpColor, 0.4);
+          ctx.lineWidth = 1;
+          ctx.setLineDash([4, 4]);
+          ctx.strokeRect(entryX, tpZoneTop, actualZoneWidth, tpZoneHeight);
+          ctx.setLineDash([]);
+        }
+
+        // Draw SL zone (fill color derived from line color, opacity based on status)
+        ctx.fillStyle = hexToRgba(slColor, zoneOpacity);
         const slZoneTop = Math.min(entryY, slY);
         const slZoneHeight = Math.abs(slY - entryY);
         ctx.fillRect(entryX, slZoneTop, actualZoneWidth, slZoneHeight);
+
+        // For signals, draw dashed border around SL zone
+        if (isSignal) {
+          ctx.strokeStyle = hexToRgba(slColor, 0.4);
+          ctx.lineWidth = 1;
+          ctx.setLineDash([4, 4]);
+          ctx.strokeRect(entryX, slZoneTop, actualZoneWidth, slZoneHeight);
+          ctx.setLineDash([]);
+        }
 
         // Calculate candle penetration into TP/SL zones (TradingView-style highlighting)
         // IMPORTANT: Track penetration only until TP or SL is HIT for the first time
@@ -2290,30 +2321,35 @@ export function Chart({
           }
         }
 
-        // Draw entry line
-        ctx.strokeStyle = "#2196F3";
+        // Draw entry line (dashed for signals)
+        ctx.strokeStyle = hexToRgba("#2196F3", lineOpacity);
         ctx.lineWidth = 2 + (highlight ? 1 : 0);
-        ctx.setLineDash([]);
+        ctx.setLineDash(lineDash);
         ctx.beginPath();
         ctx.moveTo(entryX, entryY);
         ctx.lineTo(entryX + actualZoneWidth, entryY);
         ctx.stroke();
+        ctx.setLineDash([]);
 
-        // Draw TP line
-        ctx.strokeStyle = tpColor;
+        // Draw TP line (dashed for signals)
+        ctx.strokeStyle = hexToRgba(tpColor, lineOpacity);
         ctx.lineWidth = 1 + (highlight ? 1 : 0);
+        ctx.setLineDash(lineDash);
         ctx.beginPath();
         ctx.moveTo(entryX, tpY);
         ctx.lineTo(entryX + actualZoneWidth, tpY);
         ctx.stroke();
+        ctx.setLineDash([]);
 
-        // Draw SL line
-        ctx.strokeStyle = slColor;
+        // Draw SL line (dashed for signals)
+        ctx.strokeStyle = hexToRgba(slColor, lineOpacity);
         ctx.lineWidth = 1 + (highlight ? 1 : 0);
+        ctx.setLineDash(lineDash);
         ctx.beginPath();
         ctx.moveTo(entryX, slY);
         ctx.lineTo(entryX + actualZoneWidth, slY);
         ctx.stroke();
+        ctx.setLineDash([]);
 
         // Draw vertical lines on left and right edges
         ctx.strokeStyle = "#787B86";
@@ -2407,6 +2443,55 @@ export function Chart({
 
           ctx.fillStyle = "#fff";
           ctx.fillText(candleText, candleLabelX + labelPadding, candleLabelY);
+        }
+
+        // Draw status badge (Signal, Live, Win/Loss)
+        let statusBadgeText = "";
+        let statusBadgeColor = "";
+        if (isSignal) {
+          statusBadgeText = "SIGNAL";
+          statusBadgeColor = "#9333EA"; // Purple for signals
+        } else if (isLive) {
+          statusBadgeText = "LIVE";
+          statusBadgeColor = "#F59E0B"; // Amber for live trades
+        } else if (isClosed && tradeOutcome) {
+          // Show outcome badge for closed trades
+          if (tradeOutcome === "tp") {
+            statusBadgeText = "WIN";
+            statusBadgeColor = "#22C55E"; // Green
+          } else if (tradeOutcome === "sl") {
+            statusBadgeText = "LOSS";
+            statusBadgeColor = "#EF4444"; // Red
+          } else {
+            statusBadgeText = "CLOSED";
+            statusBadgeColor = "#6B7280"; // Gray
+          }
+        }
+
+        if (statusBadgeText) {
+          const badgeTextWidth = ctx.measureText(statusBadgeText).width;
+          const badgeWidth = badgeTextWidth + labelPadding * 2;
+          const badgeX = entryX + 10;
+          const badgeY = tpY + (isLong ? -labelHeight - 30 : 30);
+
+          // Draw badge background
+          ctx.fillStyle = statusBadgeColor;
+          ctx.beginPath();
+          ctx.roundRect(badgeX, badgeY, badgeWidth, labelHeight, 3);
+          ctx.fill();
+
+          // Add pulsing border for live trades (just a thicker border as animation isn't possible in static canvas)
+          if (isLive) {
+            ctx.strokeStyle = "#fff";
+            ctx.lineWidth = 2;
+            ctx.stroke();
+          }
+
+          // Draw badge text
+          ctx.fillStyle = "#fff";
+          ctx.font = "bold 10px Inter, sans-serif";
+          ctx.fillText(statusBadgeText, badgeX + labelPadding, badgeY + labelHeight / 2);
+          ctx.font = "11px Inter, sans-serif"; // Reset font
         }
 
         // Draw EXIT line if trade was closed at a different price than TP/SL (manual exit)

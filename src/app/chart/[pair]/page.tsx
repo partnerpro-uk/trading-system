@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useMemo, useEffect } from "react";
+import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { useParams } from "next/navigation";
 import { Panel, Group as PanelGroup, Separator as PanelResizeHandle } from "react-resizable-panels";
 import { Chart } from "@/components/chart/Chart";
@@ -15,7 +15,8 @@ import { useStrategyVisuals } from "@/hooks/useStrategyVisuals";
 import { useDrawings, useDrawingKeyboardShortcuts } from "@/hooks/useDrawings";
 import { usePositionSync } from "@/hooks/usePositionSync";
 import { useTradesForChart } from "@/hooks/useTrades";
-import { hydrateDrawingStore } from "@/lib/drawings/store";
+import { hydrateDrawingStore, useDrawingStore } from "@/lib/drawings/store";
+import { PositionDrawing, HorizontalRayDrawing } from "@/lib/drawings/types";
 import Link from "next/link";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 import { UserButton, SignedIn, SignedOut, SignInButton } from "@clerk/nextjs";
@@ -86,8 +87,8 @@ export default function ChartPage() {
   const { strategies } = useStrategies();
   const [selectedStrategy, setSelectedStrategy] = useState<string | null>(null);
 
-  // Strategy visuals (indicators, markers, zones)
-  const { indicatorSeries, indicatorConfigs, markers, zones } = useStrategyVisuals({
+  // Strategy visuals (indicators, markers, zones, levels, entry signals)
+  const { indicatorSeries, indicatorConfigs, markers, zones, levels, entrySignals } = useStrategyVisuals({
     strategyId: selectedStrategy,
     candles: candles,
   });
@@ -116,6 +117,111 @@ export default function ChartPage() {
 
   // Fetch trades for this chart to display exit lines on positions
   const { tradesMap } = useTradesForChart(pair, timeframe);
+
+  // Track which entry signals we've already created drawings for (to avoid duplicates)
+  const createdSignalsRef = useRef<Set<string>>(new Set());
+  // Track which strategy levels we've created (FCR high/low, FVG lines)
+  const createdLevelsRef = useRef<Set<string>>(new Set());
+  // Track previous strategy to clear levels when strategy changes
+  const prevStrategyRef = useRef<string | null>(null);
+
+  // Create position drawings from strategy entry signals
+  useEffect(() => {
+    if (!entrySignals || entrySignals.length === 0) return;
+
+    const { createLongPosition, createShortPosition } = useDrawingStore.getState();
+
+    for (const signal of entrySignals) {
+      // Create a unique key for this signal
+      const signalKey = `${signal.timestamp}-${signal.direction}-${signal.entryPrice}`;
+
+      // Skip if we've already created a drawing for this signal
+      if (createdSignalsRef.current.has(signalKey)) continue;
+
+      // Check if a position already exists at this timestamp
+      const existingPosition = drawings.find(
+        (d) =>
+          (d.type === "longPosition" || d.type === "shortPosition") &&
+          (d as PositionDrawing).entry.timestamp === signal.timestamp
+      );
+
+      if (existingPosition) {
+        createdSignalsRef.current.add(signalKey);
+        continue;
+      }
+
+      // Create the position drawing
+      const entry = {
+        timestamp: signal.timestamp,
+        price: signal.entryPrice,
+      };
+
+      if (signal.direction === "long") {
+        createLongPosition(pair, timeframe, entry, signal.takeProfit, signal.stopLoss, {
+          createdBy: "strategy",
+          strategyId: signal.strategyId,
+          status: "signal",
+        });
+      } else {
+        createShortPosition(pair, timeframe, entry, signal.takeProfit, signal.stopLoss, {
+          createdBy: "strategy",
+          strategyId: signal.strategyId,
+          status: "signal",
+        });
+      }
+
+      createdSignalsRef.current.add(signalKey);
+    }
+  }, [entrySignals, pair, timeframe, drawings]);
+
+  // Create horizontal ray drawings from strategy levels (FCR high/low, FVG lines)
+  useEffect(() => {
+    if (!levels || levels.length === 0) return;
+
+    const { createHorizontalRay } = useDrawingStore.getState();
+
+    // If strategy changed, clear the created levels tracker
+    if (prevStrategyRef.current !== selectedStrategy) {
+      createdLevelsRef.current.clear();
+      prevStrategyRef.current = selectedStrategy;
+    }
+
+    for (const level of levels) {
+      // Create a unique key for this level
+      const levelKey = `${level.label || 'level'}-${level.price}-${level.startTime || 0}`;
+
+      // Skip if we've already created this level
+      if (createdLevelsRef.current.has(levelKey)) continue;
+
+      // Check if a horizontal ray already exists at this price/time
+      const existingRay = drawings.find((d) => {
+        if (d.type !== "horizontalRay" || d.createdBy !== "strategy") return false;
+        const ray = d as HorizontalRayDrawing;
+        return ray.anchor.price === level.price;
+      });
+
+      if (existingRay) {
+        createdLevelsRef.current.add(levelKey);
+        continue;
+      }
+
+      // Create the horizontal ray
+      const anchor = {
+        timestamp: level.startTime || (candles?.[0]?.timestamp || Date.now()),
+        price: level.price,
+      };
+
+      createHorizontalRay(pair, timeframe, anchor, {
+        color: level.color,
+        lineWidth: level.lineWidth,
+        lineStyle: level.lineStyle,
+        label: level.label,
+        createdBy: "strategy",
+      });
+
+      createdLevelsRef.current.add(levelKey);
+    }
+  }, [levels, pair, timeframe, drawings, selectedStrategy, candles]);
 
   // Drawing keyboard shortcuts (including Ctrl+Z for undo, 1-9 for quick colors, arrows for micro-adjust)
   useDrawingKeyboardShortcuts(

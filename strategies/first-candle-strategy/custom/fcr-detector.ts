@@ -402,7 +402,9 @@ export function computeFCRDetector(
               day.entryPrice = candle.close;
 
               // Calculate SL and TP
-              const tickSize = 0.01; // Approximate
+              // Use price-based buffer (0.1% of price for indices, smaller for forex)
+              const priceLevel = candle.close;
+              const tickSize = priceLevel > 100 ? priceLevel * 0.0002 : 0.0001;
               day.stopLoss = day.retestLow - tickSize;
               const risk = day.entryPrice - day.stopLoss;
               day.takeProfit = day.entryPrice + risk * fullParams.riskRewardRatio;
@@ -425,7 +427,9 @@ export function computeFCRDetector(
               day.entryPrice = candle.close;
 
               // Calculate SL and TP
-              const tickSize = 0.01;
+              // Use price-based buffer (0.1% of price for indices, smaller for forex)
+              const priceLevel = candle.close;
+              const tickSize = priceLevel > 100 ? priceLevel * 0.0002 : 0.0001;
               day.stopLoss = day.retestHigh + tickSize;
               const risk = day.stopLoss - day.entryPrice;
               day.takeProfit = day.entryPrice - risk * fullParams.riskRewardRatio;
