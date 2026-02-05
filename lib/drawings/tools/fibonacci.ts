@@ -24,8 +24,12 @@ export interface FibLevel {
 /**
  * Calculate Fibonacci retracement levels between two price points
  *
- * @param startPrice - Starting price (usually swing low/high)
- * @param endPrice - Ending price (usually swing high/low)
+ * TradingView convention: levels are relative to drawing direction
+ * - 100% at anchor1 (start point / first click)
+ * - 0% at anchor2 (end point / second click)
+ *
+ * @param startPrice - Starting price (anchor1 / first click)
+ * @param endPrice - Ending price (anchor2 / second click)
  * @param levels - Array of Fibonacci levels to calculate
  * @returns Array of FibLevel objects
  */
@@ -39,7 +43,7 @@ export function calculateFibLevels(
 
   return levels.map((level) => ({
     level,
-    price: startPrice + range * (1 - level),  // Retracement is from end to start
+    price: startPrice + range * (1 - level),  // 100% at startPrice (anchor1), 0% at endPrice (anchor2)
     label: level === 0 ? "0" : level === 1 ? "1" : level.toFixed(3).replace(/0+$/, "").replace(/\.$/, ""),
     color: colors[level] || DEFAULT_DRAWING_COLORS.fibonacci.line,
   }));

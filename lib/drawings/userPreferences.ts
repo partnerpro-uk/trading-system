@@ -8,6 +8,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { COLOR_PRESETS } from "./colors";
+import { DEFAULT_FIB_LEVELS, DEFAULT_DRAWING_COLORS } from "./types";
 
 /**
  * User preferences interface
@@ -24,6 +25,8 @@ interface UserDrawingPreferences {
 
   // Fibonacci
   lastFibColor: string;
+  lastFibLevels: number[];
+  lastFibLevelColors: Record<number, string>;
 
   // Position drawing
   lastTpColor: string;
@@ -36,6 +39,9 @@ interface UserDrawingPreferences {
   setLastFillColor: (color: string) => void;
   setLastBorderColor: (color: string) => void;
   setLastFibColor: (color: string) => void;
+  setLastFibLevels: (levels: number[]) => void;
+  setLastFibLevelColors: (colors: Record<number, string>) => void;
+  setLastFibLevelColor: (level: number, color: string) => void;
   setLastTpColor: (color: string) => void;
   setLastSlColor: (color: string) => void;
 
@@ -55,6 +61,7 @@ interface UserDrawingPreferences {
   getLineDefaults: () => { color: string; lineWidth: number; lineStyle: "solid" | "dashed" | "dotted" };
   getFillDefaults: () => { fillColor: string; borderColor: string };
   getPositionDefaults: () => { tpColor: string; slColor: string };
+  getFibDefaults: () => { levels: number[]; levelColors: Record<number, string> };
 }
 
 /**
@@ -67,6 +74,8 @@ const DEFAULTS = {
   fillColor: "rgba(33, 150, 243, 0.1)",
   borderColor: "#2196F3",
   fibColor: "#787B86",
+  fibLevels: DEFAULT_FIB_LEVELS,
+  fibLevelColors: DEFAULT_DRAWING_COLORS.fibonacci.levels,
   tpColor: "#26A69A",        // Green
   slColor: "#EF5350",        // Red
 };
@@ -84,6 +93,8 @@ export const useUserPreferences = create<UserDrawingPreferences>()(
       lastFillColor: DEFAULTS.fillColor,
       lastBorderColor: DEFAULTS.borderColor,
       lastFibColor: DEFAULTS.fibColor,
+      lastFibLevels: DEFAULTS.fibLevels,
+      lastFibLevelColors: DEFAULTS.fibLevelColors,
       lastTpColor: DEFAULTS.tpColor,
       lastSlColor: DEFAULTS.slColor,
 
@@ -94,6 +105,11 @@ export const useUserPreferences = create<UserDrawingPreferences>()(
       setLastFillColor: (color) => set({ lastFillColor: color }),
       setLastBorderColor: (color) => set({ lastBorderColor: color }),
       setLastFibColor: (color) => set({ lastFibColor: color }),
+      setLastFibLevels: (levels) => set({ lastFibLevels: levels }),
+      setLastFibLevelColors: (colors) => set({ lastFibLevelColors: colors }),
+      setLastFibLevelColor: (level, color) => set((state) => ({
+        lastFibLevelColors: { ...state.lastFibLevelColors, [level]: color }
+      })),
       setLastTpColor: (color) => set({ lastTpColor: color }),
       setLastSlColor: (color) => set({ lastSlColor: color }),
 
@@ -144,6 +160,11 @@ export const useUserPreferences = create<UserDrawingPreferences>()(
         tpColor: get().lastTpColor,
         slColor: get().lastSlColor,
       }),
+
+      getFibDefaults: () => ({
+        levels: get().lastFibLevels,
+        levelColors: get().lastFibLevelColors,
+      }),
     }),
     {
       name: "trading-user-preferences",
@@ -154,6 +175,8 @@ export const useUserPreferences = create<UserDrawingPreferences>()(
         lastFillColor: state.lastFillColor,
         lastBorderColor: state.lastBorderColor,
         lastFibColor: state.lastFibColor,
+        lastFibLevels: state.lastFibLevels,
+        lastFibLevelColors: state.lastFibLevelColors,
         lastTpColor: state.lastTpColor,
         lastSlColor: state.lastSlColor,
       }),

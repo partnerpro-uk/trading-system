@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { X, Lock, Unlock, Eye, EyeOff } from "lucide-react";
+import { X, Lock, Unlock, Eye, EyeOff, Plus, Trash2, Pencil, RotateCcw } from "lucide-react";
 import { ColorPicker, RectangleColorPicker } from "./ColorPicker";
 import { LineStyleSelector } from "./LineStyleSelector";
 import {
@@ -16,8 +16,11 @@ import {
   isRectangleDrawing,
   isCircleDrawing,
   isPositionDrawing,
+  DEFAULT_DRAWING_COLORS,
+  DEFAULT_FIB_LEVELS,
 } from "@/lib/drawings/types";
 import { hexToRgb } from "@/lib/drawings/colors";
+import { useUserPreferences } from "@/lib/drawings/userPreferences";
 import { useStrategies } from "@/hooks/useStrategies";
 import {
   detectSession,
@@ -135,13 +138,18 @@ export function DrawingSettings({ drawing, onUpdate, onClose, positions = [] }: 
   }, [onClose]);
 
   // For position drawings, show Trade Info as primary tab
-  // For other drawings, show standard tabs
+  // Custom tabs per drawing type
   const tabs: { id: TabId; label: string }[] = isPositionDrawing(drawing)
     ? [
         { id: "tradeInfo", label: "Trade Info" },
         { id: "style", label: "Style" },
         { id: "coordinates", label: "Coordinates" },
         { id: "visibility", label: "Visibility" },
+      ]
+    : isFibonacciDrawing(drawing)
+    ? [
+        { id: "style", label: "Style" },
+        { id: "coordinates", label: "Coordinates" },
       ]
     : [
         { id: "style", label: "Style" },
@@ -150,11 +158,14 @@ export function DrawingSettings({ drawing, onUpdate, onClose, positions = [] }: 
         { id: "visibility", label: "Visibility" },
       ];
 
+  // Use wider modal for Fibonacci drawings
+  const modalWidth = isFibonacciDrawing(drawing) ? "w-[600px]" : "w-[380px]";
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" data-modal>
       <div
         ref={modalRef}
-        className="bg-gray-900 border border-gray-700 rounded-lg shadow-2xl w-[380px] max-h-[80vh] overflow-hidden"
+        className={`bg-gray-900 border border-gray-700 rounded-lg shadow-2xl ${modalWidth} max-h-[80vh] overflow-hidden`}
         onClick={(e) => e.stopPropagation()}
         onKeyDown={(e) => e.stopPropagation()}
       >
@@ -192,13 +203,13 @@ export function DrawingSettings({ drawing, onUpdate, onClose, positions = [] }: 
         </div>
 
         {/* Tab Content */}
-        <div className="p-4 overflow-y-auto max-h-[400px]">
+        <div className={`p-4 ${isFibonacciDrawing(drawing) ? "overflow-visible" : "overflow-y-auto max-h-[400px]"}`}>
           {activeTab === "tradeInfo" && isPositionDrawing(drawing) && (
             <TradeInfoTab drawing={drawing} onUpdate={onUpdate} />
           )}
           {activeTab === "style" && <StyleTab drawing={drawing} onUpdate={onUpdate} />}
           {activeTab === "text" && <TextTab drawing={drawing} onUpdate={onUpdate} positions={positions} />}
-          {activeTab === "coordinates" && <CoordinatesTab drawing={drawing} onUpdate={onUpdate} />}
+          {activeTab === "coordinates" && <CoordinatesTab drawing={drawing} onUpdate={onUpdate} positions={positions} />}
           {activeTab === "visibility" && <VisibilityTab drawing={drawing} onUpdate={onUpdate} />}
         </div>
 
@@ -284,7 +295,7 @@ function StyleTab({ drawing, onUpdate }: { drawing: Drawing; onUpdate: (updates:
 
   return (
     <div className="space-y-4">
-      {/* Color */}
+      {/* Color - hide for Fibonacci since each level has its own color */}
       {supportsFill ? (
         <div className="space-y-3">
           <div className="flex items-center justify-between">
@@ -322,7 +333,7 @@ function StyleTab({ drawing, onUpdate }: { drawing: Drawing; onUpdate: (updates:
             </div>
           </div>
         </div>
-      ) : (
+      ) : !isFibonacciDrawing(drawing) && (
         <div className="flex items-center justify-between">
           <span className="text-sm text-gray-400">Color</span>
           <ColorPicker value={getColor()} onChange={handleColorChange} />
@@ -375,34 +386,40 @@ function StyleTab({ drawing, onUpdate }: { drawing: Drawing; onUpdate: (updates:
       {/* Fibonacci-specific settings */}
       {isFibonacciDrawing(drawing) && (
         <>
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-gray-400">Extend Left</span>
-            <ToggleSwitch
-              checked={drawing.extendLeft}
-              onChange={(checked) => onUpdate({ extendLeft: checked } as Partial<Drawing>)}
-            />
+          {/* Options Grid - 2x2 */}
+          <div className="grid grid-cols-2 gap-x-6 gap-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-gray-400">Extend Left</span>
+              <ToggleSwitch
+                checked={drawing.extendLeft}
+                onChange={(checked) => onUpdate({ extendLeft: checked } as Partial<Drawing>)}
+              />
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-gray-400">Extend Right</span>
+              <ToggleSwitch
+                checked={drawing.extendRight}
+                onChange={(checked) => onUpdate({ extendRight: checked } as Partial<Drawing>)}
+              />
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-gray-400">Show Labels</span>
+              <ToggleSwitch
+                checked={drawing.showLabels}
+                onChange={(checked) => onUpdate({ showLabels: checked } as Partial<Drawing>)}
+              />
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-gray-400">Show Prices</span>
+              <ToggleSwitch
+                checked={drawing.showPrices}
+                onChange={(checked) => onUpdate({ showPrices: checked } as Partial<Drawing>)}
+              />
+            </div>
           </div>
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-gray-400">Extend Right</span>
-            <ToggleSwitch
-              checked={drawing.extendRight}
-              onChange={(checked) => onUpdate({ extendRight: checked } as Partial<Drawing>)}
-            />
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-gray-400">Show Labels</span>
-            <ToggleSwitch
-              checked={drawing.showLabels}
-              onChange={(checked) => onUpdate({ showLabels: checked } as Partial<Drawing>)}
-            />
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-gray-400">Show Prices</span>
-            <ToggleSwitch
-              checked={drawing.showPrices}
-              onChange={(checked) => onUpdate({ showPrices: checked } as Partial<Drawing>)}
-            />
-          </div>
+
+          {/* Fibonacci Levels Configuration */}
+          <FibonacciLevelsEditor drawing={drawing} onUpdate={onUpdate} />
         </>
       )}
 
@@ -865,7 +882,7 @@ function calculateRadius(center: DrawingAnchor, edge: DrawingAnchor): number {
  * Coordinates Tab - Semantic coordinate representation
  * Each drawing type shows coordinates with meaningful labels
  */
-function CoordinatesTab({ drawing, onUpdate }: { drawing: Drawing; onUpdate: (updates: Partial<Drawing>) => void }) {
+function CoordinatesTab({ drawing, onUpdate, positions = [] }: { drawing: Drawing; onUpdate: (updates: Partial<Drawing>) => void; positions?: PositionDrawing[] }) {
   // Handle anchor changes for drawings with anchor1/anchor2
   const handleAnchorChange = (key: string, field: "timestamp" | "price", value: number) => {
     if (key === "anchor") {
@@ -1288,6 +1305,39 @@ function CoordinatesTab({ drawing, onUpdate }: { drawing: Drawing; onUpdate: (up
         );
       })()}
 
+      {/* Link to Position (for non-position drawings when positions exist) */}
+      {!isPositionDrawing(drawing) && positions.length > 0 && (
+        <div className="pt-3 border-t border-gray-700">
+          <label className="text-sm text-gray-400 block mb-1.5">Link to Position</label>
+          <select
+            value={drawing.tradeId || ""}
+            onChange={(e) => onUpdate({ tradeId: e.target.value || undefined } as Partial<Drawing>)}
+            className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white text-sm focus:outline-none focus:border-purple-500"
+          >
+            <option value="">Not linked</option>
+            {positions.map((pos) => {
+              const isLong = pos.type === "longPosition";
+              const direction = isLong ? "Long" : "Short";
+              const price = pos.entry.price.toFixed(5);
+              const dateStr = new Date(pos.entry.timestamp).toLocaleDateString("en-GB", {
+                day: "numeric",
+                month: "short",
+              });
+              return (
+                <option key={pos.id} value={pos.id}>
+                  {direction} @ {price} ({dateStr})
+                </option>
+              );
+            })}
+          </select>
+          <p className="text-[10px] text-gray-500 mt-1">
+            {drawing.tradeId
+              ? "Linked. Appears grouped in sidebar."
+              : "Link this drawing to a trade position."}
+          </p>
+        </div>
+      )}
+
       {/* Created timestamp (read-only info) */}
       <div className="pt-2 border-t border-gray-700">
         <span className="text-xs text-gray-500">
@@ -1357,6 +1407,237 @@ function VisibilityTab({ drawing, onUpdate }: { drawing: Drawing; onUpdate: (upd
         <p>Created by: {drawing.createdBy}</p>
         {drawing.strategyId && <p>Strategy: {drawing.strategyId}</p>}
         {drawing.tradeId && <p>Trade: {drawing.tradeId}</p>}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Fibonacci Levels Editor - Checkbox-based level selection with color pickers
+ */
+function FibonacciLevelsEditor({
+  drawing,
+  onUpdate,
+}: {
+  drawing: FibonacciDrawing;
+  onUpdate: (updates: Partial<Drawing>) => void;
+}) {
+  const [newLevelInput, setNewLevelInput] = useState("");
+  const [saved, setSaved] = useState(false);
+  const { setLastFibLevels, setLastFibLevelColors, getFibDefaults } = useUserPreferences();
+
+  // Combine 7 default levels with any custom levels the user has added
+  const customLevels = drawing.levels.filter((l) => !DEFAULT_FIB_LEVELS.includes(l));
+  const allAvailableLevels = [...DEFAULT_FIB_LEVELS, ...customLevels].sort((a, b) => a - b);
+
+  // Check if a level is enabled (in the drawing.levels array)
+  const isLevelEnabled = (level: number) => drawing.levels.includes(level);
+
+  // Check if a level is custom (not in the 7 defaults)
+  const isCustomLevel = (level: number) => !DEFAULT_FIB_LEVELS.includes(level);
+
+  // Toggle a level on/off
+  const handleToggleLevel = (level: number, enabled: boolean) => {
+    let newLevels: number[];
+    if (enabled) {
+      newLevels = [...drawing.levels, level].sort((a, b) => a - b);
+    } else {
+      newLevels = drawing.levels.filter((l) => l !== level);
+    }
+    onUpdate({ levels: newLevels } as Partial<Drawing>);
+  };
+
+  // Generate a color for new/custom levels
+  const getRandomColor = () => {
+    const colors = ["#F7525F", "#FF9800", "#4CAF50", "#2196F3", "#9C27B0", "#E91E63", "#00BCD4", "#8BC34A", "#FFC107", "#009688"];
+    return colors[Math.floor(Math.random() * colors.length)];
+  };
+
+  // Add a custom level
+  const handleAddLevel = () => {
+    const value = parseFloat(newLevelInput);
+    if (isNaN(value) || value < 0) return;
+
+    const levelValue = value / 100; // Convert percentage to decimal
+    if (allAvailableLevels.includes(levelValue)) {
+      // Level already exists, just enable it if not enabled
+      if (!isLevelEnabled(levelValue)) {
+        handleToggleLevel(levelValue, true);
+      }
+      setNewLevelInput("");
+      return;
+    }
+
+    // Add new custom level (enabled by default)
+    const newLevels = [...drawing.levels, levelValue].sort((a, b) => a - b);
+    const newLevelColors = {
+      ...(drawing.levelColors || {}),
+      [levelValue]: getRandomColor(),
+    };
+    onUpdate({ levels: newLevels, levelColors: newLevelColors } as Partial<Drawing>);
+    setNewLevelInput("");
+  };
+
+  // Remove a custom level entirely
+  const handleRemoveCustomLevel = (level: number) => {
+    const newLevels = drawing.levels.filter((l) => l !== level);
+    const newLevelColors = { ...(drawing.levelColors || {}) };
+    delete newLevelColors[level];
+    onUpdate({ levels: newLevels, levelColors: newLevelColors } as Partial<Drawing>);
+  };
+
+  // Reset to user's saved defaults (or system defaults if none saved)
+  const handleResetToDefaults = () => {
+    const userDefaults = getFibDefaults();
+    onUpdate({
+      levels: [...userDefaults.levels],
+      levelColors: { ...userDefaults.levelColors },
+    } as Partial<Drawing>);
+  };
+
+  // Save current setup as user's default
+  const handleSaveAsDefault = () => {
+    setLastFibLevels([...drawing.levels]);
+    setLastFibLevelColors(drawing.levelColors || {});
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  };
+
+
+  // Render a single level row
+  const renderLevelRow = (level: number) => {
+    const enabled = isLevelEnabled(level);
+    const levelColor =
+      drawing.levelColors?.[level] ||
+      DEFAULT_DRAWING_COLORS.fibonacci.levels[level] ||
+      "#787B86";
+    const isCustom = isCustomLevel(level);
+
+    return (
+      <div
+        key={level}
+        className={`flex items-center gap-3 py-1.5 px-2 rounded group transition-colors ${
+          enabled ? "bg-gray-800/50" : "bg-gray-800/20 opacity-60"
+        }`}
+      >
+        {/* Checkbox */}
+        <input
+          type="checkbox"
+          checked={enabled}
+          onChange={(e) => handleToggleLevel(level, e.target.checked)}
+          className="w-4 h-4 rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500 focus:ring-offset-0 cursor-pointer"
+        />
+
+        {/* Color indicator bar */}
+        <div
+          className="w-1 h-5 rounded-full shrink-0"
+          style={{ backgroundColor: enabled ? levelColor : "#4B5563" }}
+        />
+
+        {/* Level value */}
+        <span
+          className={`w-16 text-sm font-medium ${enabled ? "" : "text-gray-500"}`}
+          style={{ color: enabled ? levelColor : undefined }}
+        >
+          {(level * 100).toFixed(1)}%
+        </span>
+
+        {/* Custom badge */}
+        {isCustom && (
+          <span className="text-[10px] px-1.5 py-0.5 bg-purple-500/20 text-purple-400 rounded font-medium">
+            Custom
+          </span>
+        )}
+
+        {/* Spacer */}
+        <div className="flex-1" />
+
+        {/* Color Picker (only when enabled) */}
+        {enabled && (
+          <ColorPicker
+            value={levelColor}
+            onChange={(color) => {
+              const newLevelColors = {
+                ...(drawing.levelColors || {}),
+                [level]: color,
+              };
+              onUpdate({ levelColors: newLevelColors } as Partial<Drawing>);
+            }}
+          />
+        )}
+
+        {/* Delete Button (only for custom levels) */}
+        {isCustom && (
+          <button
+            onClick={() => handleRemoveCustomLevel(level)}
+            className="p-1 text-gray-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all"
+            title="Remove custom level"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        )}
+      </div>
+    );
+  };
+
+  const enabledCount = drawing.levels.length;
+
+  return (
+    <div className="pt-3 border-t border-gray-700">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-sm text-white font-medium">
+          Levels ({enabledCount})
+        </span>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleSaveAsDefault}
+            className={`text-xs transition-colors ${
+              saved
+                ? "text-green-400"
+                : "text-gray-400 hover:text-blue-400"
+            }`}
+            title="Save current levels & colors as default for new drawings"
+          >
+            {saved ? "Saved!" : "Save as Default"}
+          </button>
+          <span className="text-gray-600">|</span>
+          <button
+            onClick={handleResetToDefaults}
+            className="flex items-center gap-1 text-xs text-gray-400 hover:text-white transition-colors"
+            title="Reset to your saved defaults"
+          >
+            <RotateCcw className="w-3 h-3" />
+            Reset
+          </button>
+        </div>
+      </div>
+
+      {/* Levels List - no scroll needed for 7 default levels */}
+      <div className="space-y-1">
+        {allAvailableLevels.map((level) => renderLevelRow(level))}
+      </div>
+
+      {/* Add Custom Level */}
+      <div className="flex items-center gap-2 mt-3 pt-3 border-t border-gray-700">
+        <input
+          type="number"
+          placeholder="Custom level %"
+          value={newLevelInput}
+          onChange={(e) => setNewLevelInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") handleAddLevel();
+          }}
+          className="flex-1 px-3 py-1.5 bg-gray-800 border border-gray-700 rounded text-white text-sm placeholder-gray-500 focus:outline-none focus:border-blue-500"
+        />
+        <button
+          onClick={handleAddLevel}
+          disabled={!newLevelInput}
+          className="p-1.5 bg-blue-500 hover:bg-blue-600 disabled:bg-gray-700 disabled:text-gray-500 text-white rounded transition-colors"
+          title="Add custom level"
+        >
+          <Plus className="w-4 h-4" />
+        </button>
       </div>
     </div>
   );

@@ -28,6 +28,8 @@ interface UseDrawingsOptions {
 }
 
 export function useDrawings({ pair, timeframe }: UseDrawingsOptions) {
+  // Get user's saved defaults for new drawings
+  const getFibDefaults = useUserPreferences((s) => s.getFibDefaults);
   // Get store functions and state
   const {
     drawings,
@@ -73,7 +75,12 @@ export function useDrawings({ pair, timeframe }: UseDrawingsOptions) {
       switch (type) {
         case "fibonacci":
           if (anchors.anchor2) {
-            createFibonacci(anchors.anchor1, anchors.anchor2);
+            // Apply user's saved Fib defaults (levels + colors)
+            const fibDefaults = getFibDefaults();
+            createFibonacci(anchors.anchor1, anchors.anchor2, {
+              levels: fibDefaults.levels,
+              levelColors: fibDefaults.levelColors,
+            });
           }
           break;
         case "trendline":
@@ -142,6 +149,7 @@ export function useDrawings({ pair, timeframe }: UseDrawingsOptions) {
       createShortPosition,
       createMarker,
       setActiveDrawingTool,
+      getFibDefaults,
     ]
   );
 

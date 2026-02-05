@@ -1948,7 +1948,8 @@ export function Chart({
         const priceRange = drawing.anchor2.price - drawing.anchor1.price;
 
         for (const level of drawing.levels) {
-          const levelPrice = drawing.anchor1.price + priceRange * level;
+          // TradingView convention: 100% at anchor1 (start), 0% at anchor2 (end)
+          const levelPrice = drawing.anchor1.price + priceRange * (1 - level);
           const levelY = series.priceToCoordinate(levelPrice);
           if (levelY === null) continue;
 
@@ -2715,8 +2716,58 @@ export function Chart({
         ctx.moveTo(x1, y1);
         ctx.lineTo(x2, y2);
       } else if (pending.type === "fibonacci") {
-        ctx.moveTo(x1, y1);
-        ctx.lineTo(x2, y2);
+        // Get the price at the cursor position
+        const price2 = series.coordinateToPrice(y2);
+        if (price2 === null) return;
+
+        const price1 = pending.anchor1.price;
+        const priceRange = price2 - price1;
+
+        // Calculate line boundaries (between anchor points only)
+        const startX = Math.min(x1, x2);
+        const endX = Math.max(x1, x2);
+
+        // Draw Fibonacci levels preview (TradingView convention: 100% at start, 0% at end)
+        for (const level of DEFAULT_FIB_LEVELS) {
+          const levelPrice = price1 + priceRange * (1 - level);
+          const levelY = series.priceToCoordinate(levelPrice);
+          if (levelY === null) continue;
+
+          const levelColor = DEFAULT_DRAWING_COLORS.fibonacci.levels[level as keyof typeof DEFAULT_DRAWING_COLORS.fibonacci.levels] ||
+            "#787B86";
+
+          ctx.beginPath();
+          ctx.strokeStyle = levelColor;
+          ctx.lineWidth = 1;
+          ctx.setLineDash([]);
+
+          // Draw line only between anchor points
+          ctx.moveTo(startX, levelY);
+          ctx.lineTo(endX, levelY);
+          ctx.stroke();
+
+          // Draw level label at the end of the line
+          ctx.fillStyle = levelColor;
+          ctx.font = "10px sans-serif";
+          ctx.fillText(`${(level * 100).toFixed(1)}%`, endX + 5, levelY + 4);
+        }
+
+        // Draw anchor points
+        ctx.setLineDash([]);
+        ctx.fillStyle = "#fff";
+        ctx.beginPath();
+        ctx.arc(x1, y1, 4, 0, 2 * Math.PI);
+        ctx.fill();
+        ctx.strokeStyle = "#333";
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.arc(x2, y2, 4, 0, 2 * Math.PI);
+        ctx.fill();
+        ctx.stroke();
+
+        return;
       } else if (pending.type === "rectangle") {
         const rectX = Math.min(x1, x2);
         const rectY = Math.min(y1, y2);

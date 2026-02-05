@@ -315,6 +315,49 @@ export const DEFAULT_FIB_LEVELS = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1];
 export const EXTENDED_FIB_LEVELS = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1, 1.272, 1.618, 2.618];
 
 /**
+ * All available Fibonacci levels that users can choose from
+ * Includes standard retracements and extensions
+ */
+export const ALL_FIB_LEVELS = [
+  0,
+  0.236,
+  0.382,
+  0.5,
+  0.618,
+  0.786,
+  1,
+  1.272,
+  1.414,
+  1.618,
+  2,
+  2.272,
+  2.618,
+  3.618,
+  4.236,
+];
+
+/**
+ * Display labels for Fibonacci levels
+ */
+export const FIB_LEVEL_LABELS: Record<number, string> = {
+  0: "0%",
+  0.236: "23.6%",
+  0.382: "38.2%",
+  0.5: "50%",
+  0.618: "61.8%",
+  0.786: "78.6%",
+  1: "100%",
+  1.272: "127.2%",
+  1.414: "141.4%",
+  1.618: "161.8%",
+  2: "200%",
+  2.272: "227.2%",
+  2.618: "261.8%",
+  3.618: "361.8%",
+  4.236: "423.6%",
+};
+
+/**
  * Default colors for drawing tools
  */
 export const DEFAULT_DRAWING_COLORS = {
@@ -328,7 +371,15 @@ export const DEFAULT_DRAWING_COLORS = {
       0.618: "#2196F3",
       0.786: "#9C27B0",
       1: "#787B86",
-    },
+      1.272: "#E91E63",
+      1.414: "#00BCD4",
+      1.618: "#8BC34A",
+      2: "#FFC107",
+      2.272: "#3F51B5",
+      2.618: "#009688",
+      3.618: "#FF5722",
+      4.236: "#673AB7",
+    } as Record<number, string>,
   },
   trendline: "#2962FF",
   horizontalLine: "#787B86",

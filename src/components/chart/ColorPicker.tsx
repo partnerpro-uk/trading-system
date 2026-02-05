@@ -26,7 +26,19 @@ export function ColorPicker({
   className = "",
 }: ColorPickerProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [openUpward, setOpenUpward] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+
+  // Check if dropdown should open upward
+  useEffect(() => {
+    if (isOpen && buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom;
+      // Open upward if less than 80px below
+      setOpenUpward(spaceBelow < 80);
+    }
+  }, [isOpen]);
 
   // Close on click outside
   useEffect(() => {
@@ -58,17 +70,22 @@ export function ColorPicker({
     <div ref={containerRef} className={`relative ${className}`}>
       {/* Color button */}
       <button
+        ref={buttonRef}
         onClick={() => setIsOpen(!isOpen)}
         className="w-6 h-6 rounded border border-gray-600 hover:border-gray-400 transition-colors"
         style={{ backgroundColor: value }}
         title="Change color"
       />
 
-      {/* Dropdown */}
+      {/* Dropdown - horizontal row */}
       {isOpen && (
-        <div className="absolute top-full left-0 mt-1 p-2 bg-gray-900 border border-gray-700 rounded-lg shadow-xl z-50 min-w-[120px]">
-          {/* 3x3 Color grid */}
-          <div className="grid grid-cols-3 gap-1 mb-2">
+        <div
+          className={`absolute right-0 p-1.5 bg-gray-900 border border-gray-700 rounded-lg shadow-xl z-[100] ${
+            openUpward ? "bottom-full mb-1" : "top-full mt-1"
+          }`}
+        >
+          {/* Horizontal color row */}
+          <div className="flex gap-1">
             {COLOR_PRESETS.map((preset) => {
               const isSelected = preset.value.toLowerCase() === value.toLowerCase();
               return (
@@ -78,7 +95,7 @@ export function ColorPicker({
                     onChange(preset.value);
                     if (!showOpacity) setIsOpen(false);
                   }}
-                  className={`w-7 h-7 rounded transition-all flex items-center justify-center ${
+                  className={`w-6 h-6 rounded transition-all flex items-center justify-center ${
                     isSelected
                       ? "ring-2 ring-white ring-offset-1 ring-offset-gray-900"
                       : "hover:scale-110"
@@ -88,7 +105,7 @@ export function ColorPicker({
                 >
                   {isSelected && (
                     <Check
-                      className="w-4 h-4"
+                      className="w-3 h-3"
                       style={{ color: getContrastingTextColor(preset.value) }}
                     />
                   )}
@@ -100,9 +117,8 @@ export function ColorPicker({
           {/* Opacity slider */}
           {showOpacity && onOpacityChange && (
             <>
-              <div className="h-px bg-gray-700 my-2" />
+              <div className="h-px bg-gray-700 my-1.5" />
               <div className="flex items-center gap-2">
-                <span className="text-xs text-gray-400 w-12">Opacity</span>
                 <input
                   type="range"
                   min="0"
