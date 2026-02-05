@@ -5,6 +5,7 @@ const isPublicRoute = createRouteMatcher([
   "/sign-up(.*)",
   "/api/candles(.*)",    // Market data is public
   "/api/news(.*)",       // News is public
+  "/api/public(.*)",     // Public API (has its own auth)
 ]);
 
 export default clerkMiddleware(async (auth, req) => {
