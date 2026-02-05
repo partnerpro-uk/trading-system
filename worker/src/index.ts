@@ -270,8 +270,8 @@ function startHTTPServer(): void {
     res.end(JSON.stringify({ error: "Not found" }));
   });
 
-  server.listen(SSE_PORT, () => {
-    console.log(`\n[SSE] HTTP server listening on port ${SSE_PORT}`);
+  server.listen(SSE_PORT, "0.0.0.0", () => {
+    console.log(`\n[SSE] HTTP server listening on 0.0.0.0:${SSE_PORT}`);
     console.log(`[SSE] Stream endpoint: /stream/prices?api_key=trd_xxx`);
     console.log(`[SSE] Prices endpoint: /prices?api_key=trd_xxx`);
   });
