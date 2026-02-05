@@ -560,6 +560,9 @@ async function startPriceStream(): Promise<void> {
 }
 
 async function main(): Promise<void> {
+  // Start HTTP server FIRST - before anything else, so health checks pass
+  startHTTPServer();
+
   console.log("================================================");
   console.log("  OANDA Candle Sync Worker");
   console.log("================================================\n");
@@ -581,9 +584,6 @@ async function main(): Promise<void> {
   console.log(`API URL: ${OANDA_API_URL}`);
   console.log(`Pairs: ${PAIRS.join(", ")}`);
   console.log(`Timeframes: ${Object.keys(TIMEFRAME_MAP).join(", ")}`);
-
-  // Start HTTP server IMMEDIATELY for health checks (before any blocking operations)
-  startHTTPServer();
 
   // Connect to Timescale (increased pool for parallel ops)
   const connUrl = TIMESCALE_URL.replace(/[?&]sslmode=[^&]+/, "");
