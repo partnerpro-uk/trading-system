@@ -7,11 +7,14 @@
  * Also:
  * - Maintains a live price stream for real-time updates
  * - Fetches economic calendar from JBlanked API (hourly)
+ * - Exposes authenticated SSE endpoint for live price streaming
  */
 
 import { config } from "dotenv";
 import { Pool } from "pg";
 import { resolve } from "path";
+import { createServer, IncomingMessage, ServerResponse } from "http";
+import { createHash } from "crypto";
 import { forwardFill } from "./jblanked-news";
 import { runCaretaker } from "./gap-caretaker";
 import { processEventReactions } from "./event-reaction-processor";
@@ -61,6 +64,218 @@ let pool: Pool;
 
 // Track last sync time for each pair/timeframe
 const lastSyncTime: Map<string, Date> = new Map();
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SSE STREAMING - Live price streaming to authenticated clients
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const SSE_PORT = parseInt(process.env.PORT || "3001");
+
+// Store latest prices in memory
+interface LivePrice {
+  pair: string;
+  bid: number;
+  ask: number;
+  mid: number;
+  time: string;
+}
+const latestPrices: Map<string, LivePrice> = new Map();
+
+// Connected SSE clients
+interface SSEClient {
+  res: ServerResponse;
+  pairs: string[] | null; // null = all pairs
+  keyId: string;
+}
+const sseClients: Set<SSEClient> = new Set();
+
+// API key cache (avoid DB hit on every validation)
+const apiKeyCache: Map<string, { valid: boolean; keyId: string; expiresAt: number }> = new Map();
+const KEY_CACHE_TTL = 60 * 1000; // 1 minute
+
+/**
+ * Hash an API key for lookup
+ */
+function hashApiKey(key: string): string {
+  return createHash("sha256").update(key).digest("hex");
+}
+
+/**
+ * Validate API key against TimescaleDB
+ */
+async function validateApiKey(key: string): Promise<{ valid: boolean; keyId: string }> {
+  if (!key || !key.startsWith("trd_")) {
+    return { valid: false, keyId: "" };
+  }
+
+  const hash = hashApiKey(key);
+
+  // Check cache
+  const cached = apiKeyCache.get(hash);
+  if (cached && cached.expiresAt > Date.now()) {
+    return { valid: cached.valid, keyId: cached.keyId };
+  }
+
+  // Query database
+  try {
+    const result = await pool.query(
+      `SELECT id, is_active, expires_at FROM api_keys WHERE key_hash = $1`,
+      [hash]
+    );
+
+    if (result.rows.length === 0) {
+      apiKeyCache.set(hash, { valid: false, keyId: "", expiresAt: Date.now() + KEY_CACHE_TTL });
+      return { valid: false, keyId: "" };
+    }
+
+    const row = result.rows[0];
+    const isValid = row.is_active && (!row.expires_at || new Date(row.expires_at) > new Date());
+
+    apiKeyCache.set(hash, { valid: isValid, keyId: row.id, expiresAt: Date.now() + KEY_CACHE_TTL });
+    return { valid: isValid, keyId: row.id };
+  } catch (err) {
+    console.error("[SSE] Error validating API key:", err);
+    return { valid: false, keyId: "" };
+  }
+}
+
+/**
+ * Broadcast price update to all connected SSE clients
+ */
+function broadcastPrice(price: LivePrice): void {
+  const data = `data: ${JSON.stringify(price)}\n\n`;
+
+  for (const client of sseClients) {
+    // Filter by pairs if specified
+    if (client.pairs === null || client.pairs.includes(price.pair)) {
+      try {
+        client.res.write(data);
+      } catch {
+        // Client disconnected, will be cleaned up
+        sseClients.delete(client);
+      }
+    }
+  }
+}
+
+/**
+ * Handle SSE connection request
+ */
+async function handleSSERequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const url = new URL(req.url || "/", `http://${req.headers.host}`);
+
+  // Parse API key from query or header
+  const apiKey = url.searchParams.get("api_key") || req.headers["x-api-key"] as string;
+
+  if (!apiKey) {
+    res.writeHead(401, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: "Missing API key" }));
+    return;
+  }
+
+  const validation = await validateApiKey(apiKey);
+  if (!validation.valid) {
+    res.writeHead(401, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: "Invalid API key" }));
+    return;
+  }
+
+  // Parse pairs filter (optional)
+  const pairsParam = url.searchParams.get("pairs");
+  const pairs = pairsParam ? pairsParam.split(",").map(p => p.trim().toUpperCase()) : null;
+
+  // Set up SSE headers
+  res.writeHead(200, {
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache",
+    "Connection": "keep-alive",
+    "Access-Control-Allow-Origin": "*",
+  });
+
+  // Send initial prices
+  res.write(`event: connected\ndata: ${JSON.stringify({ message: "Connected to price stream", pairs: pairs || "all" })}\n\n`);
+
+  // Send current prices
+  for (const [, price] of latestPrices) {
+    if (pairs === null || pairs.includes(price.pair)) {
+      res.write(`data: ${JSON.stringify(price)}\n\n`);
+    }
+  }
+
+  // Register client
+  const client: SSEClient = { res, pairs, keyId: validation.keyId };
+  sseClients.add(client);
+  console.log(`[SSE] Client connected (total: ${sseClients.size})`);
+
+  // Handle disconnect
+  req.on("close", () => {
+    sseClients.delete(client);
+    console.log(`[SSE] Client disconnected (total: ${sseClients.size})`);
+  });
+}
+
+/**
+ * Start HTTP server for SSE endpoint
+ */
+function startHTTPServer(): void {
+  const server = createServer(async (req, res) => {
+    const url = new URL(req.url || "/", `http://${req.headers.host}`);
+
+    // CORS preflight
+    if (req.method === "OPTIONS") {
+      res.writeHead(204, {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, OPTIONS",
+        "Access-Control-Allow-Headers": "X-API-Key",
+      });
+      res.end();
+      return;
+    }
+
+    // Health check
+    if (url.pathname === "/health") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ status: "ok", clients: sseClients.size, prices: latestPrices.size }));
+      return;
+    }
+
+    // SSE stream endpoint
+    if (url.pathname === "/stream/prices") {
+      await handleSSERequest(req, res);
+      return;
+    }
+
+    // Latest prices (REST endpoint)
+    if (url.pathname === "/prices") {
+      const apiKey = url.searchParams.get("api_key") || req.headers["x-api-key"] as string;
+      if (!apiKey) {
+        res.writeHead(401, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Missing API key" }));
+        return;
+      }
+      const validation = await validateApiKey(apiKey);
+      if (!validation.valid) {
+        res.writeHead(401, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Invalid API key" }));
+        return;
+      }
+
+      res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+      res.end(JSON.stringify(Object.fromEntries(latestPrices)));
+      return;
+    }
+
+    // 404
+    res.writeHead(404, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: "Not found" }));
+  });
+
+  server.listen(SSE_PORT, () => {
+    console.log(`\n[SSE] HTTP server listening on port ${SSE_PORT}`);
+    console.log(`[SSE] Stream endpoint: /stream/prices?api_key=trd_xxx`);
+    console.log(`[SSE] Prices endpoint: /prices?api_key=trd_xxx`);
+  });
+}
 
 interface OandaCandle {
   complete: boolean;
@@ -304,13 +519,25 @@ async function startPriceStream(): Promise<void> {
             const data = JSON.parse(line);
 
             if (data.type === "PRICE") {
-              // Log price updates occasionally (every 30 seconds per pair)
+              const bid = parseFloat(data.bids?.[0]?.price || "0");
+              const ask = parseFloat(data.asks?.[0]?.price || "0");
+              const mid = (bid + ask) / 2;
+
+              // Store and broadcast price
+              const price: LivePrice = {
+                pair: data.instrument,
+                bid,
+                ask,
+                mid,
+                time: data.time,
+              };
+              latestPrices.set(data.instrument, price);
+              broadcastPrice(price);
+
+              // Log price updates occasionally (every 30 seconds)
               const now = Date.now();
               if (now - lastHeartbeat > 30000) {
-                const bid = parseFloat(data.bids?.[0]?.price || "0");
-                const ask = parseFloat(data.asks?.[0]?.price || "0");
-                const mid = (bid + ask) / 2;
-                console.log(`[${data.instrument}] ${mid.toFixed(5)} (bid: ${bid.toFixed(5)}, ask: ${ask.toFixed(5)})`);
+                console.log(`[${data.instrument}] ${mid.toFixed(5)} (bid: ${bid.toFixed(5)}, ask: ${ask.toFixed(5)}) [${sseClients.size} clients]`);
                 lastHeartbeat = now;
               }
             } else if (data.type === "HEARTBEAT") {
@@ -377,7 +604,10 @@ async function main(): Promise<void> {
   // Start periodic sync loops
   startSyncLoops();
 
-  // Start live price stream (runs in background)
+  // Start HTTP server for SSE streaming
+  startHTTPServer();
+
+  // Start live price stream (runs in background, broadcasts to SSE clients)
   startPriceStream().catch(console.error);
 
   // Start JBlanked news updater (runs every hour)
