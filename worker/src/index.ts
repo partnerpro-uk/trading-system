@@ -598,14 +598,14 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  // Initial sync
+  // Start HTTP server FIRST so health checks pass while sync runs
+  startHTTPServer();
+
+  // Initial sync (runs while health check is available)
   await initialSync();
 
   // Start periodic sync loops
   startSyncLoops();
-
-  // Start HTTP server for SSE streaming
-  startHTTPServer();
 
   // Start live price stream (runs in background, broadcasts to SSE clients)
   startPriceStream().catch(console.error);
