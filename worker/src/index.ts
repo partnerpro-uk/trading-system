@@ -582,6 +582,9 @@ async function main(): Promise<void> {
   console.log(`Pairs: ${PAIRS.join(", ")}`);
   console.log(`Timeframes: ${Object.keys(TIMEFRAME_MAP).join(", ")}`);
 
+  // Start HTTP server IMMEDIATELY for health checks (before any blocking operations)
+  startHTTPServer();
+
   // Connect to Timescale (increased pool for parallel ops)
   const connUrl = TIMESCALE_URL.replace(/[?&]sslmode=[^&]+/, "");
   pool = new Pool({
@@ -597,9 +600,6 @@ async function main(): Promise<void> {
     console.error("Failed to connect to TimescaleDB:", err);
     process.exit(1);
   }
-
-  // Start HTTP server FIRST so health checks pass while sync runs
-  startHTTPServer();
 
   // Initial sync (runs while health check is available)
   await initialSync();
