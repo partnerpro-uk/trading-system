@@ -477,7 +477,8 @@ async function runCaretaker(): Promise<void> {
 // Export for use in main worker
 export { runCaretaker, initConnections };
 
-// Run standalone if executed directly
-if (require.main === module) {
+// Run standalone if executed directly (ESM compatible)
+import { fileURLToPath } from "url";
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
   runCaretaker().catch(console.error);
 }
