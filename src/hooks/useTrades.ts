@@ -8,6 +8,14 @@ export type TradeStatus = "pending" | "open" | "closed" | "cancelled";
 export type TradeOutcome = "TP" | "SL" | "MW" | "ML" | "BE";
 export type TradeDirection = "LONG" | "SHORT";
 
+export type CloseReason =
+  | "tp_hit" | "sl_hit"
+  | "manual_profit" | "manual_loss" | "breakeven"
+  | "emotional" | "news" | "thesis_broken"
+  | "timeout" | "other";
+
+export type EntryReason = "limit" | "market" | "late" | "partial" | "spread" | "other";
+
 export interface Trade {
   _id: Id<"trades">;
   _creationTime: number;
@@ -28,15 +36,44 @@ export interface Trade {
   pnlPips?: number;
   pnlDollars?: number;
   barsHeld?: number;
-  maxDrawdownPips?: number;  // Max adverse excursion (how far trade went against)
+  maxDrawdownPips?: number;
   indicatorSnapshot?: string;
   conditionsMet?: string[];
   notes?: string;
-  entryScreenshot?: string;  // Screenshot URL at entry
-  exitScreenshot?: string;   // Screenshot URL at exit
+  entryScreenshot?: string;
+  exitScreenshot?: string;
+  // Plan vs Reality — Entry
+  actualEntryPrice?: number;
+  actualEntryTime?: number;
+  entrySlippagePips?: number;
+  entryReason?: EntryReason;
+  // Plan vs Reality — Exit
+  exitSlippagePips?: number;
+  closeReason?: CloseReason;
+  closeReasonNote?: string;
+  // Session & Meta
+  session?: "Sydney" | "Tokyo" | "London" | "New York" | "Overlap";
+  createdBy?: "user" | "claude" | "strategy";
   status: TradeStatus;
   createdAt: number;
   updatedAt: number;
+}
+
+export interface SessionStats {
+  wins: number;
+  total: number;
+  pnlPips: number;
+}
+
+export interface ExecutionQuality {
+  avgEntrySlippagePips: number;
+  avgExitSlippagePips: number;
+  earlyExitRate: number;
+  earlyExitAvgPips: number;
+  lateEntryWinRate: number;
+  lateEntryCount: number;
+  closeReasonBreakdown: Record<string, number>;
+  sessionBreakdown: Record<string, SessionStats>;
 }
 
 export interface TradeStats {
@@ -50,6 +87,7 @@ export interface TradeStats {
   totalPnlDollars: number;
   avgBarsHeld: number;
   expectancy: number;
+  executionQuality?: ExecutionQuality;
 }
 
 interface UseTradesOptions {

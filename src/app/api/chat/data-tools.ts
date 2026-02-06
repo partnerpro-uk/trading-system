@@ -272,6 +272,7 @@ export async function executeDataTool(
             maxDrawdownPips: t.maxDrawdownPips,
             barsHeld: t.barsHeld,
             // Context
+            session: t.session,
             strategy: t.strategyId,
             notes: t.notes,
             createdBy: t.createdBy,

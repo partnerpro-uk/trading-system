@@ -15,7 +15,7 @@ import {
   ChevronDown,
   Camera,
 } from "lucide-react";
-import { useTrades, useTradeStats, Trade, TradeOutcome } from "@/hooks/useTrades";
+import { useTrades, useTradeStats, Trade, TradeOutcome, CloseReason } from "@/hooks/useTrades";
 import { useStrategies } from "@/hooks/useStrategies";
 import { StrategySignalsTab } from "@/components/journal/StrategySignalsTab";
 import { TradeDetailModal } from "@/components/trades/TradeDetailModal";
@@ -80,6 +80,30 @@ function OutcomeBadge({ outcome, status }: { outcome?: TradeOutcome; status: str
   return (
     <span className={`px-2 py-0.5 text-xs font-medium rounded ${bg} ${text}`}>
       {label}
+    </span>
+  );
+}
+
+// Close reason display labels and colors
+const CLOSE_REASON_CONFIG: Record<CloseReason, { label: string; color: string }> = {
+  tp_hit: { label: "TP Hit", color: "text-green-400" },
+  sl_hit: { label: "SL Hit", color: "text-red-400" },
+  manual_profit: { label: "Take Profit", color: "text-green-400" },
+  manual_loss: { label: "Cut Loss", color: "text-red-400" },
+  breakeven: { label: "Break Even", color: "text-yellow-400" },
+  emotional: { label: "Emotional", color: "text-orange-400" },
+  news: { label: "News", color: "text-blue-400" },
+  thesis_broken: { label: "Thesis Broken", color: "text-purple-400" },
+  timeout: { label: "Timeout", color: "text-gray-400" },
+  other: { label: "Other", color: "text-gray-400" },
+};
+
+function CloseReasonBadge({ reason, note }: { reason?: CloseReason; note?: string }) {
+  if (!reason) return null;
+  const config = CLOSE_REASON_CONFIG[reason];
+  return (
+    <span className={`text-[10px] ${config.color}`} title={note || undefined}>
+      {config.label}
     </span>
   );
 }
@@ -316,6 +340,8 @@ function TradeRow({
     exitPrice: trade.exitPrice?.toFixed(trade.pair.includes("JPY") ? 3 : 5) || "",
     outcome: trade.outcome || "",
     strategyId: trade.strategyId,
+    closeReason: trade.closeReason || "",
+    closeReasonNote: trade.closeReasonNote || "",
   });
   const [isSaving, setIsSaving] = useState(false);
 
@@ -326,6 +352,8 @@ function TradeRow({
         exitPrice: trade.exitPrice?.toFixed(trade.pair.includes("JPY") ? 3 : 5) || "",
         outcome: trade.outcome || "",
         strategyId: trade.strategyId,
+        closeReason: trade.closeReason || "",
+        closeReasonNote: trade.closeReasonNote || "",
       });
     }
   }, [isEditing, trade]);
@@ -366,9 +394,28 @@ function TradeRow({
           // Manual exit - determine win/loss based on P&L
           updates.outcome = pnl >= 0 ? "MW" : "ML";
         }
+
+        // Auto-derive closeReason if not explicitly set
+        if (editValues.closeReason) {
+          updates.closeReason = editValues.closeReason;
+        } else if (updates.outcome === "TP") {
+          updates.closeReason = "tp_hit";
+        } else if (updates.outcome === "SL") {
+          updates.closeReason = "sl_hit";
+        } else if (updates.outcome === "MW") {
+          updates.closeReason = "manual_profit";
+        } else if (updates.outcome === "ML") {
+          updates.closeReason = "manual_loss";
+        } else if (updates.outcome === "BE") {
+          updates.closeReason = "breakeven";
+        }
       } else if (editValues.outcome) {
-        // Apply explicit outcome if user selected one (without exit price)
         updates.outcome = editValues.outcome;
+      }
+
+      // Pass close reason note if provided
+      if (editValues.closeReasonNote) {
+        updates.closeReasonNote = editValues.closeReasonNote;
       }
 
       await onSaveEdit(updates);
@@ -379,7 +426,7 @@ function TradeRow({
     }
   };
 
-  const session = detectSession(trade.entryTime);
+  const session = trade.session || detectSession(trade.entryTime);
   const sessionColor = getSessionColor(session);
   const rMultiple =
     trade.exitPrice && trade.status === "closed"
@@ -438,7 +485,12 @@ function TradeRow({
         )}
       </td>
       <td className="px-2 py-2 font-mono text-gray-300 text-xs">
-        {formatPrice(trade.entryPrice, trade.pair)}
+        <div>{formatPrice(trade.entryPrice, trade.pair)}</div>
+        {trade.entrySlippagePips !== undefined && trade.entrySlippagePips !== 0 && (
+          <div className={`text-[10px] ${trade.entrySlippagePips > 0 ? "text-orange-400" : "text-green-400"}`}>
+            {trade.entrySlippagePips > 0 ? "+" : ""}{trade.entrySlippagePips.toFixed(1)}p slip
+          </div>
+        )}
       </td>
       <td className="px-2 py-2 font-mono text-gray-300 text-xs">
         {isEditing ? (
@@ -503,14 +555,40 @@ function TradeRow({
       </td>
       <td className="px-2 py-2">
         {isEditing ? (
-          <EditableSelect
-            value={editValues.outcome}
-            isEditing={isEditing}
-            onChange={(v) => setEditValues((prev) => ({ ...prev, outcome: v }))}
-            options={outcomeOptions}
-          />
+          <div className="space-y-1">
+            <EditableSelect
+              value={editValues.outcome}
+              isEditing={isEditing}
+              onChange={(v) => setEditValues((prev) => ({ ...prev, outcome: v }))}
+              options={outcomeOptions}
+            />
+            <select
+              value={editValues.closeReason}
+              onChange={(e) => setEditValues((prev) => ({ ...prev, closeReason: e.target.value }))}
+              className="bg-gray-800 border border-blue-500 rounded px-1 py-0.5 text-[10px] w-full focus:outline-none"
+            >
+              <option value="">Close reason...</option>
+              <option value="tp_hit">TP Hit</option>
+              <option value="sl_hit">SL Hit</option>
+              <option value="manual_profit">Take Profit</option>
+              <option value="manual_loss">Cut Loss</option>
+              <option value="breakeven">Break Even</option>
+              <option value="thesis_broken">Thesis Broken</option>
+              <option value="news">News</option>
+              <option value="emotional">Emotional</option>
+              <option value="timeout">Timeout</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
         ) : (
-          <OutcomeBadge outcome={trade.outcome} status={trade.status} />
+          <div>
+            <OutcomeBadge outcome={trade.outcome} status={trade.status} />
+            {trade.closeReason && (
+              <div className="mt-0.5">
+                <CloseReasonBadge reason={trade.closeReason} note={trade.closeReasonNote} />
+              </div>
+            )}
+          </div>
         )}
       </td>
       <td className="px-2 py-2">
@@ -760,6 +838,38 @@ export default function TradesPage() {
             trend={periodStats.totalPnl >= 0 ? "up" : "down"}
           />
         </div>
+
+        {/* Execution Quality Stats */}
+        {stats?.executionQuality && stats.totalTrades > 0 && (
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3 mb-4">
+            <StatCard
+              label="Avg Entry Slip"
+              value={`${stats.executionQuality.avgEntrySlippagePips.toFixed(1)}p`}
+              trend={stats.executionQuality.avgEntrySlippagePips > 1 ? "down" : "neutral"}
+              size="small"
+            />
+            <StatCard
+              label="Avg Exit Slip"
+              value={`${stats.executionQuality.avgExitSlippagePips.toFixed(1)}p`}
+              trend={stats.executionQuality.avgExitSlippagePips > 1 ? "down" : "neutral"}
+              size="small"
+            />
+            <StatCard
+              label="Early Exit Rate"
+              value={`${stats.executionQuality.earlyExitRate.toFixed(0)}%`}
+              subValue={`avg ${stats.executionQuality.earlyExitAvgPips >= 0 ? "+" : ""}${stats.executionQuality.earlyExitAvgPips.toFixed(1)}p`}
+              size="small"
+            />
+            <StatCard
+              label="Late Entry WR"
+              value={stats.executionQuality.lateEntryCount > 0 ? `${stats.executionQuality.lateEntryWinRate.toFixed(0)}%` : "-"}
+              subValue={stats.executionQuality.lateEntryCount > 0 ? `${stats.executionQuality.lateEntryCount} trades` : undefined}
+              size="small"
+            />
+            <StatCard label="Expectancy" value={`${stats.expectancy.toFixed(1)}p`} trend={stats.expectancy > 0 ? "up" : "down"} size="small" />
+            <StatCard label="Avg Bars Held" value={stats.avgBarsHeld.toFixed(0)} size="small" />
+          </div>
+        )}
 
         {/* Filters row */}
         <div className="flex items-center gap-3 mb-4">

@@ -165,6 +165,14 @@ export const createTrade = mutation({
       ? (actualEntry - args.entryPrice) * pipMultiplier
       : (args.entryPrice - actualEntry) * pipMultiplier;
 
+    // Auto-detect trading session from entry time
+    const utcHour = new Date(args.entryTime).getUTCHours();
+    const session: "Sydney" | "Tokyo" | "London" | "New York" | "Overlap" =
+      utcHour >= 12 && utcHour < 16 ? "Overlap" :
+      utcHour >= 7 && utcHour < 16 ? "London" :
+      utcHour >= 12 && utcHour < 21 ? "New York" :
+      utcHour >= 0 && utcHour < 9 ? "Tokyo" : "Sydney";
+
     return await ctx.db.insert("trades", {
       ...args,
       userId: user.clerkId,
@@ -173,6 +181,7 @@ export const createTrade = mutation({
       actualEntryTime: args.actualEntryTime ?? args.entryTime,
       entrySlippagePips: Math.round(entrySlippagePips * 10) / 10,
       entryReason: args.entryReason ?? "limit",
+      session,
       createdAt: now,
       updatedAt: now,
     });
@@ -498,6 +507,16 @@ export const getTradeStats = query({
       closeReasonBreakdown[reason] = (closeReasonBreakdown[reason] ?? 0) + 1;
     }
 
+    // Session performance breakdown
+    const sessionBreakdown: Record<string, { wins: number; total: number; pnlPips: number }> = {};
+    for (const t of closedTrades) {
+      const s = t.session ?? "Unknown";
+      if (!sessionBreakdown[s]) sessionBreakdown[s] = { wins: 0, total: 0, pnlPips: 0 };
+      sessionBreakdown[s].total++;
+      sessionBreakdown[s].pnlPips += t.pnlPips ?? 0;
+      if (["TP", "MW", "BE"].includes(t.outcome ?? "")) sessionBreakdown[s].wins++;
+    }
+
     return {
       totalTrades: closedTrades.length,
       wins: wins.length,
@@ -517,6 +536,7 @@ export const getTradeStats = query({
         lateEntryWinRate: Math.round(lateEntryWinRate * 10) / 10,
         lateEntryCount: lateEntries.length,
         closeReasonBreakdown,
+        sessionBreakdown,
       },
     };
   },

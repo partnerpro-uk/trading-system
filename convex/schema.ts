@@ -178,6 +178,15 @@ export default defineSchema({
     )),
     closeReasonNote: v.optional(v.string()),     // Free-text elaboration
 
+    // Trading session (auto-detected from entry time)
+    session: v.optional(v.union(
+      v.literal("Sydney"),
+      v.literal("Tokyo"),
+      v.literal("London"),
+      v.literal("New York"),
+      v.literal("Overlap")
+    )),
+
     // Screenshots (URLs to stored images)
     entryScreenshot: v.optional(v.string()),  // Screenshot URL at entry
     exitScreenshot: v.optional(v.string()),   // Screenshot URL at exit
