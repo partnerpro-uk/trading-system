@@ -443,16 +443,20 @@ export default function ChartPage() {
   }, [levels, pair, timeframe, drawings, selectedStrategy, candles]);
 
   // Drawing keyboard shortcuts (including Ctrl+Z for undo, 1-9 for quick colors, arrows for micro-adjust)
+  const deleteSelected = useCallback(() => {
+    if (selectedDrawingId) deleteDrawing(selectedDrawingId);
+  }, [selectedDrawingId, deleteDrawing]);
+  const shortcutOptions = useMemo(() => ({
+    drawings,
+    updateDrawing,
+    pair,
+  }), [drawings, updateDrawing, pair]);
   useDrawingKeyboardShortcuts(
     setActiveDrawingTool,
-    () => selectedDrawingId && deleteDrawing(selectedDrawingId),
+    deleteSelected,
     selectedDrawingId,
     undo,
-    {
-      drawings,
-      updateDrawing,
-      pair,
-    }
+    shortcutOptions
   );
 
   // Handle indicator toggle
