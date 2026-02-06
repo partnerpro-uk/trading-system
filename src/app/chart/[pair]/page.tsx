@@ -36,11 +36,24 @@ export default function ChartPage() {
   const pair = params.pair as string;
 
   // Clerk auth for Convex token (used by Claude chat to query trades)
+  // getToken is unstable (new ref each render) and mints fresh JWTs,
+  // so we store it in a ref to avoid an infinite re-render loop.
   const { getToken } = useAuth();
   const [convexToken, setConvexToken] = useState<string | null>(null);
+  const getTokenRef = useRef(getToken);
+  getTokenRef.current = getToken;
   useEffect(() => {
-    getToken({ template: "convex" }).then(setConvexToken).catch(() => {});
-  }, [getToken]);
+    let cancelled = false;
+    const fetchToken = () => {
+      getTokenRef.current({ template: "convex" })
+        .then((token) => { if (!cancelled) setConvexToken(token); })
+        .catch(() => {});
+    };
+    fetchToken();
+    // Refresh token every 50s (Clerk tokens expire in ~60s)
+    const interval = setInterval(fetchToken, 50_000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, []);
 
   // Candle cache with prefetching (adjacent timeframes load immediately, rest after 20s)
   const {
