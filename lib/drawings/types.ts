@@ -28,6 +28,16 @@ export interface PriceLevelContext {
 }
 
 /**
+ * Modification log entry — tracks WHY a drawing was changed
+ * Only Claude-initiated updates are logged (human edits are not)
+ */
+export interface DrawingModification {
+  timestamp: number;
+  reason: string;
+  changes: Record<string, { from: unknown; to: unknown }>;
+}
+
+/**
  * Base drawing interface
  */
 export interface BaseDrawing {
@@ -48,6 +58,13 @@ export interface BaseDrawing {
 
   // Semantic context
   priceLevel?: PriceLevelContext;
+
+  // Cross-timeframe visibility
+  sourceTimeframe?: string;                // Auto-set: which timeframe this was drawn on (e.g. "D", "M15")
+  visibility?: "all" | string[];           // Default "all" = visible on every timeframe. Or ["M15", "H1"] = restricted.
+
+  // Audit trail — Claude's reasoning for modifications
+  modifications?: DrawingModification[];   // Append-only log of changes with reasons
 
   // Lock status (prevents user editing/moving)
   locked?: boolean;         // If true, drawing cannot be moved or edited by user

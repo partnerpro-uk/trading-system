@@ -5,9 +5,9 @@ import Link from "next/link";
 import { useDrawingStore } from "@/lib/drawings/store";
 import { Drawing, isPositionDrawing, isFibonacciDrawing, isRectangleDrawing, isTrendlineDrawing, isHorizontalLineDrawing, isHorizontalRayDrawing, isVerticalLineDrawing, isCircleDrawing } from "@/lib/drawings/types";
 import { PAIRS_BY_CATEGORY, formatPrice } from "@/lib/pairs";
+import { InstitutionalPanel } from "./InstitutionalPanel";
 
 // Stable empty array to prevent infinite re-renders with Zustand SSR
-const EMPTY_DRAWINGS: Drawing[] = [];
 
 interface PriceData {
   price: number;
@@ -40,7 +40,7 @@ interface IndicatorToggle {
   visible: boolean;
 }
 
-type SidebarTab = "pairs" | "drawings";
+type SidebarTab = "pairs" | "drawings" | "institutional";
 
 interface ChartSidebarProps {
   currentPair: string;
@@ -172,9 +172,8 @@ export function ChartSidebar({
   const [, setCountdownTick] = useState(0);
   const [activeTab, setActiveTab] = useState<SidebarTab>("pairs");
 
-  // Get drawings from store
-  const drawingsKey = `${currentPair}:${currentTimeframe}`;
-  const drawings = useDrawingStore((state) => state.drawings[drawingsKey] ?? EMPTY_DRAWINGS);
+  // Get drawings from store (cross-timeframe visibility)
+  const drawings = useDrawingStore((state) => state.getDrawings(currentPair, currentTimeframe));
   const selectedDrawingId = useDrawingStore((state) => state.selectedDrawingId);
   const selectDrawing = useDrawingStore((state) => state.selectDrawing);
   const updateDrawing = useDrawingStore((state) => state.updateDrawing);
@@ -801,6 +800,11 @@ export function ChartSidebar({
             </div>
           </div>
         )}
+
+        {/* Institutional Tab Content */}
+        {activeTab === "institutional" && (
+          <InstitutionalPanel currentPair={currentPair} />
+        )}
       </div>
 
       {/* Icon Column (Right Side) */}
@@ -859,6 +863,31 @@ export function ChartSidebar({
               {drawings.length > 9 ? "9+" : drawings.length}
             </span>
           )}
+        </button>
+
+        {/* Institutional Tab Icon */}
+        <button
+          onClick={() => setActiveTab("institutional")}
+          className={`w-8 h-8 flex items-center justify-center rounded transition-colors ${
+            activeTab === "institutional"
+              ? "bg-blue-600 text-white"
+              : "text-gray-400 hover:text-gray-200 hover:bg-gray-800"
+          }`}
+          title="Institutional Positioning (COT)"
+        >
+          <svg
+            className="w-4 h-4"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
+            />
+          </svg>
         </button>
       </div>
     </div>

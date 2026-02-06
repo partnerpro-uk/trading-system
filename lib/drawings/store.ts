@@ -11,6 +11,7 @@ import {
   Drawing,
   DrawingType,
   DrawingAnchor,
+  DrawingModification,
   FibonacciDrawing,
   TrendlineDrawing,
   HorizontalLineDrawing,
@@ -48,7 +49,7 @@ interface DrawingStore {
 
   // CRUD Operations
   addDrawing: (pair: string, timeframe: string, drawing: Omit<Drawing, "id" | "createdAt">) => string;
-  updateDrawing: (pair: string, timeframe: string, id: string, updates: Partial<Drawing>) => void;
+  updateDrawing: (pair: string, timeframe: string, id: string, updates: Partial<Drawing>, reason?: string) => void;
   removeDrawing: (pair: string, timeframe: string, id: string) => void;
   clearDrawings: (pair: string, timeframe: string) => void;
 
@@ -146,6 +147,21 @@ function getKey(pair: string, timeframe: string): string {
 }
 
 /**
+ * Find the storage key that contains a drawing by ID (cross-timeframe search)
+ */
+function findDrawingKey(
+  drawings: Record<string, Drawing[]>,
+  pair: string,
+  id: string
+): string | null {
+  for (const key in drawings) {
+    if (!key.startsWith(pair + ":")) continue;
+    if (drawings[key].some((d) => d.id === id)) return key;
+  }
+  return null;
+}
+
+/**
  * Create the drawing store
  */
 export const useDrawingStore = create<DrawingStore>()(
@@ -219,6 +235,8 @@ export const useDrawingStore = create<DrawingStore>()(
         const newDrawing: Drawing = {
           ...drawing,
           id,
+          sourceTimeframe: timeframe,
+          visibility: drawing.visibility ?? "all",
           createdAt: now,
           updatedAt: now,
         } as Drawing;
@@ -233,36 +251,66 @@ export const useDrawingStore = create<DrawingStore>()(
         return id;
       },
 
-      // Update drawing
-      updateDrawing: (pair, timeframe, id, updates) => {
+      // Update drawing (with cross-timeframe fallback and optional audit log)
+      updateDrawing: (pair, timeframe, id, updates, reason?) => {
         const key = getKey(pair, timeframe);
+        const found = (get().drawings[key] || []).some((d) => d.id === id);
+        const targetKey = found ? key : findDrawingKey(get().drawings, pair, id);
+        if (!targetKey) return;
+
+        // Push undo stack for Claude-initiated updates (reason = audit trail)
+        if (reason) {
+          const targetTf = targetKey.split(":")[1];
+          get().pushToUndoStack(pair, targetTf);
+        }
 
         set((state) => {
-          const currentDrawings = state.drawings[key] || [];
-          const updatedDrawings = currentDrawings.map((d): Drawing =>
-            d.id === id ? { ...d, ...updates, updatedAt: Date.now() } as Drawing : d
-          );
+          const currentDrawings = state.drawings[targetKey] || [];
+          const updatedDrawings = currentDrawings.map((d): Drawing => {
+            if (d.id !== id) return d;
+
+            // Build modification log entry when reason is provided (Claude updates)
+            let modifications = d.modifications;
+            if (reason) {
+              const changes: Record<string, { from: unknown; to: unknown }> = {};
+              for (const [field, newValue] of Object.entries(updates)) {
+                if (field === "modifications") continue;
+                const oldValue = (d as unknown as Record<string, unknown>)[field];
+                if (JSON.stringify(oldValue) !== JSON.stringify(newValue)) {
+                  changes[field] = { from: oldValue, to: newValue };
+                }
+              }
+              const entry: DrawingModification = { timestamp: Date.now(), reason, changes };
+              modifications = [...(d.modifications || []), entry].slice(-50);
+            }
+
+            return { ...d, ...updates, modifications, updatedAt: Date.now() } as Drawing;
+          });
 
           return {
             drawings: {
               ...state.drawings,
-              [key]: updatedDrawings,
+              [targetKey]: updatedDrawings,
             },
           };
         });
       },
 
-      // Remove drawing
+      // Remove drawing (with cross-timeframe fallback)
       removeDrawing: (pair, timeframe, id) => {
-        // Push to undo stack before making changes
-        get().pushToUndoStack(pair, timeframe);
-
         const key = getKey(pair, timeframe);
+        const found = (get().drawings[key] || []).some((d) => d.id === id);
+        const targetKey = found ? key : findDrawingKey(get().drawings, pair, id);
+        if (!targetKey) return;
+
+        // Push undo for the target key's timeframe
+        const targetTf = targetKey.split(":")[1];
+        get().pushToUndoStack(pair, targetTf);
 
         set((state) => ({
           drawings: {
             ...state.drawings,
-            [key]: (state.drawings[key] || []).filter((d) => d.id !== id),
+            [targetKey]: (state.drawings[targetKey] || []).filter((d) => d.id !== id),
           },
           selectedDrawingId: state.selectedDrawingId === id ? null : state.selectedDrawingId,
         }));
@@ -294,16 +342,45 @@ export const useDrawingStore = create<DrawingStore>()(
         set({ selectedDrawingId: id });
       },
 
-      // Get drawings for pair/timeframe
+      // Get visible drawings for pair/timeframe (cross-timeframe query)
       getDrawings: (pair, timeframe) => {
-        const key = getKey(pair, timeframe);
-        return get().drawings[key] || [];
+        const allDrawings = get().drawings;
+        const result: Drawing[] = [];
+        const prefix = pair + ":";
+
+        for (const key in allDrawings) {
+          if (!key.startsWith(prefix)) continue;
+          const keyTf = key.slice(prefix.length);
+
+          for (const d of allDrawings[key]) {
+            const vis = d.visibility ?? "all";
+            if (
+              keyTf === timeframe ||
+              vis === "all" ||
+              (Array.isArray(vis) && vis.includes(timeframe))
+            ) {
+              result.push(d);
+            }
+          }
+        }
+
+        return result;
       },
 
-      // Get drawing by ID
+      // Get drawing by ID (searches across timeframes for this pair)
       getDrawingById: (pair, timeframe, id) => {
         const key = getKey(pair, timeframe);
-        return (get().drawings[key] || []).find((d) => d.id === id);
+        const found = (get().drawings[key] || []).find((d) => d.id === id);
+        if (found) return found;
+
+        // Fallback: search other timeframes
+        const allDrawings = get().drawings;
+        for (const k in allDrawings) {
+          if (!k.startsWith(pair + ":") || k === key) continue;
+          const d = allDrawings[k].find((d) => d.id === id);
+          if (d) return d;
+        }
+        return undefined;
       },
 
       // Get drawings by strategy
@@ -455,8 +532,8 @@ export const useDrawingStore = create<DrawingStore>()(
 
         // Determine default status based on creator:
         // - User-created positions: "open" (already in a trade)
-        // - Strategy-generated: "signal" (needs confirmation)
-        const defaultStatus = options.createdBy === "strategy" ? "signal" : "open";
+        // - Strategy/Claude-generated: "signal" (needs trader confirmation before syncing to journal)
+        const defaultStatus = (options.createdBy === "strategy" || options.createdBy === "claude") ? "signal" : "open";
 
         const drawing: Omit<LongPositionDrawing, "id" | "createdAt"> = {
           type: "longPosition",
@@ -481,8 +558,8 @@ export const useDrawingStore = create<DrawingStore>()(
 
         // Determine default status based on creator:
         // - User-created positions: "open" (already in a trade)
-        // - Strategy-generated: "signal" (needs confirmation)
-        const defaultStatus = options.createdBy === "strategy" ? "signal" : "open";
+        // - Strategy/Claude-generated: "signal" (needs trader confirmation before syncing to journal)
+        const defaultStatus = (options.createdBy === "strategy" || options.createdBy === "claude") ? "signal" : "open";
 
         const drawing: Omit<ShortPositionDrawing, "id" | "createdAt"> = {
           type: "shortPosition",
@@ -630,7 +707,7 @@ export const hydrateDrawingStore = () => {
  * Hook to get drawings for current chart
  */
 export function useChartDrawings(pair: string, timeframe: string) {
-  const drawings = useDrawingStore((state) => state.drawings[getKey(pair, timeframe)] ?? EMPTY_DRAWINGS);
+  const drawings = useDrawingStore((state) => state.getDrawings(pair, timeframe));
   const activeDrawingTool = useDrawingStore((state) => state.activeDrawingTool);
   const selectedDrawingId = useDrawingStore((state) => state.selectedDrawingId);
 

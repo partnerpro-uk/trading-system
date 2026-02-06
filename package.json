@@ -23,6 +23,7 @@
     "worker:test": "cd worker && NODE_TLS_REJECT_UNAUTHORIZED=0 npx tsx src/test-connection.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.73.0",
     "@clerk/clerk-react": "^5.59.6",
     "@clerk/nextjs": "^6.36.10",
     "@clickhouse/client": "^1.16.0",

@@ -153,6 +153,13 @@ export default defineSchema({
     entryScreenshot: v.optional(v.string()),  // Screenshot URL at entry
     exitScreenshot: v.optional(v.string()),   // Screenshot URL at exit
 
+    // Creator — who initiated this trade
+    createdBy: v.optional(v.union(
+      v.literal("user"),       // Manual user trade
+      v.literal("claude"),     // Claude AI trade idea
+      v.literal("strategy")    // Strategy signal
+    )),
+
     // Status
     status: v.union(
       v.literal("pending"),    // Order placed but not filled
@@ -170,6 +177,54 @@ export default defineSchema({
     .index("by_pair", ["pair"])
     .index("by_status", ["status"])
     .index("by_entry_time", ["entryTime"]),
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // TRADE SNAPSHOTS
+  // Data-rich chart state captures at key moments in a trade's lifecycle
+  // ═══════════════════════════════════════════════════════════════════════════
+  snapshots: defineTable({
+    userId: v.string(),
+    tradeId: v.id("trades"),
+
+    // Moment identification
+    momentLabel: v.union(
+      v.literal("setup"),     // Before entry (manual)
+      v.literal("entry"),     // At trade entry (auto)
+      v.literal("during"),    // Mid-trade checkpoint (manual)
+      v.literal("exit")       // At trade close (auto)
+    ),
+
+    // Chart context
+    pair: v.string(),
+    timeframe: v.string(),
+    timestamp: v.number(),    // When snapshot was taken (Unix ms)
+
+    // Viewport
+    visibleRange: v.object({
+      from: v.number(),       // Earliest visible candle timestamp
+      to: v.number(),         // Latest visible candle timestamp
+    }),
+
+    // Drawings snapshot (JSON string — immutable copy at capture time)
+    drawings: v.string(),
+
+    // Trade context at the moment of capture (JSON string)
+    tradeContext: v.string(),
+
+    // Optional metadata
+    strategy: v.optional(v.string()),
+    analysisNotes: v.optional(v.string()),
+    aiDescription: v.optional(v.string()),
+
+    // Auto vs manual
+    createdBy: v.union(v.literal("auto"), v.literal("manual")),
+
+    // Metadata
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_trade", ["tradeId"])
+    .index("by_user", ["userId"]),
 
   // ═══════════════════════════════════════════════════════════════════════════
   // STRATEGY SETTINGS
@@ -197,4 +252,46 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_user_strategy", ["userId", "strategyId"]),
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // CHAT CONVERSATIONS
+  // Claude AI chat sessions linked to chart context
+  // ═══════════════════════════════════════════════════════════════════════════
+  conversations: defineTable({
+    userId: v.string(),              // Clerk user ID
+    pair: v.string(),                // Chart pair at conversation start
+    timeframe: v.string(),           // Chart timeframe at start
+    title: v.optional(v.string()),   // Auto-generated from first message
+    model: v.string(),               // "haiku" | "sonnet"
+    messageCount: v.number(),
+    tokenUsage: v.object({
+      inputTokens: v.number(),
+      outputTokens: v.number(),
+      cacheReadTokens: v.number(),
+    }),
+    lastMessageAt: v.number(),
+    createdAt: v.number(),
+  })
+    .index("by_user", ["userId", "lastMessageAt"])
+    .index("by_pair", ["pair", "lastMessageAt"]),
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // CHAT MESSAGES
+  // Individual messages within conversations
+  // ═══════════════════════════════════════════════════════════════════════════
+  chatMessages: defineTable({
+    conversationId: v.id("conversations"),
+    role: v.union(v.literal("user"), v.literal("assistant")),
+    content: v.string(),
+    toolCalls: v.optional(v.string()),       // JSON: tool calls made
+    toolResults: v.optional(v.string()),     // JSON: tool results
+    drawingActions: v.optional(v.string()),  // JSON: drawings created/modified
+    tokenUsage: v.optional(v.object({
+      inputTokens: v.number(),
+      outputTokens: v.number(),
+    })),
+    model: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_conversation", ["conversationId", "createdAt"]),
 });

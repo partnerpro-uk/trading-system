@@ -24,6 +24,7 @@ import {
   isPriceBelow,
 } from "@/lib/drawings/describe";
 import { getColorName } from "@/lib/drawings/colors";
+import { getLatestCOTForPair, generateCOTSummary } from "@/lib/db/cot";
 
 /**
  * Parse query parameters
@@ -120,8 +121,28 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Generate context
-    const context = generateContext(drawings, currentPrice, thresholdPips);
+    // Generate drawing context + fetch COT data in parallel
+    const [context, cotPosition] = await Promise.all([
+      Promise.resolve(generateContext(drawings, currentPrice, thresholdPips)),
+      getLatestCOTForPair(pair).catch(() => null),
+    ]);
+
+    // Build institutional context if available
+    let institutional = null;
+    if (cotPosition) {
+      institutional = {
+        pair,
+        reportDate: cotPosition.report_date,
+        levMoneyNet: cotPosition.lev_money_net_positions,
+        levMoneyChange: cotPosition.weekly_change_lev_money,
+        assetMgrNet: cotPosition.asset_mgr_net_positions,
+        dealerNet: cotPosition.dealer_net_positions,
+        sentiment: cotPosition.sentiment,
+        percentile: cotPosition.lev_money_percentile,
+        isExtreme: cotPosition.sentiment.isExtreme,
+        summary: generateCOTSummary(cotPosition, cotPosition.sentiment),
+      };
+    }
 
     return NextResponse.json({
       chartState: {
@@ -130,6 +151,7 @@ export async function POST(req: NextRequest) {
         currentPrice,
       },
       ...context,
+      institutional,
     });
   } catch (error) {
     console.error("Error generating chart context:", error);

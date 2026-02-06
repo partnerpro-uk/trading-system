@@ -18,6 +18,7 @@ import { createHash } from "crypto";
 import { forwardFill } from "./jblanked-news";
 import { runCaretaker } from "./gap-caretaker";
 import { processEventReactions } from "./event-reaction-processor";
+import { fetchLatestCOT } from "./cot-data";
 
 // Load env from parent .env.local
 config({ path: resolve(process.cwd(), "../.env.local") });
@@ -619,6 +620,9 @@ async function main(): Promise<void> {
   // Start event reaction processor (runs every 15 minutes)
   startEventReactionProcessor();
 
+  // Start COT data updater (checks every 6 hours, data updates weekly)
+  startCOTUpdater();
+
   // Keep process alive
   console.log("\nWorker running. Press Ctrl+C to stop.\n");
 }
@@ -705,6 +709,36 @@ function startEventReactionProcessor(): void {
   }, REACTION_INTERVAL);
 
   console.log(`[EventReactions] Scheduled reaction processing (every ${REACTION_INTERVAL / (60 * 1000)} minutes, first run in 2 minutes)`);
+}
+
+/**
+ * Start COT data updater on 6-hour schedule
+ * CFTC releases data weekly on Friday, but we check every 6 hours
+ * to ensure we catch it even if one fetch fails
+ */
+function startCOTUpdater(): void {
+  const COT_CHECK_INTERVAL = 6 * 60 * 60 * 1000; // 6 hours
+
+  // Run after 3 minutes (let other syncs complete first)
+  setTimeout(() => {
+    console.log("\n[COT] Running initial COT data check...");
+    fetchLatestCOT().catch((err) => {
+      console.error("[COT] Initial fetch failed:", err);
+    });
+  }, 3 * 60 * 1000);
+
+  // Then check every 6 hours
+  setInterval(async () => {
+    console.log("\n[COT] Checking for new COT data...");
+    try {
+      await fetchLatestCOT();
+      console.log("[COT] Update complete");
+    } catch (err) {
+      console.error("[COT] Update failed:", err);
+    }
+  }, COT_CHECK_INTERVAL);
+
+  console.log(`[COT] Scheduled COT updates (every 6 hours, first run in 3 minutes)`);
 }
 
 // Graceful shutdown

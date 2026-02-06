@@ -81,6 +81,7 @@ export function usePositionSync(
           takeProfit: position.takeProfit,
           quantity: position.quantity,
           notes: position.notes,
+          createdBy: position.createdBy,
         })
           .then((tradeId) => {
             updateDrawing(pair, timeframe, position.id, {

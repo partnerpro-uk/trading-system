@@ -18,8 +18,10 @@ import { useTradesForChart } from "@/hooks/useTrades";
 import { hydrateDrawingStore, useDrawingStore } from "@/lib/drawings/store";
 import { PositionDrawing, HorizontalRayDrawing } from "@/lib/drawings/types";
 import Link from "next/link";
-import { ArrowLeft, ArrowRight } from "lucide-react";
+import { ArrowLeft, ArrowRight, MessageSquare } from "lucide-react";
 import { UserButton, SignedIn, SignedOut, SignInButton } from "@clerk/nextjs";
+import { ChatPanel } from "@/components/chat/ChatPanel";
+import { useChatStore } from "@/lib/chat/store";
 
 const TIMEFRAMES = ["M1", "M5", "M15", "M30", "H1", "H4", "D", "W", "M"] as const;
 
@@ -45,6 +47,23 @@ export default function ChartPage() {
   const [showSessionLines, setShowSessionLines] = useState<boolean>(false); // Off by default (less clutter)
   const [showSessionLabels, setShowSessionLabels] = useState<boolean>(false); // Off by default (less clutter)
   const [showNews, setShowNews] = useState<boolean>(true);
+
+  // Chat panel state
+  const chatOpen = useChatStore((s) => s.isOpen);
+  const toggleChat = useChatStore((s) => s.toggle);
+  const closeChat = useChatStore((s) => s.close);
+
+  // Chat keyboard shortcut (Cmd+L / Ctrl+L)
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key === "l") {
+        e.preventDefault();
+        toggleChat();
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [toggleChat]);
 
   // Selected event for sidebar panel
   const [selectedEvent, setSelectedEvent] = useState<NewsEventData | null>(null);
@@ -391,6 +410,20 @@ export default function ChartPage() {
             <ArrowLeft className="w-4 h-4" />
             Back
           </Link>
+
+          {/* Chat toggle */}
+          <button
+            onClick={toggleChat}
+            className={`p-1.5 rounded transition-colors ${
+              chatOpen
+                ? "bg-blue-600 text-white"
+                : "text-gray-400 hover:text-gray-200 hover:bg-gray-800"
+            }`}
+            title="Toggle Claude chat (⌘L)"
+          >
+            <MessageSquare className="w-4 h-4" />
+          </button>
+
           <h1 className="text-xl font-semibold">{displayPair}</h1>
           {livePrice && (
             <span className="text-lg font-mono text-gray-200">
@@ -481,8 +514,26 @@ export default function ChartPage() {
       {/* Main content: resizable chart / sidebar */}
       <main className="flex-1 min-h-0">
         <PanelGroup orientation="horizontal" className="h-full">
+          {/* Chat Panel */}
+          {chatOpen && (
+            <>
+              <Panel id="chat" defaultSize={25} minSize={15} maxSize={35}>
+                <ChatPanel
+                  context={{
+                    pair,
+                    timeframe,
+                    currentPrice: livePrice?.mid ?? null,
+                    drawings: filteredDrawings,
+                  }}
+                  onClose={closeChat}
+                />
+              </Panel>
+              <PanelResizeHandle className="w-2 bg-gray-700 hover:bg-blue-500 transition-colors cursor-col-resize" />
+            </>
+          )}
+
           {/* Chart Panel */}
-          <Panel id="chart" defaultSize="80%" minSize="50%">
+          <Panel id="chart" defaultSize={chatOpen ? 55 : 80} minSize={40}>
             <div className="h-full w-full relative flex">
               {/* Drawing Toolbar - Left Sidebar */}
               <DrawingToolbar
@@ -536,7 +587,7 @@ export default function ChartPage() {
           <PanelResizeHandle className="w-2 bg-gray-700 hover:bg-blue-500 transition-colors cursor-col-resize" />
 
           {/* Sidebar Panel */}
-          <Panel id="sidebar" defaultSize="20%" minSize="15%" maxSize="40%">
+          <Panel id="sidebar" defaultSize={20} minSize={15} maxSize={40}>
             <div className="h-full w-full">
               {selectedEvent ? (
                 <NewsEventPanel

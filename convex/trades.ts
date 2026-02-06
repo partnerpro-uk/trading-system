@@ -140,6 +140,11 @@ export const createTrade = mutation({
     indicatorSnapshot: v.optional(v.string()),
     conditionsMet: v.optional(v.array(v.string())),
     notes: v.optional(v.string()),
+    createdBy: v.optional(v.union(
+      v.literal("user"),
+      v.literal("claude"),
+      v.literal("strategy")
+    )),
   },
   handler: async (ctx, args) => {
     const user = await getAuthenticatedUser(ctx);
