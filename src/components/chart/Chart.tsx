@@ -146,6 +146,8 @@ interface ChartProps {
     exitTime?: number;
     pnlPips?: number;
   }>;
+  // Visible range change callback (timestamps in ms) for snapshot capture
+  onVisibleRangeChange?: (range: { from: number; to: number } | null) => void;
 }
 
 // Drag/hover part types
@@ -208,6 +210,7 @@ export function Chart({
   onDrawingUpdate,
   onDrawingDelete,
   tradesMap,
+  onVisibleRangeChange,
 }: ChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -3519,6 +3522,45 @@ export function Chart({
       timeScale.unsubscribeVisibleLogicalRangeChange(handleVisibleRangeChange);
     };
   }, [candles, isLoadingMore, hasMoreHistory, loadMoreHistory]);
+
+  // Broadcast visible range as timestamps for snapshot capture
+  useEffect(() => {
+    if (!chartRef.current || !onVisibleRangeChange || !candles || candles.length === 0) return;
+
+    const chart = chartRef.current;
+    const timeScale = chart.timeScale();
+
+    const handleRangeForSnapshot = () => {
+      const logicalRange = timeScale.getVisibleLogicalRange();
+      if (!logicalRange) {
+        onVisibleRangeChange(null);
+        return;
+      }
+
+      // Convert logical bar indices to timestamps using candleDataRef
+      const times = Array.from(candleDataRef.current.keys());
+      if (times.length === 0) {
+        onVisibleRangeChange(null);
+        return;
+      }
+
+      const fromIdx = Math.max(0, Math.floor(logicalRange.from));
+      const toIdx = Math.min(times.length - 1, Math.floor(logicalRange.to));
+
+      const fromTimestamp = (times[fromIdx] || times[0]) * 1000; // Convert seconds to ms
+      const toTimestamp = (times[toIdx] || times[times.length - 1]) * 1000;
+
+      onVisibleRangeChange({ from: fromTimestamp, to: toTimestamp });
+    };
+
+    // Initial call
+    handleRangeForSnapshot();
+
+    timeScale.subscribeVisibleLogicalRangeChange(handleRangeForSnapshot);
+    return () => {
+      timeScale.unsubscribeVisibleLogicalRangeChange(handleRangeForSnapshot);
+    };
+  }, [candles, onVisibleRangeChange]);
 
   useEffect(() => {
     lastCandleRef.current = null;

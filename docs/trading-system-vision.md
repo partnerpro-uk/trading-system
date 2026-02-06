@@ -183,86 +183,135 @@ Three modes of operation:
 
 ---
 
-## Dual-Layer Trade Capture System
+## Trade Snapshots — Data-Rich Chart State Capture
 
-Every trade moment is captured in two parallel layers:
+**Implemented.** Every key moment in a trade's lifecycle is captured as a structured data snapshot — not a pixel screenshot, but the raw data behind the chart: viewport, drawings, trade context, and AI description. Enough to reconstruct a read-only chart replay and give Claude structured analysis data.
 
-### Human Layer (Visual + Contextual)
-- **Screenshot** — What the chart actually looked like
-- **Annotations** — Your drawings, zones, levels marked
-- **Thoughts** — What you were thinking at that moment
-- **Voice notes** — Optional audio capture of reasoning
-- **Feel** — The intangibles that numbers don't capture
+### What a Snapshot Contains
 
-### Machine Layer (Technical + Queryable)
-- **Raw OHLCV data** — Every candle across all timeframes
-- **Indicator values** — Exact numbers, not "RSI was high"
-- **Drawing coordinates** — Programmatic representation
-- **Timestamps** — Millisecond precision
-- **Session/timing data** — London, NY, overlap, etc.
+Each snapshot stores:
+- **Visible range** — Exact candle timestamps at viewport edges
+- **Filtered drawings** — Only drawings relevant to this trade and viewport (immutable JSON copy)
+- **Trade context** — Entry/SL/TP prices, current price, P&L pips, distance to targets
+- **AI description** — Pre-computed natural language describing drawings, key levels, and trade state
+- **Moment label** — `setup`, `entry`, `during`, or `exit`
+- **Metadata** — Pair, timeframe, timestamp, strategy, notes
 
-**Both layers linked by timestamp.** Query either. Claude can analyze the technical data across thousands of trades while you can review the human context of any specific moment.
+### How Snapshots Are Captured
 
-### Why Both Matters
+**Auto-capture (fire-and-forget):**
+- **On trade entry** — When a position drawing creates a Convex trade, an "entry" snapshot fires automatically
+- **On trade close** — When TP/SL is hit and the trade closes, an "exit" snapshot fires automatically
 
-The technical data enables pattern analysis at scale. But trading isn't purely mechanical:
+**Manual capture:**
+- Camera button on the Live Position Panel during an open trade
+- Creates a "during" snapshot with current viewport state
 
-- "News was about to drop, I was hesitant"
-- "This looked clean but something felt off"
-- "Entered late because I was distracted"
+### Drawing Filter — What Gets Included
 
-That context matters for genuine improvement. The human layer captures what numbers can't.
+Not every drawing on the chart belongs in a snapshot. Three criteria (union, deduped by ID):
+
+1. **Trade-linked** — Drawings explicitly associated with the trade (`drawing.tradeId`)
+2. **Time-correlated** — Drawings created between trade creation and snapshot time
+3. **Viewport-intersecting** — Drawings whose anchors overlap the visible time range
+   - Horizontal lines always included (infinite span)
+   - Extended zones included if they reach into the viewport
+   - Position drawings included if entry timestamp is in range
+
+Old off-screen drawings from days ago are excluded. Extended zones that stretch into today's analysis are included.
+
+### Snapshot Replay
+
+Each snapshot can be replayed in a read-only Lightweight Chart:
+- Fetches candles for the stored visible range (with padding for context)
+- Renders the filtered drawings on a canvas overlay
+- Shows trade markers: entry line (white), SL line (red dashed), TP line (green dashed)
+- Moment label badge and P&L display
+- No interaction — scroll/zoom disabled, purely for review
+
+### AI Description Format
+
+Claude doesn't look at visual screenshots. Instead, each snapshot's `aiDescription` field contains structured text:
+
+```
+=== Trade Snapshot: ENTRY ===
+GBP/USD LONG | Entry: 1.36699, SL: 1.36476, TP: 1.36923
+Current: 1.36850 | P&L: +15.1 pips | TP: 7.3 pips away | SL: 37.4 pips away
+
+Drawings (8):
+  - fibonacci retracement (7 levels) from 1.36200 to 1.36900
+  - blue rectangle zone "London Kill Zone" from 1.36400 to 1.36600
+  ...
+
+Key Levels:
+  1.36923 — Take Profit (7.3 pips above)
+  1.36900 — Fib 0% (5.0 pips above)
+  ...
+```
+
+This reuses the existing `describeAllDrawings()` and `extractKeyLevels()` functions from the drawing description system, extended with trade context.
+
+### Trade Detail Modal
+
+Clicking a trade in the journal opens a detail modal with:
+- **Trade summary** — 7 stat cards (entry, exit, SL, TP, P&L, R-multiple, duration)
+- **Snapshot timeline** — Horizontal scrollable cards showing each captured moment
+- **Replay viewer** — Read-only chart rendering the selected snapshot
+- **AI analysis** — Toggle to show/hide the pre-computed description
+
+### Dual-Layer Capture
+
+The snapshot system implements both layers of trade capture:
+
+**Human Layer (Visual + Contextual)**
+- Drawings, zones, levels as they appeared at capture time
+- Notes attached to snapshots
+- Manual "during" snapshots capture your in-the-moment view
+
+**Machine Layer (Technical + Queryable)**
+- Raw OHLCV data reconstructed from stored visible range
+- Drawing coordinates as structured JSON
+- Trade context with exact pip calculations
+- AI descriptions queryable by Claude for pattern analysis
+
+**Both layers linked by trade ID.** Claude can analyze the machine layer across thousands of trades while you review the visual replay of any specific moment.
 
 ---
 
-## Replay Generator System
+## Snapshot Replay System
 
-Go beyond static trade logs — generate rewatchable, annotated replays of any trade.
+**Implemented.** Instead of recording live sessions, the system captures data-rich snapshots at key moments and reconstructs read-only chart replays from stored data.
 
-### What a Replay Looks Like
+### How Replay Works
 
-```
-[Chart animating, candles forming one by one]
+Each snapshot stores enough metadata to reconstruct the exact chart view:
 
-00:05 — Your annotation: "Watching this level, looking for a sweep"
-00:12 — Claude overlay appears: "Liquidity below equal lows identified"
-00:18 — Your voice note: "There's the sweep"
-00:20 — Claude: "Break of structure confirmed on this candle"
-00:25 — Entry marker appears on chart
-00:25 — Your note: "Entered here, targeting 2R"
+1. Fetch candles from the database for the snapshot's stored visible range (with 20% padding)
+2. Create a read-only Lightweight Chart instance (no scroll/zoom)
+3. Render the filtered drawings on a canvas overlay
+4. Overlay trade markers (entry, SL, TP price lines)
+5. Display moment label, P&L, and timestamp
 
-[Fast forward through trade duration]
+No recording needed — candles already exist in TimescaleDB/ClickHouse. Snapshots are just bookmarks.
 
-01:45 — Exit marker appears
-01:45 — Your reflection: "Held through the pullback, worked out"
-01:50 — Claude: "This setup matched 47 historical examples. Win rate: 64%"
-02:00 — Final stats overlay: +2.3R, 12 candles duration
-```
+### Trade Detail Modal Experience
 
-### Replay Capabilities
+From the trades journal:
 
-**Generate replays for:**
-- Individual trades (review your own decisions)
-- Pattern compilations ("Show me all head & shoulders setups")
-- Loss analysis ("Replay all losing trades this month")
-- Best setups ("My top 10 trades by R multiple")
+1. Click a trade row or camera icon to open the detail modal
+2. See trade summary: entry, exit, SL, TP, P&L, R-multiple, duration, session
+3. Browse the snapshot timeline — horizontal cards for each captured moment (entry, during, exit)
+4. Click a snapshot card to load that moment into the replay viewer
+5. Toggle AI analysis to see Claude's structured description of what was on the chart
 
-**Replay controls:**
-- Play/pause/speed control
-- Step forward/back by candle
-- Toggle Claude commentary on/off
-- Toggle your annotations on/off
-- Jump to entry/exit moments
+### Future: Training Content
 
-### Training Content Generator
+After months of auto-captured snapshots:
 
-After 6 months you'd have:
-- Hundreds of annotated trade replays
-- Searchable by pattern, outcome, pair, session
-- Claude can reference any of them
-- Generate compilations: "My 5 best liquidity sweep setups with commentary"
-
-You're essentially building a **personal trading course** from your own experience, automatically.
+- Every trade has entry + exit snapshots automatically
+- Manual "during" snapshots capture mid-trade analysis
+- Claude can reference snapshot AI descriptions across your trade history
+- Pattern analysis: "Show trades where fibonacci retracement was present at entry"
 
 ---
 
@@ -471,5 +520,5 @@ This is not HFT. Seconds matter, milliseconds don't.
 
 ---
 
-*Document Version: 1.0 — Vision*
-*Last Updated: January 2026*
+*Document Version: 1.1 — Vision*
+*Last Updated: February 2026*

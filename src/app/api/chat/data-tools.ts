@@ -15,6 +15,18 @@ import {
   generateCOTSummary,
 } from "@/lib/db/cot";
 import { detectSession } from "@/lib/trading/sessions";
+import { ConvexHttpClient } from "convex/browser";
+import { api } from "../../../../convex/_generated/api";
+
+// ─── Convex Client (lazy, per-request) ──────────────────────────────────────
+
+function getConvexClient(token?: string): ConvexHttpClient | null {
+  const url = process.env.NEXT_PUBLIC_CONVEX_URL;
+  if (!url || !token) return null;
+  const client = new ConvexHttpClient(url);
+  client.setAuth(token);
+  return client;
+}
 
 // ─── Data Tool Executor ──────────────────────────────────────────────────────
 
@@ -22,7 +34,8 @@ export async function executeDataTool(
   name: string,
   input: Record<string, unknown>,
   defaultPair: string,
-  defaultTimeframe: string
+  defaultTimeframe: string,
+  convexToken?: string
 ): Promise<unknown> {
   switch (name) {
     case "get_candles": {
@@ -212,19 +225,82 @@ export async function executeDataTool(
     }
 
     case "get_trade_history": {
-      // Trade history is in Convex — for now return a placeholder
-      return {
-        message: "Trade history will be connected via Convex in the persistence phase.",
-        pair: (input.pair as string) || defaultPair,
-      };
+      const client = getConvexClient(convexToken);
+      if (!client) {
+        return { error: "Not authenticated — cannot access trade history. Ask the user to sign in." };
+      }
+
+      const pair = (input.pair as string) || undefined;
+      const limit = Math.min((input.limit as number) || 20, 50);
+      const status = input.status as string | undefined;
+
+      try {
+        const trades = await client.query(api.trades.getTrades, {
+          status: status as "pending" | "open" | "closed" | "cancelled" | undefined,
+          limit,
+        });
+
+        // Filter by pair if specified
+        const filtered = pair ? trades.filter((t: Record<string, unknown>) => t.pair === pair) : trades;
+
+        return {
+          count: filtered.length,
+          trades: filtered.map((t: Record<string, unknown>) => ({
+            id: t._id,
+            pair: t.pair,
+            timeframe: t.timeframe,
+            direction: t.direction,
+            status: t.status,
+            // Planned
+            plannedEntry: t.entryPrice,
+            entryTime: t.entryTime,
+            plannedTP: t.takeProfit,
+            plannedSL: t.stopLoss,
+            // Actual (Plan vs Reality)
+            actualEntry: t.actualEntryPrice,
+            entrySlippagePips: t.entrySlippagePips,
+            entryReason: t.entryReason,
+            // Exit
+            exitPrice: t.exitPrice,
+            exitTime: t.exitTime,
+            exitSlippagePips: t.exitSlippagePips,
+            closeReason: t.closeReason,
+            closeReasonNote: t.closeReasonNote,
+            // Outcome
+            outcome: t.outcome,
+            pnlPips: t.pnlPips,
+            maxDrawdownPips: t.maxDrawdownPips,
+            barsHeld: t.barsHeld,
+            // Context
+            strategy: t.strategyId,
+            notes: t.notes,
+            createdBy: t.createdBy,
+            createdAt: t.createdAt,
+          })),
+        };
+      } catch (e) {
+        return { error: `Failed to fetch trades: ${e instanceof Error ? e.message : String(e)}` };
+      }
     }
 
     case "get_trade_stats": {
-      // Trade stats are in Convex — for now return a placeholder
-      return {
-        message: "Trade statistics will be connected via Convex in the persistence phase.",
-        pair: (input.pair as string) || defaultPair,
-      };
+      const client = getConvexClient(convexToken);
+      if (!client) {
+        return { error: "Not authenticated — cannot access trade stats. Ask the user to sign in." };
+      }
+
+      const pair = (input.pair as string) || undefined;
+      const strategyId = (input.strategyId as string) || undefined;
+
+      try {
+        const stats = await client.query(api.trades.getTradeStats, {
+          pair,
+          strategyId,
+        });
+        return stats;
+      } catch (e) {
+        return { error: `Failed to fetch trade stats: ${e instanceof Error ? e.message : String(e)}` };
+      }
     }
 
     default:

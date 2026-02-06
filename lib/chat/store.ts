@@ -339,6 +339,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
         currentPrice: context.currentPrice,
         drawings: context.drawings,
         model,
+        convexToken: context.convexToken ?? undefined,
       };
 
       const response = await fetch("/api/chat", {

@@ -16,6 +16,8 @@ export interface TakeTradeOptions {
   entryType: "market" | "limit";
   positionSize?: number;
   customEntry?: number;
+  actualEntryPrice?: number;
+  entryReason?: "limit" | "market";
 }
 
 /**
@@ -72,11 +74,19 @@ export function TakeTradeModal({
     };
   }, [onClose]);
 
+  // Slippage preview for market entry
+  const slippagePips = entryType === "market" && currentPrice
+    ? Math.abs(currentPrice - entryPrice) * pipMultiplier
+    : 0;
+
   const handleConfirm = () => {
+    const actualPrice = entryType === "market" && currentPrice ? currentPrice : entryPrice;
     onConfirm({
       entryType,
       positionSize: positionSize ? parseFloat(positionSize) : undefined,
       customEntry: entryType === "market" && currentPrice ? currentPrice : undefined,
+      actualEntryPrice: actualPrice,
+      entryReason: entryType === "market" ? "market" : "limit",
     });
   };
 
@@ -176,6 +186,11 @@ export function TakeTradeModal({
               <div className="text-xs text-amber-400 flex items-center gap-1 mt-1">
                 <AlertTriangle className="w-3 h-3" />
                 Market price: {currentPrice.toFixed(5)}
+                {slippagePips > 0.1 && (
+                  <span className="text-amber-400/70 ml-1">
+                    ({slippagePips.toFixed(1)} pips from signal)
+                  </span>
+                )}
               </div>
             )}
           </div>

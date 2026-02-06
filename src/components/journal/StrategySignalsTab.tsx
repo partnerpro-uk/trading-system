@@ -433,6 +433,10 @@ export function StrategySignalsTab({ onSignalTaken }: StrategySignalsTabProps) {
       status: options.entryType === "market" ? "open" : "pending",
       confirmedAt: Date.now(),
       quantity: options.positionSize,
+      // Plan vs Reality — Entry
+      actualEntryPrice: options.actualEntryPrice,
+      actualEntryTimestamp: options.actualEntryPrice ? Date.now() : undefined,
+      entryReason: options.entryReason,
     });
 
     setSelectedSignal(null);

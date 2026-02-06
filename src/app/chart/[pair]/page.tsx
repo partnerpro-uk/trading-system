@@ -15,11 +15,17 @@ import { useStrategyVisuals } from "@/hooks/useStrategyVisuals";
 import { useDrawings, useDrawingKeyboardShortcuts } from "@/hooks/useDrawings";
 import { usePositionSync } from "@/hooks/usePositionSync";
 import { useTradesForChart } from "@/hooks/useTrades";
+import { useCaptureSnapshot } from "@/hooks/useSnapshots";
 import { hydrateDrawingStore, useDrawingStore } from "@/lib/drawings/store";
-import { PositionDrawing, HorizontalRayDrawing } from "@/lib/drawings/types";
+import { PositionDrawing, HorizontalRayDrawing, isPositionDrawing } from "@/lib/drawings/types";
+import { LivePositionsContainer } from "@/components/chart/LivePositionPanel";
+import { CloseTradeModal, CloseTradeResult } from "@/components/chart/CloseTradeModal";
+import { useMutation } from "convex/react";
+import { api } from "../../../../convex/_generated/api";
+import { Id } from "../../../../convex/_generated/dataModel";
 import Link from "next/link";
 import { ArrowLeft, ArrowRight, MessageSquare } from "lucide-react";
-import { UserButton, SignedIn, SignedOut, SignInButton } from "@clerk/nextjs";
+import { UserButton, SignedIn, SignedOut, SignInButton, useAuth } from "@clerk/nextjs";
 import { ChatPanel } from "@/components/chat/ChatPanel";
 import { useChatStore } from "@/lib/chat/store";
 
@@ -28,6 +34,13 @@ const TIMEFRAMES = ["M1", "M5", "M15", "M30", "H1", "H4", "D", "W", "M"] as cons
 export default function ChartPage() {
   const params = useParams();
   const pair = params.pair as string;
+
+  // Clerk auth for Convex token (used by Claude chat to query trades)
+  const { getToken } = useAuth();
+  const [convexToken, setConvexToken] = useState<string | null>(null);
+  useEffect(() => {
+    getToken({ template: "convex" }).then(setConvexToken).catch(() => {});
+  }, [getToken]);
 
   // Candle cache with prefetching (adjacent timeframes load immediately, rest after 20s)
   const {
@@ -130,12 +143,117 @@ export default function ChartPage() {
     undo,
   } = useDrawings({ pair, timeframe });
 
+  // Visible range ref for snapshot capture (updated by Chart component)
+  const visibleRangeRef = useRef<{ from: number; to: number } | null>(null);
+  const handleVisibleRangeChange = useCallback((range: { from: number; to: number } | null) => {
+    visibleRangeRef.current = range;
+  }, []);
+
+  // Snapshot capture hook
+  const { capture: captureSnapshot } = useCaptureSnapshot(pair, timeframe, visibleRangeRef);
+
   // Sync position drawings to Convex trades and auto-detect TP/SL hits
   // Trade log (Convex) is source of truth for exits - manual edits override auto-detection
-  usePositionSync(pair, timeframe, candles);
+  usePositionSync(pair, timeframe, candles, captureSnapshot, livePrice);
 
   // Fetch trades for this chart to display exit lines on positions
   const { tradesMap } = useTradesForChart(pair, timeframe);
+
+  // Close trade modal state
+  const [closingPosition, setClosingPosition] = useState<PositionDrawing | null>(null);
+  const closeTradeConvex = useMutation(api.trades.closeTrade);
+
+  // Get open positions for the LivePositionsContainer
+  const openPositions = useMemo(() => {
+    return drawings.filter(
+      (d) => isPositionDrawing(d) && (d.status === "open" || d.status === "pending")
+    ) as PositionDrawing[];
+  }, [drawings]);
+
+  // Handle close trade from LivePositionPanel
+  const handleClosePosition = useCallback((positionId: string) => {
+    const position = drawings.find((d) => d.id === positionId);
+    if (position && isPositionDrawing(position)) {
+      setClosingPosition(position as PositionDrawing);
+    }
+  }, [drawings]);
+
+  // Handle close trade confirmation from modal
+  const handleCloseTradeConfirm = useCallback(async (result: CloseTradeResult) => {
+    if (!closingPosition) return;
+
+    const isLong = closingPosition.type === "longPosition";
+    const pipMultiplier = pair.includes("JPY") ? 100 : 10000;
+
+    // Calculate P&L
+    const pnl = isLong
+      ? (result.exitPrice - closingPosition.entry.price) * pipMultiplier
+      : (closingPosition.entry.price - result.exitPrice) * pipMultiplier;
+
+    // Determine outcome from close reason
+    let outcome: "TP" | "SL" | "MW" | "ML" | "BE";
+    if (result.closeReason === "breakeven") {
+      outcome = "BE";
+    } else if (pnl >= 0) {
+      outcome = "MW";
+    } else {
+      outcome = "ML";
+    }
+
+    // Close the Convex trade if synced
+    if (closingPosition.convexTradeId) {
+      try {
+        await closeTradeConvex({
+          id: closingPosition.convexTradeId as Id<"trades">,
+          exitTime: Date.now(),
+          exitPrice: result.exitPrice,
+          outcome,
+          pnlPips: Math.round(pnl * 100) / 100,
+          closeReason: result.closeReason,
+          closeReasonNote: result.closeReasonNote,
+        });
+      } catch (e) {
+        console.error("Failed to close trade in Convex:", e);
+      }
+    }
+
+    // Update the drawing with closed state
+    updateDrawing(closingPosition.id, {
+      status: "closed",
+      exitPrice: result.exitPrice,
+      exitTimestamp: Date.now(),
+      closedAt: Date.now(),
+      closedReason: "manual",
+      outcome: pnl >= 0 ? "manual" : "manual",
+      closeReasonNote: result.closeReasonNote,
+    } as Record<string, unknown>);
+
+    setClosingPosition(null);
+  }, [closingPosition, pair, closeTradeConvex, updateDrawing]);
+
+  // Handle snapshot from LivePositionPanel
+  const handlePositionSnapshot = useCallback((positionId: string) => {
+    const position = drawings.find((d) => d.id === positionId);
+    if (position && isPositionDrawing(position)) {
+      const pos = position as PositionDrawing;
+      const price = livePrice?.mid;
+      if (pos.convexTradeId && price) {
+        captureSnapshot({
+          tradeId: pos.convexTradeId,
+          momentLabel: "during",
+          currentPrice: price,
+          trade: {
+            direction: pos.type === "longPosition" ? "LONG" : "SHORT",
+            entryPrice: pos.entry.price,
+            stopLoss: pos.stopLoss,
+            takeProfit: pos.takeProfit,
+            entryTime: pos.entry.timestamp,
+            createdAt: pos.createdAt ?? Date.now(),
+          },
+        });
+      }
+    }
+  }, [drawings, captureSnapshot, livePrice]);
 
   // Track which entry signals we've already created drawings for (to avoid duplicates)
   const createdSignalsRef = useRef<Set<string>>(new Set());
@@ -524,6 +642,7 @@ export default function ChartPage() {
                     timeframe,
                     currentPrice: livePrice?.mid ?? null,
                     drawings: filteredDrawings,
+                    convexToken,
                   }}
                   onClose={closeChat}
                 />
@@ -543,7 +662,15 @@ export default function ChartPage() {
                 drawingCount={drawingCount}
               />
               {/* Chart with left padding for toolbar */}
-              <div className="flex-1 h-full pl-11">
+              <div className="flex-1 h-full pl-11 relative">
+              {/* Live Position Overlay */}
+              <LivePositionsContainer
+                positions={openPositions}
+                pair={pair}
+                currentPrice={livePrice?.mid ?? null}
+                onClose={handleClosePosition}
+                onSnapshot={handlePositionSnapshot}
+              />
               <Chart
                 pair={pair}
                 timeframe={timeframe}
@@ -578,6 +705,8 @@ export default function ChartPage() {
                 onDrawingDelete={deleteDrawing}
                 // Trades data for position exits (source of truth)
                 tradesMap={tradesMap}
+                // Visible range for snapshot capture
+                onVisibleRangeChange={handleVisibleRangeChange}
               />
               </div>
             </div>
@@ -624,6 +753,17 @@ export default function ChartPage() {
           </Panel>
         </PanelGroup>
       </main>
+
+      {/* Close Trade Modal */}
+      {closingPosition && (
+        <CloseTradeModal
+          position={closingPosition}
+          pair={pair}
+          currentPrice={livePrice?.mid ?? null}
+          onConfirm={handleCloseTradeConfirm}
+          onClose={() => setClosingPosition(null)}
+        />
+      )}
     </div>
   );
 }

@@ -60,6 +60,7 @@ export interface ChatContext {
   timeframe: string;
   currentPrice: number | null;
   drawings: Drawing[];
+  convexToken?: string | null;
 }
 
 // ─── SSE Events ──────────────────────────────────────────────────────────────
@@ -124,6 +125,7 @@ export interface ChatRequest {
   drawings: Drawing[];
   model?: ChatModel;
   conversationId?: string;
+  convexToken?: string;
 }
 
 // ─── Drawing Metadata (shared across all drawing tools) ─────────────────────

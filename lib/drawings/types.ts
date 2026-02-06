@@ -245,6 +245,12 @@ interface BasePositionDrawing extends BaseDrawing {
   entryFilledAt?: number;      // When entry was filled (pending → open)
   closedAt?: number;           // When trade closed
   closedReason?: "tp" | "sl" | "manual" | "timeout";  // Why the trade closed
+
+  // Plan vs Reality — Execution tracking
+  actualEntryPrice?: number;      // What trader actually got filled at
+  actualEntryTimestamp?: number;  // When entry actually filled (Unix ms)
+  entryReason?: "limit" | "market" | "late" | "partial" | "spread" | "other";
+  closeReasonNote?: string;       // Free-text elaboration on why trade was closed
 }
 
 /**

@@ -7,6 +7,7 @@ import { useDrawingStore } from "@/lib/drawings/store";
 import { isPositionDrawing, PositionDrawing } from "@/lib/drawings/types";
 import { CandleData } from "./useCandles";
 import { Id } from "../../convex/_generated/dataModel";
+import { MomentLabel } from "@/lib/snapshots/capture";
 
 /**
  * Hook that syncs position drawings to Convex trades table.
@@ -15,6 +16,7 @@ import { Id } from "../../convex/_generated/dataModel";
  * 1. Creates trades in Convex when new position drawings are created
  * 2. Auto-detects TP/SL hits from candle data and closes trades
  * 3. Tracks max drawdown during the trade
+ * 4. Auto-captures chart snapshots on trade entry and exit
  *
  * Trade log (Convex) is the source of truth. Manual edits in trade log
  * take priority - auto-detection only runs for open trades.
@@ -22,7 +24,23 @@ import { Id } from "../../convex/_generated/dataModel";
 export function usePositionSync(
   pair: string,
   timeframe: string,
-  candles: CandleData[] | null
+  candles: CandleData[] | null,
+  captureSnapshot?: (params: {
+    tradeId: string;
+    momentLabel: MomentLabel;
+    currentPrice: number;
+    trade: {
+      entryPrice: number;
+      stopLoss: number;
+      takeProfit: number;
+      direction: "LONG" | "SHORT";
+      entryTime: number;
+      createdAt: number;
+      strategyId?: string;
+    };
+    notes?: string;
+  }) => Promise<string | null>,
+  livePrice?: { mid?: number; bid?: number; ask?: number } | null
 ) {
   const createTrade = useMutation(api.trades.createTrade);
   const closeTrade = useMutation(api.trades.closeTrade);
@@ -39,6 +57,16 @@ export function usePositionSync(
   const closedTradeIds = useRef<Set<string>>(new Set());
   // Track last processed candle timestamp per trade
   const lastProcessedCandle = useRef<Map<string, number>>(new Map());
+  // Track which trades we've already snapshotted to avoid duplicates
+  const snapshotted = useRef<Set<string>>(new Set());
+
+  // Store captureSnapshot in a ref to avoid effect dependency churn
+  const captureRef = useRef(captureSnapshot);
+  captureRef.current = captureSnapshot;
+
+  // Store livePrice in a ref
+  const livePriceRef = useRef(livePrice);
+  livePriceRef.current = livePrice;
 
   // Get all drawings for this chart - stable selector that returns the array reference directly
   const drawingsKey = `${pair}:${timeframe}`;
@@ -82,6 +110,10 @@ export function usePositionSync(
           quantity: position.quantity,
           notes: position.notes,
           createdBy: position.createdBy,
+          // Plan vs Reality — Entry
+          actualEntryPrice: position.actualEntryPrice,
+          actualEntryTime: position.actualEntryTimestamp,
+          entryReason: position.entryReason,
         })
           .then((tradeId) => {
             updateDrawing(pair, timeframe, position.id, {
@@ -90,6 +122,29 @@ export function usePositionSync(
             });
             processedIds.current.add(position.id);
             syncingIds.current.delete(position.id);
+
+            // Auto-capture entry snapshot (fire-and-forget)
+            if (captureRef.current && !snapshotted.current.has(`entry:${tradeId}`)) {
+              snapshotted.current.add(`entry:${tradeId}`);
+              const currentPrice = livePriceRef.current?.mid || position.entry.price;
+              captureRef.current({
+                tradeId,
+                momentLabel: "entry",
+                currentPrice,
+                trade: {
+                  entryPrice: position.entry.price,
+                  stopLoss: position.stopLoss,
+                  takeProfit: position.takeProfit,
+                  direction,
+                  entryTime: position.entry.timestamp,
+                  createdAt: Date.now(),
+                  strategyId: position.strategyId,
+                },
+              }).catch((err) => {
+                console.error("Failed to capture entry snapshot:", err);
+                snapshotted.current.delete(`entry:${tradeId}`);
+              });
+            }
           })
           .catch((error) => {
             console.error("Failed to sync position to Convex:", error);
@@ -214,9 +269,32 @@ export function usePositionSync(
           outcome: type,
           pnlPips: Math.round(pnlPips * 100) / 100,
           barsHeld: Math.max(1, barsHeld),
+          closeReason: type === "TP" ? "tp_hit" : "sl_hit",
         })
           .then(() => {
             console.log(`Trade ${trade._id} auto-closed: ${type} hit at ${exitPrice}`);
+
+            // Auto-capture exit snapshot (fire-and-forget)
+            if (captureRef.current && !snapshotted.current.has(`exit:${trade._id}`)) {
+              snapshotted.current.add(`exit:${trade._id}`);
+              captureRef.current({
+                tradeId: trade._id,
+                momentLabel: "exit",
+                currentPrice: exitPrice,
+                trade: {
+                  entryPrice: trade.entryPrice,
+                  stopLoss: trade.stopLoss,
+                  takeProfit: trade.takeProfit,
+                  direction: trade.direction,
+                  entryTime: trade.entryTime,
+                  createdAt: trade.createdAt,
+                  strategyId: trade.strategyId,
+                },
+              }).catch((err) => {
+                console.error("Failed to capture exit snapshot:", err);
+                snapshotted.current.delete(`exit:${trade._id}`);
+              });
+            }
           })
           .catch((error) => {
             console.error("Failed to close trade:", error);

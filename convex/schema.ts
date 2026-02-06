@@ -149,6 +149,35 @@ export default defineSchema({
     conditionsMet: v.optional(v.array(v.string())),  // Which strategy conditions triggered
     notes: v.optional(v.string()),
 
+    // Plan vs Reality — Entry
+    actualEntryPrice: v.optional(v.number()),    // What trader actually got filled at
+    actualEntryTime: v.optional(v.number()),     // When entry actually filled (Unix ms)
+    entrySlippagePips: v.optional(v.number()),   // Signed: positive = worse fill
+    entryReason: v.optional(v.union(
+      v.literal("limit"),        // Filled at planned price (limit order)
+      v.literal("market"),       // Market order — may differ from planned
+      v.literal("late"),         // Entered late (missed the planned level)
+      v.literal("partial"),      // Partial fill
+      v.literal("spread"),       // Slippage due to spread
+      v.literal("other")         // Other reason
+    )),
+
+    // Plan vs Reality — Exit (exitPrice/exitTime already exist above)
+    exitSlippagePips: v.optional(v.number()),    // Deviation from planned TP/SL
+    closeReason: v.optional(v.union(
+      v.literal("tp_hit"),           // TP hit automatically
+      v.literal("sl_hit"),           // SL hit automatically
+      v.literal("manual_profit"),    // Closed manually in profit
+      v.literal("manual_loss"),      // Closed manually at a loss
+      v.literal("breakeven"),        // Closed at breakeven
+      v.literal("emotional"),        // Emotional decision
+      v.literal("news"),             // News event incoming
+      v.literal("thesis_broken"),    // Original trade thesis invalidated
+      v.literal("timeout"),          // Time-based exit
+      v.literal("other")            // Other reason
+    )),
+    closeReasonNote: v.optional(v.string()),     // Free-text elaboration
+
     // Screenshots (URLs to stored images)
     entryScreenshot: v.optional(v.string()),  // Screenshot URL at entry
     exitScreenshot: v.optional(v.string()),   // Screenshot URL at exit

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { TrendingUp, TrendingDown, X, ChevronDown, ChevronUp } from "lucide-react";
+import { TrendingUp, TrendingDown, X, ChevronDown, ChevronUp, Camera } from "lucide-react";
 import { PositionDrawing } from "@/lib/drawings/types";
 import {
   useLivePositionPnL,
@@ -14,6 +14,7 @@ interface LivePositionPanelProps {
   pair: string;
   currentPrice: number | null;
   onClose?: (positionId: string) => void;
+  onSnapshot?: (positionId: string) => void;
   onCollapse?: () => void;
   isCollapsed?: boolean;
 }
@@ -34,9 +35,11 @@ export function LivePositionPanel({
   pair,
   currentPrice,
   onClose,
+  onSnapshot,
   onCollapse,
   isCollapsed = false,
 }: LivePositionPanelProps) {
+  const [snapshotting, setSnapshotting] = useState(false);
   const pnlData = useLivePositionPnL(position, currentPrice);
   const isLong = position.type === "longPosition";
 
@@ -170,16 +173,32 @@ export function LivePositionPanel({
           </div>
         </div>
 
-        {/* Close button */}
-        {onClose && (
-          <button
-            onClick={() => onClose(position.id)}
-            className="w-full py-2 text-sm font-medium text-gray-300 bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors flex items-center justify-center gap-2"
-          >
-            <X className="w-4 h-4" />
-            Close Trade
-          </button>
-        )}
+        {/* Actions */}
+        <div className="flex gap-2">
+          {onSnapshot && (
+            <button
+              onClick={async () => {
+                setSnapshotting(true);
+                onSnapshot(position.id);
+                setTimeout(() => setSnapshotting(false), 1500);
+              }}
+              disabled={snapshotting}
+              className="flex-1 py-2 text-sm font-medium text-gray-300 bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+            >
+              <Camera className="w-4 h-4" />
+              {snapshotting ? "Saved" : "Snapshot"}
+            </button>
+          )}
+          {onClose && (
+            <button
+              onClick={() => onClose(position.id)}
+              className="flex-1 py-2 text-sm font-medium text-gray-300 bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors flex items-center justify-center gap-2"
+            >
+              <X className="w-4 h-4" />
+              Close Trade
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -193,6 +212,7 @@ interface LivePositionsContainerProps {
   pair: string;
   currentPrice: number | null;
   onClose?: (positionId: string) => void;
+  onSnapshot?: (positionId: string) => void;
 }
 
 export function LivePositionsContainer({
@@ -200,6 +220,7 @@ export function LivePositionsContainer({
   pair,
   currentPrice,
   onClose,
+  onSnapshot,
 }: LivePositionsContainerProps) {
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
 
@@ -233,6 +254,7 @@ export function LivePositionsContainer({
           pair={pair}
           currentPrice={currentPrice}
           onClose={onClose}
+          onSnapshot={onSnapshot}
           onCollapse={() => toggleCollapse(position.id)}
           isCollapsed={collapsedIds.has(position.id)}
         />

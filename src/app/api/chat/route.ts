@@ -50,6 +50,7 @@ export async function POST(request: NextRequest) {
     currentPrice,
     drawings,
     model = "sonnet",
+    convexToken,
   } = body;
 
   if (!messages || !Array.isArray(messages) || !pair || !timeframe) {
@@ -96,7 +97,8 @@ export async function POST(request: NextRequest) {
         timeframe,
         writer,
         encoder,
-        request.signal
+        request.signal,
+        convexToken
       );
     } catch (error) {
       if (error instanceof Error && error.name !== "AbortError") {
@@ -137,7 +139,8 @@ async function streamWithToolLoop(
   timeframe: string,
   writer: WritableStreamDefaultWriter,
   encoder: TextEncoder,
-  signal: AbortSignal
+  signal: AbortSignal,
+  convexToken?: string
 ): Promise<void> {
   let totalInputTokens = 0;
   let totalOutputTokens = 0;
@@ -274,7 +277,7 @@ async function streamWithToolLoop(
       } else {
         // Server-side data tools — execute immediately
         try {
-          const result = await executeDataTool(tool.name, tool.input, pair, timeframe);
+          const result = await executeDataTool(tool.name, tool.input, pair, timeframe, convexToken);
           toolResults.push({
             type: "tool_result",
             tool_use_id: tool.id,

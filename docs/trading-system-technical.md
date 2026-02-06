@@ -56,6 +56,7 @@ trading-system/
 │   ├── schema.ts                 # Database schema (see below)
 │   ├── candles.ts                # Candle data mutations/queries
 │   ├── trades.ts                 # Trade log mutations/queries
+│   ├── snapshots.ts              # Trade snapshot CRUD (getByTrade, create, update, delete)
 │   ├── strategies.ts             # Strategy CRUD
 │   ├── analysis.ts               # Claude API integration
 │   ├── indicators.ts             # Indicator calculations
@@ -116,10 +117,10 @@ trading-system/
 │   │   │   ├── StrategyEditor.tsx
 │   │   │   ├── ConditionBuilder.tsx
 │   │   │   └── BacktestResults.tsx
-│   │   ├── replay/
-│   │   │   ├── ReplayPlayer.tsx
-│   │   │   ├── ReplayControls.tsx
-│   │   │   └── AnnotationOverlay.tsx
+│   │   ├── snapshots/
+│   │   │   └── SnapshotReplayViewer.tsx  # Read-only chart replay from snapshot data
+│   │   ├── trades/
+│   │   │   └── TradeDetailModal.tsx      # Trade detail with snapshot timeline + replay
 │   │   └── ui/                   # Shared UI components
 │   │       ├── Button.tsx
 │   │       ├── Card.tsx
@@ -156,6 +157,11 @@ trading-system/
 │   │   │   ├── generator.ts      # Replay generation
 │   │   │   ├── player.ts         # Playback logic
 │   │   │   └── types.ts
+│   │   ├── snapshots/
+│   │   │   ├── index.ts              # Barrel exports
+│   │   │   ├── filter-drawings.ts    # Drawing filter (trade-linked, time-correlated, viewport-intersecting)
+│   │   │   ├── capture.ts            # buildSnapshotData() — assembles snapshot from state
+│   │   │   └── describe.ts           # AI description generator + trade context computation
 │   │   ├── ai/
 │   │   │   ├── claude.ts         # Claude API wrapper
 │   │   │   ├── openrouter.ts     # OpenRouter wrapper (optional)
@@ -176,7 +182,9 @@ trading-system/
 │   │   ├── useStrategy.ts        # Active strategy state
 │   │   ├── useSetupDetection.ts  # Live setup scanning
 │   │   ├── useClaude.ts          # Claude API interaction
-│   │   └── useTradeLog.ts        # Trade CRUD operations
+│   │   ├── useTradeLog.ts        # Trade CRUD operations
+│   │   ├── usePositionSync.ts    # Position drawing ↔ Convex trade sync + auto-snapshots
+│   │   └── useSnapshots.ts       # useSnapshots(tradeId) + useCaptureSnapshot(pair, tf)
 │   │
 │   └── stores/
 │       ├── chartStore.ts         # Chart state (Zustand)
@@ -528,6 +536,38 @@ export default defineSchema({
     .index("by_entry_time", ["entryTimestamp"])
     .index("by_strategy", ["strategyId"])
     .index("by_pair_status", ["pair", "status"]),
+
+  // ═══════════════════════════════════════════════════════════════
+  // TRADE SNAPSHOTS
+  // ═══════════════════════════════════════════════════════════════
+
+  snapshots: defineTable({
+    userId: v.string(),
+    tradeId: v.id("trades"),
+    momentLabel: v.union(
+      v.literal("setup"),
+      v.literal("entry"),
+      v.literal("during"),
+      v.literal("exit")
+    ),
+    pair: v.string(),
+    timeframe: v.string(),
+    timestamp: v.number(),                    // When snapshot was taken (Unix ms)
+    visibleRange: v.object({
+      from: v.number(),                       // Earliest visible candle timestamp
+      to: v.number(),                         // Latest visible candle timestamp
+    }),
+    drawings: v.string(),                     // JSON: Drawing[] filtered for this snapshot
+    tradeContext: v.string(),                 // JSON: { entryPrice, sl, tp, currentPrice, direction, pnlPips, ... }
+    strategy: v.optional(v.string()),
+    analysisNotes: v.optional(v.string()),
+    aiDescription: v.optional(v.string()),    // Pre-computed natural language for Claude
+    createdBy: v.union(v.literal("auto"), v.literal("manual")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_trade", ["tradeId"])
+    .index("by_user", ["userId"]),
 
   // ═══════════════════════════════════════════════════════════════
   // STRATEGIES
@@ -1145,10 +1185,17 @@ export function Chart({ pair, timeframe }: ChartProps) {
 - [ ] Strategy comparison view
 - [ ] Performance breakdown (by session, day)
 
-### Phase 10: Review & Replay
-- [ ] Trade replay generator
-- [ ] Replay player UI
-- [ ] Annotation overlay system
+### Phase 10: Trade Snapshots & Replay ✅
+- [x] Convex snapshots table + CRUD functions (`convex/snapshots.ts`)
+- [x] Drawing filter logic — 3-criteria union (`lib/snapshots/filter-drawings.ts`)
+- [x] AI description generator (`lib/snapshots/describe.ts`)
+- [x] Snapshot capture logic + React hooks (`lib/snapshots/capture.ts`, `src/hooks/useSnapshots.ts`)
+- [x] Chart visible range exposure (`Chart.tsx` → `onVisibleRangeChange`)
+- [x] Auto-capture on trade entry + exit (`usePositionSync.ts`)
+- [x] Manual capture button on LivePositionPanel
+- [x] Snapshot replay viewer — read-only LW Charts (`SnapshotReplayViewer.tsx`)
+- [x] Trade detail modal with snapshot timeline (`TradeDetailModal.tsx`)
+- [x] Trades page integration — camera icon + modal trigger
 - [ ] Weekly review dashboard
 - [ ] Performance analytics charts
 
@@ -1161,5 +1208,5 @@ export function Chart({ pair, timeframe }: ChartProps) {
 
 ---
 
-*Document Version: 1.0 — Technical Specification*
-*Last Updated: January 2026*
+*Document Version: 1.1 — Technical Specification*
+*Last Updated: February 2026*

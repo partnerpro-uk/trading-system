@@ -13,10 +13,12 @@ import {
   Check,
   X,
   ChevronDown,
+  Camera,
 } from "lucide-react";
 import { useTrades, useTradeStats, Trade, TradeOutcome } from "@/hooks/useTrades";
 import { useStrategies } from "@/hooks/useStrategies";
 import { StrategySignalsTab } from "@/components/journal/StrategySignalsTab";
+import { TradeDetailModal } from "@/components/trades/TradeDetailModal";
 import {
   detectSession,
   getSessionColor,
@@ -296,6 +298,7 @@ function TradeRow({
   onCancelEdit,
   onSaveEdit,
   onViewChart,
+  onViewDetails,
   onDelete,
 }: {
   trade: Trade;
@@ -306,6 +309,7 @@ function TradeRow({
   onCancelEdit: () => void;
   onSaveEdit: (updates: Record<string, unknown>) => Promise<void>;
   onViewChart: () => void;
+  onViewDetails: () => void;
   onDelete: () => void;
 }) {
   const [editValues, setEditValues] = useState({
@@ -539,6 +543,13 @@ function TradeRow({
                 <Pencil className="w-4 h-4" />
               </button>
               <button
+                onClick={onViewDetails}
+                className="p-1.5 rounded text-gray-400 hover:text-amber-400 hover:bg-gray-800 transition-colors"
+                title="View Snapshots"
+              >
+                <Camera className="w-4 h-4" />
+              </button>
+              <button
                 onClick={onViewChart}
                 className="p-1.5 rounded text-gray-400 hover:text-blue-400 hover:bg-gray-800 transition-colors"
                 title="View on Chart"
@@ -577,6 +588,9 @@ export default function TradesPage() {
 
   // Inline edit state - track which trade ID is being edited
   const [editingTradeId, setEditingTradeId] = useState<string | null>(null);
+
+  // Trade detail modal state
+  const [detailTrade, setDetailTrade] = useState<Trade | null>(null);
 
   // Get unique pairs
   const uniquePairs = useMemo(() => {
@@ -830,6 +844,7 @@ export default function TradesPage() {
                       onCancelEdit={() => setEditingTradeId(null)}
                       onSaveEdit={handleSaveEdit}
                       onViewChart={() => handleViewChart(trade)}
+                      onViewDetails={() => setDetailTrade(trade)}
                       onDelete={() => handleDelete(trade)}
                     />
                   ))}
@@ -841,6 +856,15 @@ export default function TradesPage() {
           </>
         )}
       </main>
+
+      {/* Trade Detail Modal */}
+      {detailTrade && (
+        <TradeDetailModal
+          trade={detailTrade}
+          strategyName={strategyMap[detailTrade.strategyId]}
+          onClose={() => setDetailTrade(null)}
+        />
+      )}
     </div>
   );
 }

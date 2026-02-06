@@ -145,15 +145,34 @@ export const createTrade = mutation({
       v.literal("claude"),
       v.literal("strategy")
     )),
+    // Plan vs Reality — Entry
+    actualEntryPrice: v.optional(v.number()),
+    actualEntryTime: v.optional(v.number()),
+    entryReason: v.optional(v.union(
+      v.literal("limit"), v.literal("market"), v.literal("late"),
+      v.literal("partial"), v.literal("spread"), v.literal("other")
+    )),
   },
   handler: async (ctx, args) => {
     const user = await getAuthenticatedUser(ctx);
     const now = Date.now();
 
+    // Auto-calculate entry slippage if actual entry provided
+    const actualEntry = args.actualEntryPrice ?? args.entryPrice;
+    const isLong = args.direction === "LONG";
+    const pipMultiplier = args.pair.includes("JPY") ? 100 : 10000;
+    const entrySlippagePips = isLong
+      ? (actualEntry - args.entryPrice) * pipMultiplier
+      : (args.entryPrice - actualEntry) * pipMultiplier;
+
     return await ctx.db.insert("trades", {
       ...args,
       userId: user.clerkId,
       status: "open",
+      actualEntryPrice: actualEntry,
+      actualEntryTime: args.actualEntryTime ?? args.entryTime,
+      entrySlippagePips: Math.round(entrySlippagePips * 10) / 10,
+      entryReason: args.entryReason ?? "limit",
       createdAt: now,
       updatedAt: now,
     });
@@ -179,6 +198,14 @@ export const closeTrade = mutation({
     pnlDollars: v.optional(v.number()),
     barsHeld: v.optional(v.number()),
     notes: v.optional(v.string()),
+    // Plan vs Reality — Exit
+    closeReason: v.optional(v.union(
+      v.literal("tp_hit"), v.literal("sl_hit"),
+      v.literal("manual_profit"), v.literal("manual_loss"), v.literal("breakeven"),
+      v.literal("emotional"), v.literal("news"), v.literal("thesis_broken"),
+      v.literal("timeout"), v.literal("other")
+    )),
+    closeReasonNote: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const user = await getAuthenticatedUser(ctx);
@@ -192,9 +219,36 @@ export const closeTrade = mutation({
       throw new Error("Not authorized");
     }
 
+    // Auto-derive closeReason from outcome if not provided
+    let closeReason = updates.closeReason;
+    if (!closeReason) {
+      switch (updates.outcome) {
+        case "TP": closeReason = "tp_hit"; break;
+        case "SL": closeReason = "sl_hit"; break;
+        case "MW": closeReason = "manual_profit"; break;
+        case "ML": closeReason = "manual_loss"; break;
+        case "BE": closeReason = "breakeven"; break;
+      }
+    }
+
+    // Auto-calculate exit slippage (deviation from planned TP/SL)
+    const pipMultiplier = trade.pair.includes("JPY") ? 100 : 10000;
+    let exitSlippagePips: number | undefined;
+    if (updates.outcome === "TP" || closeReason === "tp_hit") {
+      exitSlippagePips = Math.round(
+        Math.abs(updates.exitPrice - trade.takeProfit) * pipMultiplier * 10
+      ) / 10;
+    } else if (updates.outcome === "SL" || closeReason === "sl_hit") {
+      exitSlippagePips = Math.round(
+        Math.abs(updates.exitPrice - trade.stopLoss) * pipMultiplier * 10
+      ) / 10;
+    }
+
     await ctx.db.patch(id, {
       ...updates,
       status: "closed",
+      closeReason,
+      exitSlippagePips,
       updatedAt: Date.now(),
       notes: updates.notes || trade.notes,
     });
@@ -236,6 +290,22 @@ export const updateTrade = mutation({
       v.literal("closed"),
       v.literal("cancelled")
     )),
+    // Plan vs Reality
+    actualEntryPrice: v.optional(v.number()),
+    actualEntryTime: v.optional(v.number()),
+    entrySlippagePips: v.optional(v.number()),
+    entryReason: v.optional(v.union(
+      v.literal("limit"), v.literal("market"), v.literal("late"),
+      v.literal("partial"), v.literal("spread"), v.literal("other")
+    )),
+    exitSlippagePips: v.optional(v.number()),
+    closeReason: v.optional(v.union(
+      v.literal("tp_hit"), v.literal("sl_hit"),
+      v.literal("manual_profit"), v.literal("manual_loss"), v.literal("breakeven"),
+      v.literal("emotional"), v.literal("news"), v.literal("thesis_broken"),
+      v.literal("timeout"), v.literal("other")
+    )),
+    closeReasonNote: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const user = await getAuthenticatedUser(ctx);
@@ -385,6 +455,49 @@ export const getTradeStats = query({
     const expectancy =
       (winRate / 100) * avgWinPips - ((100 - winRate) / 100) * avgLossPips;
 
+    // Execution quality metrics (only from trades with slippage data)
+    const tradesWithEntrySlippage = closedTrades.filter(
+      (t) => t.entrySlippagePips !== undefined
+    );
+    const tradesWithExitSlippage = closedTrades.filter(
+      (t) => t.exitSlippagePips !== undefined
+    );
+    const avgEntrySlippagePips = tradesWithEntrySlippage.length > 0
+      ? tradesWithEntrySlippage.reduce((s, t) => s + (t.entrySlippagePips ?? 0), 0) / tradesWithEntrySlippage.length
+      : 0;
+    const avgExitSlippagePips = tradesWithExitSlippage.length > 0
+      ? tradesWithExitSlippage.reduce((s, t) => s + (t.exitSlippagePips ?? 0), 0) / tradesWithExitSlippage.length
+      : 0;
+
+    // Early exit rate: trades closed manually before hitting TP/SL
+    const earlyExits = closedTrades.filter((t) =>
+      t.closeReason && !["tp_hit", "sl_hit"].includes(t.closeReason)
+    );
+    const earlyExitRate = closedTrades.length > 0
+      ? (earlyExits.length / closedTrades.length) * 100
+      : 0;
+    const earlyExitAvgPips = earlyExits.length > 0
+      ? earlyExits.reduce((s, t) => s + (t.pnlPips ?? 0), 0) / earlyExits.length
+      : 0;
+
+    // Late entry win rate
+    const lateEntries = closedTrades.filter(
+      (t) => t.entryReason === "late" || (t.entrySlippagePips && t.entrySlippagePips > 2)
+    );
+    const lateEntryWins = lateEntries.filter((t) =>
+      ["TP", "MW", "BE"].includes(t.outcome ?? "")
+    );
+    const lateEntryWinRate = lateEntries.length > 0
+      ? (lateEntryWins.length / lateEntries.length) * 100
+      : 0;
+
+    // Close reason breakdown
+    const closeReasonBreakdown: Record<string, number> = {};
+    for (const t of closedTrades) {
+      const reason = t.closeReason ?? "unknown";
+      closeReasonBreakdown[reason] = (closeReasonBreakdown[reason] ?? 0) + 1;
+    }
+
     return {
       totalTrades: closedTrades.length,
       wins: wins.length,
@@ -396,6 +509,15 @@ export const getTradeStats = query({
       totalPnlDollars: Math.round(totalPnlDollars * 100) / 100,
       avgBarsHeld: Math.round(avgBarsHeld * 100) / 100,
       expectancy: Math.round(expectancy * 100) / 100,
+      executionQuality: {
+        avgEntrySlippagePips: Math.round(avgEntrySlippagePips * 10) / 10,
+        avgExitSlippagePips: Math.round(avgExitSlippagePips * 10) / 10,
+        earlyExitRate: Math.round(earlyExitRate * 10) / 10,
+        earlyExitAvgPips: Math.round(earlyExitAvgPips * 10) / 10,
+        lateEntryWinRate: Math.round(lateEntryWinRate * 10) / 10,
+        lateEntryCount: lateEntries.length,
+        closeReasonBreakdown,
+      },
     };
   },
 });

@@ -435,13 +435,13 @@ const getCOTHistory: Tool = {
 
 const getTradeHistory: Tool = {
   name: "get_trade_history",
-  description: "Get the user's trade journal history for a specific pair. Shows past entries, exits, P&L, and notes.",
+  description: "Get the user's trade journal history. Each trade includes Plan vs Reality data: planned entry vs actual fill price, entry slippage, close reason (tp_hit, sl_hit, manual_profit, manual_loss, breakeven, emotional, news, thesis_broken, timeout, other), and close notes. Use this to analyze execution quality, behavioral patterns, and trade outcomes.",
   input_schema: {
     type: "object" as const,
     properties: {
-      pair: { type: "string", description: "Currency pair (e.g. 'EUR_USD'). Defaults to current chart pair. Pass 'all' for all pairs." },
-      status: { type: "string", enum: ["open", "closed", "all"], description: "Filter by trade status (default 'all')" },
-      limit: { type: "number", description: "Maximum number of trades to return (default 20)" },
+      pair: { type: "string", description: "Currency pair (e.g. 'EUR_USD'). Omit for all pairs." },
+      status: { type: "string", enum: ["open", "closed", "cancelled"], description: "Filter by trade status. Omit for all statuses." },
+      limit: { type: "number", description: "Maximum number of trades to return (default 20, max 50)" },
     },
     required: [],
   },
@@ -449,11 +449,12 @@ const getTradeHistory: Tool = {
 
 const getTradeStats: Tool = {
   name: "get_trade_stats",
-  description: "Get aggregate trading statistics for the user. Includes win rate, average P&L, total trades, profit factor, and streaks.",
+  description: "Get aggregate trading statistics including execution quality metrics. Returns win rate, avg P&L, expectancy, PLUS: avg entry/exit slippage, early exit rate and avg P&L of early exits, late entry win rate, and close reason breakdown. Use this to identify execution patterns and behavioral edges/leaks.",
   input_schema: {
     type: "object" as const,
     properties: {
-      pair: { type: "string", description: "Currency pair to filter stats for. Pass 'all' for overall stats." },
+      pair: { type: "string", description: "Currency pair to filter stats for. Omit for overall stats." },
+      strategyId: { type: "string", description: "Strategy ID to filter by. Omit for all strategies." },
     },
     required: [],
   },
