@@ -646,30 +646,27 @@ export default function ChartPage() {
         </div>
       </header>
 
-      {/* Main content: resizable chart / sidebar */}
-      <main className="flex-1 min-h-0">
-        <PanelGroup orientation="horizontal" className="h-full">
-          {/* Chat Panel */}
-          {chatOpen && (
-            <>
-              <Panel id="chat" defaultSize={28} minSize={22} maxSize={40}>
-                <ChatPanel
-                  context={{
-                    pair,
-                    timeframe,
-                    currentPrice: livePrice?.mid ?? null,
-                    drawings: filteredDrawings,
-                    convexToken,
-                  }}
-                  onClose={closeChat}
-                />
-              </Panel>
-              <PanelResizeHandle className="w-2 bg-gray-700 hover:bg-blue-500 transition-colors cursor-col-resize" />
-            </>
-          )}
+      {/* Main content: chat sidebar + resizable chart/sidebar */}
+      <main className="flex-1 min-h-0 flex">
+        {/* Chat Panel — outside PanelGroup to avoid conditional-panel layout bugs */}
+        {chatOpen && (
+          <div className="h-full flex-shrink-0 w-[350px] min-w-[280px] max-w-[500px] resize-x overflow-hidden border-r border-gray-700">
+            <ChatPanel
+              context={{
+                pair,
+                timeframe,
+                currentPrice: livePrice?.mid ?? null,
+                drawings: filteredDrawings,
+                convexToken,
+              }}
+              onClose={closeChat}
+            />
+          </div>
+        )}
 
+        <PanelGroup orientation="horizontal" className="h-full flex-1">
           {/* Chart Panel */}
-          <Panel id="chart" defaultSize={chatOpen ? 52 : 80} minSize={35}>
+          <Panel id="chart" defaultSize={80} minSize={40}>
             <div className="h-full w-full relative flex">
               {/* Drawing Toolbar - Left Sidebar */}
               <DrawingToolbar
