@@ -10,7 +10,7 @@
  * - Reclaim detection (price closes back beyond the broken level)
  */
 
-import type { Candle, SwingPoint, BOSEvent, BOSDirection } from "./types";
+import type { Candle, SwingPoint, BOSEvent, BOSDirection, BOSType } from "./types";
 
 /**
  * Get pip multiplier for a currency pair.
@@ -82,6 +82,9 @@ export function detectBOS(
   let lastBullishBOS: BOSEvent | null = null;
   let lastBearishBOS: BOSEvent | null = null;
 
+  // Track direction of last structural break for BOS vs MSS classification
+  let prevBreakDirection: BOSDirection | null = null;
+
   // Find the candle index where we can start checking
   const firstSwingCandleIdx = Math.min(
     swingHighs[0].candleIndex,
@@ -121,6 +124,12 @@ export function detectBOS(
       const medianBody = computeMedianBody(candles, i, 20);
       const isDisplacement = medianBody > 0 && bodySize >= medianBody * 2.0;
 
+      // Same direction = continuation (BOS), opposite = reversal (MSS)
+      const bosType: BOSType =
+        prevBreakDirection === null || prevBreakDirection === "bullish"
+          ? "bos"
+          : "mss";
+
       const event: BOSEvent = {
         timestamp: candle.timestamp,
         direction: "bullish",
@@ -134,10 +143,12 @@ export function detectBOS(
           ) / 100,
         isDisplacement,
         isCounterTrend: false, // Phase 1 default
+        bosType,
       };
 
       events.push(event);
       lastBullishBOS = event;
+      prevBreakDirection = "bullish";
     }
 
     // Check bearish BOS: body close below reference swing low
@@ -149,6 +160,11 @@ export function detectBOS(
       const bodySize = Math.abs(candle.close - candle.open);
       const medianBody = computeMedianBody(candles, i, 20);
       const isDisplacement = medianBody > 0 && bodySize >= medianBody * 2.0;
+
+      const bosType: BOSType =
+        prevBreakDirection === null || prevBreakDirection === "bearish"
+          ? "bos"
+          : "mss";
 
       const event: BOSEvent = {
         timestamp: candle.timestamp,
@@ -163,10 +179,12 @@ export function detectBOS(
           ) / 100,
         isDisplacement,
         isCounterTrend: false,
+        bosType,
       };
 
       events.push(event);
       lastBearishBOS = event;
+      prevBreakDirection = "bearish";
     }
   }
 

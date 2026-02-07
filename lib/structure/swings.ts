@@ -10,7 +10,7 @@ import type { Candle, SwingPoint } from "./types";
 
 /** Timeframe-scaled lookback: how many candles on each side to confirm a swing */
 export const LOOKBACK_MAP: Record<string, number> = {
-  M15: 7,
+  M15: 5,
   M30: 7,
   H1: 5,
   H4: 5,

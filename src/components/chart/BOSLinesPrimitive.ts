@@ -1,8 +1,8 @@
 /**
  * BOSLinesPrimitive — Renders dashed horizontal lines for Break of Structure events.
  *
- * Lines extend from the broken swing timestamp to the right edge of the chart.
- * Green = bullish BOS, red = bearish BOS.
+ * Lines extend from the broken swing timestamp to the confirming candle.
+ * Green = bullish, red = bearish. BOS = continuation, MSS = reversal.
  * Active = full opacity, reclaimed = faded.
  */
 
@@ -25,12 +25,15 @@ export interface BOSLineData {
   status: "active" | "reclaimed";
   confirmingTimestamp: number; // unix ms
   magnitudePips: number;
+  reclaimedAt?: number; // unix ms — when the BOS was reclaimed
+  bosType: "bos" | "mss"; // bos = continuation, mss = market structure shift
+  timeframe?: string; // for label display
 }
 
 interface RendererLine {
   startX: number;
   y: number;
-  endX: number; // right edge of chart
+  endX: number;
   color: string;
   alpha: number;
   labelText: string;
@@ -54,7 +57,6 @@ class BOSLinesRenderer implements IPrimitivePaneRenderer {
       (scope: BitmapCoordinatesRenderingScope) => {
         const ctx = scope.context;
         const { horizontalPixelRatio, verticalPixelRatio } = scope;
-        const chartWidth = scope.bitmapSize.width;
 
         ctx.save();
 
@@ -66,9 +68,7 @@ class BOSLinesRenderer implements IPrimitivePaneRenderer {
             continue;
 
           const sx = line.startX * horizontalPixelRatio;
-          const ex = line.endX > 0
-            ? line.endX * horizontalPixelRatio
-            : chartWidth;
+          const ex = line.endX * horizontalPixelRatio;
           const y = line.y * verticalPixelRatio;
 
           // Draw dashed line
@@ -85,11 +85,12 @@ class BOSLinesRenderer implements IPrimitivePaneRenderer {
           ctx.lineTo(ex, y);
           ctx.stroke();
 
-          // Draw price label at line start
+          // Draw label at midpoint of line
+          const midX = (sx + ex) / 2;
           const fontSize = Math.round(8 * verticalPixelRatio);
           ctx.font = `${fontSize}px monospace`;
           ctx.fillStyle = line.color;
-          ctx.textAlign = "left";
+          ctx.textAlign = "center";
           ctx.setLineDash([]);
           ctx.globalAlpha = Math.min(line.alpha + 0.2, 1);
 
@@ -99,7 +100,7 @@ class BOSLinesRenderer implements IPrimitivePaneRenderer {
           const padY = 2 * verticalPixelRatio;
           ctx.fillStyle = "rgba(10, 10, 10, 0.8)";
           ctx.fillRect(
-            sx,
+            midX - metrics.width / 2 - padX,
             y - fontSize - padY,
             metrics.width + padX * 2,
             fontSize + padY * 2
@@ -107,7 +108,7 @@ class BOSLinesRenderer implements IPrimitivePaneRenderer {
 
           // Label text
           ctx.fillStyle = line.color;
-          ctx.fillText(line.labelText, sx + padX, y - padY);
+          ctx.fillText(line.labelText, midX, y - padY);
 
           ctx.globalAlpha = 1;
         }
@@ -176,27 +177,26 @@ export class BOSLinesPrimitive implements ISeriesPrimitive<Time> {
     const timeScale = this._chart.timeScale();
     const lines: RendererLine[] = [];
 
-    // Get the right edge coordinate
-    const visibleRange = timeScale.getVisibleLogicalRange();
-    const rightEdgeX = visibleRange
-      ? timeScale.logicalToCoordinate(visibleRange.to)
-      : null;
-
     for (const bos of this._bosEvents) {
       const startTime = (bos.brokenSwingTimestamp / 1000) as Time;
       const startX = timeScale.timeToCoordinate(startTime);
+      const confirmX = timeScale.timeToCoordinate(
+        (bos.confirmingTimestamp / 1000) as Time
+      );
       const y = this._series.priceToCoordinate(bos.brokenLevel);
 
-      if (startX !== null && y !== null) {
+      // Only render when both endpoints and price level are resolvable
+      if (startX !== null && confirmX !== null && y !== null) {
+        const typeLabel = bos.bosType === "mss" ? "MSS" : "BOS";
+        const tfSuffix = bos.timeframe ? `\n${bos.timeframe}` : "";
+
         lines.push({
           startX,
           y,
-          endX: rightEdgeX ?? -1, // -1 = use chart width
+          endX: confirmX,
           color: bos.direction === "bullish" ? "#22c55e" : "#ef4444",
           alpha: bos.status === "active" ? 0.7 : 0.25,
-          labelText: `BOS ${bos.brokenLevel.toFixed(
-            bos.brokenLevel < 10 ? 5 : 3
-          )}`,
+          labelText: `${typeLabel}${tfSuffix}`,
         });
       }
     }

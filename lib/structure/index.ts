@@ -19,6 +19,7 @@ import type {
   StructureLabel,
 } from "./types";
 import { detectSwings, LOOKBACK_MAP, REQUIRED_DEPTH } from "./swings";
+import { enforceZigzag } from "./zigzag";
 import { labelSwings } from "./labeling";
 import { detectBOS } from "./bos";
 import { detectSweeps } from "./sweeps";
@@ -31,6 +32,7 @@ import { enrichBOSEvents } from "./bos-enrichment";
 
 // Re-export sub-modules for direct access
 export { detectSwings, LOOKBACK_MAP, REQUIRED_DEPTH } from "./swings";
+export { enforceZigzag } from "./zigzag";
 export { labelSwings } from "./labeling";
 export { detectBOS } from "./bos";
 export { detectSweeps } from "./sweeps";
@@ -43,6 +45,11 @@ export { enrichBOSEvents } from "./bos-enrichment";
 
 // Re-export types
 export type * from "./types";
+
+/** Detect swings with zigzag filtering (convenience wrapper). */
+export function detectFilteredSwings(candles: Candle[], timeframe: string): SwingPoint[] {
+  return enforceZigzag(detectSwings(candles, timeframe));
+}
 
 /**
  * Derive the current structure state from swings and BOS events.
@@ -116,8 +123,8 @@ export function computeStructure(
   monthlyCandles: Candle[],
   options?: ComputeStructureOptions
 ): StructureResponse {
-  // 1. Detect raw swing points
-  const rawSwings = detectSwings(candles, timeframe);
+  // 1. Detect raw swing points + zigzag filter (alternating H-L-H-L)
+  const rawSwings = enforceZigzag(detectSwings(candles, timeframe));
 
   // 2. Label swings (HH/HL/LH/LL/EQH/EQL)
   const swings = labelSwings(rawSwings, candles);

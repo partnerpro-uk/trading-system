@@ -29,6 +29,7 @@ export interface SwingPoint {
 
 export type BOSDirection = "bullish" | "bearish";
 export type BOSStatus = "active" | "reclaimed";
+export type BOSType = "bos" | "mss"; // bos = continuation, mss = market structure shift
 
 export interface BOSEvent {
   timestamp: number; // confirming candle close time
@@ -40,6 +41,7 @@ export interface BOSEvent {
   magnitudePips: number; // how far beyond (in pips)
   isDisplacement: boolean; // body >= median(last 20) * 2.0
   isCounterTrend: boolean; // true if opposing HTF direction
+  bosType: BOSType; // "bos" = continuation, "mss" = reversal/shift
 
   // Reclaim tracking (populated if status becomes "reclaimed")
   reclaimedAt?: number;

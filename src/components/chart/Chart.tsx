@@ -929,6 +929,9 @@ export function Chart({
           status: e.status,
           confirmingTimestamp: e.timestamp,
           magnitudePips: e.magnitudePips,
+          reclaimedAt: e.reclaimedAt,
+          bosType: e.bosType ?? "bos",
+          timeframe,
         }));
         bosLinesPrimitiveRef.current.updateBOSEvents(bosData);
       } else {

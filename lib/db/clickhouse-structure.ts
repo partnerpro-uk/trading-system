@@ -55,6 +55,7 @@ export interface CHBOSEvent {
   reclaimed_at: string | null;
   reclaimed_by_close: number | null;
   time_til_reclaim_ms: number | null;
+  bos_type: string;
 }
 
 export interface CHSweepEvent {
@@ -408,7 +409,7 @@ export async function getBOSEventsFromCH(
     query: `
       SELECT time, pair, timeframe, direction, status, broken_level, broken_swing_time,
         confirming_close, magnitude_pips, is_displacement, is_counter_trend,
-        reclaimed_at, reclaimed_by_close, time_til_reclaim_ms
+        reclaimed_at, reclaimed_by_close, time_til_reclaim_ms, bos_type
       FROM bos_events
       WHERE ${clause}
       ORDER BY time DESC
@@ -423,6 +424,7 @@ export async function getBOSEventsFromCH(
     broken_level: string; broken_swing_time: string; confirming_close: string;
     magnitude_pips: string; is_displacement: string; is_counter_trend: string;
     reclaimed_at: string; reclaimed_by_close: string; time_til_reclaim_ms: string;
+    bos_type: string;
   }
   const rows = await result.json<Row>();
 
@@ -441,6 +443,7 @@ export async function getBOSEventsFromCH(
     reclaimed_at: r.reclaimed_at || null,
     reclaimed_by_close: r.reclaimed_by_close ? pf(r.reclaimed_by_close) : null,
     time_til_reclaim_ms: r.time_til_reclaim_ms ? parseInt(r.time_til_reclaim_ms) : null,
+    bos_type: r.bos_type || "bos",
   }));
 }
 
