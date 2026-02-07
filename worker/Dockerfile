@@ -33,15 +33,20 @@ ENV TZ=America/New_York
 
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
-
-# Install dependencies
+# Copy worker package files and install deps
+COPY worker/package*.json ./worker/
+WORKDIR /app/worker
 RUN npm ci
 
-# Copy source
-COPY src ./src
-COPY tsconfig.json ./
+# Copy worker source
+WORKDIR /app
+COPY worker/src ./worker/src
+COPY worker/tsconfig.json ./worker/tsconfig.json
 
-# Run
+# Copy shared libraries needed by worker (relative imports: ../../lib, ../../convex)
+COPY lib ./lib
+COPY convex/_generated ./convex/_generated
+
+# Run from worker directory
+WORKDIR /app/worker
 CMD ["npm", "start"]

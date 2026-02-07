@@ -1,0 +1,11 @@
+node_modules
+.next
+.git
+.env*
+*.md
+docs
+public
+src
+scripts
+worker/node_modules
+worker/dist
