@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery, useMutation } from "convex/react";
+import { useQuery, useMutation, useConvexAuth } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { Id } from "../../convex/_generated/dataModel";
 
@@ -101,20 +101,23 @@ interface UseTradesOptions {
  * Hook for fetching and managing trades from Convex
  */
 export function useTrades(options: UseTradesOptions = {}) {
+  const { isAuthenticated } = useConvexAuth();
   const { status, strategyId, pair, limit } = options;
 
-  // Fetch trades based on filters
+  // Fetch trades based on filters (skip when not authenticated)
   const trades = useQuery(
     strategyId
       ? api.trades.getTradesByStrategy
       : pair
         ? api.trades.getTradesByPair
         : api.trades.getTrades,
-    strategyId
-      ? { strategyId, limit }
-      : pair
-        ? { pair, limit }
-        : { status, limit }
+    isAuthenticated
+      ? (strategyId
+          ? { strategyId, limit }
+          : pair
+            ? { pair, limit }
+            : { status, limit })
+      : "skip"
   );
 
   // Mutations
@@ -139,7 +142,8 @@ export function useTrades(options: UseTradesOptions = {}) {
  * Hook for fetching trade statistics
  */
 export function useTradeStats(options: { strategyId?: string; pair?: string } = {}) {
-  const stats = useQuery(api.trades.getTradeStats, options);
+  const { isAuthenticated } = useConvexAuth();
+  const stats = useQuery(api.trades.getTradeStats, isAuthenticated ? options : "skip");
 
   return {
     stats: stats as TradeStats | undefined,
@@ -151,7 +155,8 @@ export function useTradeStats(options: { strategyId?: string; pair?: string } = 
  * Hook for fetching open trades
  */
 export function useOpenTrades() {
-  const trades = useQuery(api.trades.getOpenTrades, {});
+  const { isAuthenticated } = useConvexAuth();
+  const trades = useQuery(api.trades.getOpenTrades, isAuthenticated ? {} : "skip");
 
   return {
     trades: trades as Trade[] | undefined,
@@ -179,7 +184,8 @@ export function useTrade(tradeId: Id<"trades"> | null) {
  * Returns a map of tradeId -> Trade for easy lookup when rendering positions
  */
 export function useTradesForChart(pair: string, timeframe: string) {
-  const trades = useQuery(api.trades.getTradesByPair, { pair, limit: 100 });
+  const { isAuthenticated } = useConvexAuth();
+  const trades = useQuery(api.trades.getTradesByPair, isAuthenticated ? { pair, limit: 100 } : "skip");
 
   // Filter by timeframe and create a lookup map
   const tradesMap = new Map<string, Trade>();

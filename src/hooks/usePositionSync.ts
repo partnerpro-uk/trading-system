@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useMemo } from "react";
-import { useMutation, useQuery } from "convex/react";
+import { useMutation, useQuery, useConvexAuth } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useDrawingStore } from "@/lib/drawings/store";
 import { isPositionDrawing, PositionDrawing } from "@/lib/drawings/types";
@@ -42,13 +42,14 @@ export function usePositionSync(
   }) => Promise<string | null>,
   livePrice?: { mid?: number; bid?: number; ask?: number } | null
 ) {
+  const { isAuthenticated } = useConvexAuth();
   const createTrade = useMutation(api.trades.createTrade);
   const closeTrade = useMutation(api.trades.closeTrade);
   const updateTrade = useMutation(api.trades.updateTrade);
   const updateDrawing = useDrawingStore((state) => state.updateDrawing);
 
-  // Query open trades for this pair
-  const openTrades = useQuery(api.trades.getOpenTrades, {});
+  // Query open trades for this pair (skip when not authenticated)
+  const openTrades = useQuery(api.trades.getOpenTrades, isAuthenticated ? {} : "skip");
 
   // Track processed IDs to avoid duplicate syncs
   const processedIds = useRef<Set<string>>(new Set());
