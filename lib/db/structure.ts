@@ -70,7 +70,7 @@ export async function upsertBOSEvents(
          reclaimed_at, reclaimed_by_close, time_til_reclaim_ms, bos_type)
        VALUES (to_timestamp($1::double precision / 1000), $2, $3, $4, $5, $6,
          to_timestamp($7::double precision / 1000), $8, $9, $10, $11,
-         ${e.reclaimedAt ? "to_timestamp($12::double precision / 1000)" : "NULL"},
+         CASE WHEN $12::double precision IS NOT NULL THEN to_timestamp($12::double precision / 1000) ELSE NULL END,
          $13, $14, $15)
        ON CONFLICT (time, pair, timeframe)
        DO UPDATE SET status = EXCLUDED.status,
@@ -277,11 +277,11 @@ export async function upsertFVGEvents(
        VALUES (to_timestamp($1::double precision / 1000), $2, $3, $4, $5,
          $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
          $16, $17, $18, $19,
-         ${e.firstTouchAt ? "to_timestamp($20::double precision / 1000)" : "NULL"},
+         CASE WHEN $20::double precision IS NOT NULL THEN to_timestamp($20::double precision / 1000) ELSE NULL END,
          $21, $22, $23, $24,
-         ${e.filledAt ? "to_timestamp($25::double precision / 1000)" : "NULL"},
+         CASE WHEN $25::double precision IS NOT NULL THEN to_timestamp($25::double precision / 1000) ELSE NULL END,
          $26,
-         ${e.invertedAt ? "to_timestamp($27::double precision / 1000)" : "NULL"},
+         CASE WHEN $27::double precision IS NOT NULL THEN to_timestamp($27::double precision / 1000) ELSE NULL END,
          $28, $29, $30, $31, $32)
        ON CONFLICT (time, pair, timeframe, direction)
        DO UPDATE SET status = EXCLUDED.status,
@@ -732,7 +732,7 @@ export async function upsertHTFStructure(
 
   await pool.query(
     `INSERT INTO htf_current_structure (pair, timeframe, direction, last_bos_direction, last_bos_timestamp, last_bos_level, swing_sequence, computed_at)
-     VALUES ($1, $2, $3, $4, ${structure.lastBOS ? "to_timestamp($5::double precision / 1000)" : "NULL"}, $6, $7, NOW())
+     VALUES ($1, $2, $3, $4, CASE WHEN $5::double precision IS NOT NULL THEN to_timestamp($5::double precision / 1000) ELSE NULL END, $6, $7, NOW())
      ON CONFLICT (pair, timeframe)
      DO UPDATE SET direction = EXCLUDED.direction,
        last_bos_direction = EXCLUDED.last_bos_direction,
