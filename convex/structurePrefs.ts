@@ -38,6 +38,7 @@ export const upsert = mutation({
       levels: v.boolean(),
       premiumDiscount: v.boolean(),
       sweeps: v.boolean(),
+      hud: v.optional(v.boolean()),
     }),
     fvgMinTier: v.number(),
     showRecentOnly: v.boolean(),

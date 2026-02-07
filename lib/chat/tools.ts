@@ -491,7 +491,7 @@ const getActiveFvgs: Tool = {
 
 const getBosHistory: Tool = {
   name: "get_bos_history",
-  description: "Get recent Break of Structure events with enrichment data (significance score, key levels broken, COT alignment, session context). Use to understand structural shifts.",
+  description: "Get recent BOS (continuation) and MSS (market structure shift/reversal) events with enrichment data (significance, key levels, COT, session context). Each event has bosType: 'bos' or 'mss'.",
   input_schema: {
     type: "object" as const,
     properties: {

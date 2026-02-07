@@ -83,6 +83,8 @@ interface ChartSidebarProps {
   onFVGTierFilterChange?: (value: 1 | 2 | 3) => void;
   showPremiumDiscount?: boolean;
   onShowPremiumDiscountChange?: (value: boolean) => void;
+  showStructureHUD?: boolean;
+  onShowStructureHUDChange?: (value: boolean) => void;
   // Structure panel data
   structureData?: StructureResponse | null;
   currentPrice?: number | null;
@@ -202,6 +204,8 @@ export function ChartSidebar({
   onFVGTierFilterChange,
   showPremiumDiscount = false,
   onShowPremiumDiscountChange,
+  showStructureHUD = true,
+  onShowStructureHUDChange,
   structureData,
   currentPrice,
 }: ChartSidebarProps) {
@@ -814,6 +818,20 @@ export function ChartSidebar({
                       title="Premium/Discount zones"
                     >
                       P/D
+                    </button>
+                  </div>
+                  {/* HUD toggle */}
+                  <div className="flex gap-1 mt-1">
+                    <button
+                      onClick={() => onShowStructureHUDChange?.(!showStructureHUD)}
+                      className={`flex-1 px-2 py-1.5 text-xs rounded transition-colors ${
+                        showStructureHUD
+                          ? "bg-emerald-600 text-white"
+                          : "bg-gray-800 text-gray-400 hover:bg-gray-700"
+                      }`}
+                      title="Structure HUD overlay on chart"
+                    >
+                      HUD
                     </button>
                   </div>
                 </div>

@@ -213,6 +213,7 @@ interface LivePositionsContainerProps {
   currentPrice: number | null;
   onClose?: (positionId: string) => void;
   onSnapshot?: (positionId: string) => void;
+  className?: string;
 }
 
 export function LivePositionsContainer({
@@ -221,6 +222,7 @@ export function LivePositionsContainer({
   currentPrice,
   onClose,
   onSnapshot,
+  className,
 }: LivePositionsContainerProps) {
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
 
@@ -246,7 +248,7 @@ export function LivePositionsContainer({
   };
 
   return (
-    <div className="absolute top-4 right-4 z-30 space-y-2">
+    <div className={className ?? "absolute top-4 right-4 z-30 space-y-2"}>
       {livePositions.map((position) => (
         <LivePositionPanel
           key={position.id}

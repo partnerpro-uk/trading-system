@@ -312,6 +312,7 @@ export default defineSchema({
       levels: v.boolean(),
       premiumDiscount: v.boolean(),
       sweeps: v.boolean(),
+      hud: v.optional(v.boolean()),
     }),
     fvgMinTier: v.number(),         // 1, 2, or 3
     showRecentOnly: v.boolean(),

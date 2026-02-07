@@ -19,7 +19,7 @@ import { getMacroRange } from "@/lib/db/clickhouse-structure";
 import { detectSession } from "@/lib/trading/sessions";
 import {
   computeStructure,
-  detectSwings,
+  detectFilteredSwings,
   labelSwings,
   detectBOS,
   deriveCurrentStructure,
@@ -55,13 +55,13 @@ async function getStructureForTool(
     ]);
 
   const d1Swings = dailyCandles?.length
-    ? labelSwings(detectSwings(dailyCandles as Candle[], "D"), dailyCandles as Candle[])
+    ? labelSwings(detectFilteredSwings(dailyCandles as Candle[], "D"), dailyCandles as Candle[])
     : [];
   const w1Swings = weeklyCandles?.length
-    ? labelSwings(detectSwings(weeklyCandles as Candle[], "W"), weeklyCandles as Candle[])
+    ? labelSwings(detectFilteredSwings(weeklyCandles as Candle[], "W"), weeklyCandles as Candle[])
     : [];
   const h4Swings = h4Candles?.length
-    ? labelSwings(detectSwings(h4Candles as Candle[], "H4"), h4Candles as Candle[])
+    ? labelSwings(detectFilteredSwings(h4Candles as Candle[], "H4"), h4Candles as Candle[])
     : undefined;
 
   // Build HTF structures for enrichment
@@ -69,7 +69,7 @@ async function getStructureForTool(
   if (enrich) {
     htfStructures = {};
     if (monthlyCandles && monthlyCandles.length > 20) {
-      const mSwings = labelSwings(detectSwings(monthlyCandles as Candle[], "M"), monthlyCandles as Candle[]);
+      const mSwings = labelSwings(detectFilteredSwings(monthlyCandles as Candle[], "M"), monthlyCandles as Candle[]);
       htfStructures["M"] = deriveCurrentStructure(mSwings, detectBOS(monthlyCandles as Candle[], mSwings, pair));
     }
     if (weeklyCandles && weeklyCandles.length > 20) {
@@ -403,6 +403,7 @@ export async function executeDataTool(
         })),
         bosEvents: result.bosEvents.slice(-10).map((b) => ({
           direction: b.direction,
+          bosType: b.bosType,
           status: b.status,
           brokenLevel: b.brokenLevel,
           magnitudePips: b.magnitudePips,
@@ -520,6 +521,7 @@ export async function executeDataTool(
         count: events.length,
         events: events.slice(-limit).reverse().map((b) => ({
           direction: b.direction,
+          bosType: b.bosType,
           status: b.status,
           brokenLevel: b.brokenLevel,
           confirmingClose: b.confirmingClose,
@@ -559,7 +561,7 @@ export async function executeDataTool(
 
       const computeCS = (candles: Candle[] | null, tf: string): void => {
         if (!candles || candles.length < 20) return;
-        const swings = labelSwings(detectSwings(candles, tf), candles);
+        const swings = labelSwings(detectFilteredSwings(candles, tf), candles);
         const bos = detectBOS(candles, swings, pair);
         structures[tf] = deriveCurrentStructure(swings, bos);
       };

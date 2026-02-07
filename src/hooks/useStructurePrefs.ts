@@ -11,6 +11,7 @@ export interface OverlayToggles {
   levels: boolean;
   premiumDiscount: boolean;
   sweeps: boolean;
+  hud?: boolean;
 }
 
 interface StructurePrefsData {
