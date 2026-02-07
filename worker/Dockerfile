@@ -49,4 +49,4 @@ COPY convex/_generated ./convex/_generated
 
 # Run from worker directory
 WORKDIR /app/worker
-CMD ["npm", "start"]
+CMD ["sh", "-c", "cd /app/worker && exec npm start"]
