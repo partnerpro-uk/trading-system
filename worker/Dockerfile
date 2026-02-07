@@ -47,6 +47,12 @@ COPY worker/tsconfig.json ./worker/tsconfig.json
 COPY lib ./lib
 COPY convex/_generated ./convex/_generated
 
+# Symlink node_modules at /app level so lib/ files can resolve npm packages.
+# Node.js walks UP from the importing file's directory to find node_modules/.
+# Without this, /app/lib/ → import("pg") only checks /app/node_modules (missing)
+# and never finds /app/worker/node_modules.
+RUN ln -s /app/worker/node_modules /app/node_modules
+
 # Run from worker directory
 WORKDIR /app/worker
 CMD ["sh", "-c", "cd /app/worker && exec npm start"]
