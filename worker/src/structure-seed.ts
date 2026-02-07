@@ -60,7 +60,7 @@ function getPool(): Pool {
     pool = new Pool({
       connectionString: url,
       ssl: { rejectUnauthorized: false },
-      max: 5,
+      max: 2,
     });
   }
   return pool;
@@ -107,12 +107,10 @@ async function seedPairTimeframe(
     return 0;
   }
 
-  // Fetch D/W/M candles for key level computation
-  const [dailyCandles, weeklyCandles, monthlyCandles] = await Promise.all([
-    fetchCandles(pair, "D", 200),
-    fetchCandles(pair, "W", 104),
-    fetchCandles(pair, "M", 60),
-  ]);
+  // Fetch D/W/M candles for key level computation (sequential to avoid DB OOM)
+  const dailyCandles = await fetchCandles(pair, "D", 200);
+  const weeklyCandles = await fetchCandles(pair, "W", 104);
+  const monthlyCandles = await fetchCandles(pair, "M", 60);
 
   // Run full structure pipeline
   const result = computeStructure(
@@ -124,13 +122,11 @@ async function seedPairTimeframe(
     monthlyCandles
   );
 
-  // Upsert all entities to TimescaleDB
-  await Promise.all([
-    upsertSwingPoints(pair, timeframe, result.swings),
-    upsertBOSEvents(pair, timeframe, result.bosEvents),
-    upsertSweepEvents(pair, timeframe, result.sweepEvents),
-    upsertFVGEvents(pair, timeframe, result.fvgEvents),
-  ]);
+  // Upsert all entities to TimescaleDB (sequential to avoid DB OOM)
+  await upsertSwingPoints(pair, timeframe, result.swings);
+  await upsertBOSEvents(pair, timeframe, result.bosEvents);
+  await upsertSweepEvents(pair, timeframe, result.sweepEvents);
+  await upsertFVGEvents(pair, timeframe, result.fvgEvents);
 
   // Key levels
   if (result.keyLevels) {
@@ -206,6 +202,8 @@ async function main() {
         console.error(`  [${pair}/${tf}] ERROR:`, err);
       }
     }
+    // Pause between pairs to let DB memory recover
+    await new Promise((r) => setTimeout(r, 2000));
   }
 
   const duration = ((Date.now() - startTime) / 1000).toFixed(1);
