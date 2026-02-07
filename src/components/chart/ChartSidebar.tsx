@@ -6,6 +6,8 @@ import { useDrawingStore } from "@/lib/drawings/store";
 import { Drawing, isPositionDrawing, isFibonacciDrawing, isRectangleDrawing, isTrendlineDrawing, isHorizontalLineDrawing, isHorizontalRayDrawing, isVerticalLineDrawing, isCircleDrawing } from "@/lib/drawings/types";
 import { PAIRS_BY_CATEGORY, formatPrice } from "@/lib/pairs";
 import { InstitutionalPanel } from "./InstitutionalPanel";
+import { StructurePanel } from "./StructurePanel";
+import type { StructureResponse } from "@/lib/structure/types";
 
 // Stable empty array to prevent infinite re-renders with Zustand SSR
 
@@ -40,7 +42,7 @@ interface IndicatorToggle {
   visible: boolean;
 }
 
-type SidebarTab = "pairs" | "drawings" | "institutional";
+type SidebarTab = "pairs" | "drawings" | "institutional" | "structure";
 
 interface ChartSidebarProps {
   currentPair: string;
@@ -65,6 +67,25 @@ interface ChartSidebarProps {
   onDrawingSelect?: (drawingId: string) => void;
   // Scroll chart to timestamp
   onScrollToTimestamp?: (timestamp: number) => void;
+  // Market structure toggles
+  showSwingLabels?: boolean;
+  onShowSwingLabelsChange?: (value: boolean) => void;
+  showBOSLines?: boolean;
+  onShowBOSLinesChange?: (value: boolean) => void;
+  showKeyLevels?: boolean;
+  onShowKeyLevelsChange?: (value: boolean) => void;
+  showSweeps?: boolean;
+  onShowSweepsChange?: (value: boolean) => void;
+  // Phase 2: FVGs + Premium/Discount
+  showFVGs?: boolean;
+  onShowFVGsChange?: (value: boolean) => void;
+  fvgTierFilter?: 1 | 2 | 3;
+  onFVGTierFilterChange?: (value: 1 | 2 | 3) => void;
+  showPremiumDiscount?: boolean;
+  onShowPremiumDiscountChange?: (value: boolean) => void;
+  // Structure panel data
+  structureData?: StructureResponse | null;
+  currentPrice?: number | null;
 }
 
 // Format countdown until event
@@ -166,6 +187,23 @@ export function ChartSidebar({
   onIndicatorToggle,
   onDrawingSelect,
   onScrollToTimestamp,
+  // Market structure toggles
+  showSwingLabels = true,
+  onShowSwingLabelsChange,
+  showBOSLines = true,
+  onShowBOSLinesChange,
+  showKeyLevels = false,
+  onShowKeyLevelsChange,
+  showSweeps = false,
+  onShowSweepsChange,
+  showFVGs = false,
+  onShowFVGsChange,
+  fvgTierFilter = 3,
+  onFVGTierFilterChange,
+  showPremiumDiscount = false,
+  onShowPremiumDiscountChange,
+  structureData,
+  currentPrice,
 }: ChartSidebarProps) {
   const [prices, setPrices] = useState<Record<string, PriceData>>({});
   const [upcomingEvents, setUpcomingEvents] = useState<UpcomingEvent[]>([]);
@@ -686,6 +724,100 @@ export function ChartSidebar({
                   </div>
                 </div>
 
+                {/* Structure toggles - 4 controls */}
+                <div className="mt-3">
+                  <span className="text-xs text-gray-500 uppercase tracking-wider">Structure</span>
+                  <div className="flex gap-1 mt-1">
+                    <button
+                      onClick={() => onShowSwingLabelsChange?.(!showSwingLabels)}
+                      className={`flex-1 px-2 py-1.5 text-xs rounded transition-colors ${
+                        showSwingLabels
+                          ? "bg-emerald-600 text-white"
+                          : "bg-gray-800 text-gray-400 hover:bg-gray-700"
+                      }`}
+                      title="Swing labels (HH/HL/LH/LL)"
+                    >
+                      Swings
+                    </button>
+                    <button
+                      onClick={() => onShowBOSLinesChange?.(!showBOSLines)}
+                      className={`flex-1 px-2 py-1.5 text-xs rounded transition-colors ${
+                        showBOSLines
+                          ? "bg-emerald-600 text-white"
+                          : "bg-gray-800 text-gray-400 hover:bg-gray-700"
+                      }`}
+                      title="Break of structure lines"
+                    >
+                      BOS
+                    </button>
+                    <button
+                      onClick={() => onShowKeyLevelsChange?.(!showKeyLevels)}
+                      className={`flex-1 px-2 py-1.5 text-xs rounded transition-colors ${
+                        showKeyLevels
+                          ? "bg-emerald-600 text-white"
+                          : "bg-gray-800 text-gray-400 hover:bg-gray-700"
+                      }`}
+                      title="Key levels (PDH/PDL, PWH/PWL, etc.)"
+                    >
+                      Levels
+                    </button>
+                    <button
+                      onClick={() => onShowSweepsChange?.(!showSweeps)}
+                      className={`flex-1 px-2 py-1.5 text-xs rounded transition-colors ${
+                        showSweeps
+                          ? "bg-emerald-600 text-white"
+                          : "bg-gray-800 text-gray-400 hover:bg-gray-700"
+                      }`}
+                      title="Liquidity sweeps"
+                    >
+                      Sweeps
+                    </button>
+                  </div>
+                  {/* Phase 2: FVGs + P/D row */}
+                  <div className="flex gap-1 mt-1">
+                    <button
+                      onClick={() => onShowFVGsChange?.(!showFVGs)}
+                      className={`flex-1 px-2 py-1.5 text-xs rounded transition-colors ${
+                        showFVGs
+                          ? "bg-emerald-600 text-white"
+                          : "bg-gray-800 text-gray-400 hover:bg-gray-700"
+                      }`}
+                      title="Fair Value Gaps"
+                    >
+                      FVGs
+                    </button>
+                    {showFVGs && (
+                      <select
+                        value={fvgTierFilter}
+                        onChange={(e) =>
+                          onFVGTierFilterChange?.(
+                            parseInt(e.target.value) as 1 | 2 | 3
+                          )
+                        }
+                        className="px-1.5 py-1 text-xs bg-gray-800 border border-gray-700 rounded text-gray-300 focus:outline-none focus:border-emerald-500"
+                        title="Minimum FVG tier to display"
+                      >
+                        <option value={3}>All</option>
+                        <option value={2}>T1-2</option>
+                        <option value={1}>T1</option>
+                      </select>
+                    )}
+                    <button
+                      onClick={() =>
+                        onShowPremiumDiscountChange?.(!showPremiumDiscount)
+                      }
+                      className={`flex-1 px-2 py-1.5 text-xs rounded transition-colors ${
+                        showPremiumDiscount
+                          ? "bg-emerald-600 text-white"
+                          : "bg-gray-800 text-gray-400 hover:bg-gray-700"
+                      }`}
+                      title="Premium/Discount zones"
+                    >
+                      P/D
+                    </button>
+                  </div>
+                </div>
+
                 {/* Strategy Section */}
                 {strategies.length > 0 && onStrategyChange && (
                   <div className="mt-3">
@@ -821,6 +953,16 @@ export function ChartSidebar({
         {activeTab === "institutional" && (
           <InstitutionalPanel currentPair={currentPair} />
         )}
+
+        {/* Structure Tab Content */}
+        {activeTab === "structure" && (
+          <StructurePanel
+            structureData={structureData ?? null}
+            currentPrice={currentPrice ?? null}
+            currentPair={currentPair}
+            onScrollToTimestamp={onScrollToTimestamp}
+          />
+        )}
       </div>
 
       {/* Icon Column (Right Side) */}
@@ -902,6 +1044,31 @@ export function ChartSidebar({
               strokeLinejoin="round"
               strokeWidth={2}
               d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
+            />
+          </svg>
+        </button>
+
+        {/* Structure Tab Icon */}
+        <button
+          onClick={() => setActiveTab("structure")}
+          className={`w-8 h-8 flex items-center justify-center rounded transition-colors ${
+            activeTab === "structure"
+              ? "bg-blue-600 text-white"
+              : "text-gray-400 hover:text-gray-200 hover:bg-gray-800"
+          }`}
+          title="Market Structure"
+        >
+          <svg
+            className="w-4 h-4"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
             />
           </svg>
         </button>

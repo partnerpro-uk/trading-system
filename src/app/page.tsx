@@ -2,9 +2,13 @@
 
 import Link from "next/link";
 import { useState, useEffect } from "react";
-import { BarChart2, LineChart, TrendingUp, ArrowRight, Zap, Shield, BarChart3, BookOpen, Activity } from "lucide-react";
+import { BarChart2, LineChart, TrendingUp, ArrowRight, Zap, Shield, BarChart3, BookOpen, Activity, FlaskConical } from "lucide-react";
 import { SignedIn, SignedOut, SignInButton, SignUpButton } from "@clerk/nextjs";
 import { PAIRS, formatPrice } from "@/lib/pairs";
+import { TodayPerformance } from "@/components/dashboard/TodayPerformance";
+import { SessionStatus } from "@/components/dashboard/SessionStatus";
+import { UpcomingEventsWidget } from "@/components/dashboard/UpcomingEventsWidget";
+import { RecentAlertsWidget } from "@/components/dashboard/RecentAlertsWidget";
 
 interface PriceData {
   price: number;
@@ -265,7 +269,7 @@ function Dashboard() {
         {/* Quick Access */}
         <section className="mb-10">
           <h2 className="text-lg font-semibold text-gray-300 mb-4">Quick Access</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <QuickAccessCard
               href="/chart/EUR_USD"
               icon={LineChart}
@@ -280,6 +284,25 @@ function Dashboard() {
               description="Track and review your trades"
               color="bg-purple-600"
             />
+            <QuickAccessCard
+              href="/backtesting"
+              icon={FlaskConical}
+              title="Backtesting"
+              description="Analyze historical structure patterns"
+              color="bg-amber-600"
+            />
+          </div>
+        </section>
+
+        {/* Dashboard Widgets */}
+        <section className="mb-8">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+            <TodayPerformance />
+            <SessionStatus />
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <UpcomingEventsWidget />
+            <RecentAlertsWidget />
           </div>
         </section>
 

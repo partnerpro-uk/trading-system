@@ -19,6 +19,14 @@ import { forwardFill } from "./jblanked-news";
 import { runCaretaker } from "./gap-caretaker";
 import { processEventReactions } from "./event-reaction-processor";
 import { fetchLatestCOT } from "./cot-data";
+import { runFVGFillTracker } from "./fvg-fill-tracker";
+import { runMacroRangeUpdater } from "./macro-range-updater";
+import { runHTFStructurePrecompute } from "./htf-structure-precompute";
+import { runIncrementalBackfill } from "./structure-backfill";
+import { runStructureArchival } from "./structure-archiver";
+import { runStructureAlerts } from "./structure-alerts";
+import { runNewsAlerts } from "./news-alerts";
+import { runPriceAlerts } from "./price-alerts";
 
 // Load env from parent .env.local
 config({ path: resolve(process.cwd(), "../.env.local") });
@@ -80,7 +88,7 @@ interface LivePrice {
   mid: number;
   time: string;
 }
-const latestPrices: Map<string, LivePrice> = new Map();
+export const latestPrices: Map<string, LivePrice> = new Map();
 
 // Connected SSE clients
 interface SSEClient {
@@ -623,6 +631,26 @@ async function main(): Promise<void> {
   // Start COT data updater (checks every 6 hours, data updates weekly)
   startCOTUpdater();
 
+  // Start FVG fill tracker (runs every 5 minutes)
+  startFVGFillTracker();
+
+  // Start macro range updater (runs daily, startup + 24h)
+  startMacroRangeUpdater();
+
+  // Start HTF structure pre-computation (runs every 4 hours)
+  startHTFStructurePrecompute();
+
+  // Start structure backfill (daily incremental, processes current month)
+  startStructureBackfill();
+
+  // Start structure archival (daily, moves >30d data to ClickHouse)
+  startStructureArchiver();
+
+  // Start alert jobs (structure, news, price)
+  startStructureAlertJob();
+  startNewsAlertJob();
+  startPriceAlertJob();
+
   // Keep process alive
   console.log("\nWorker running. Press Ctrl+C to stop.\n");
 }
@@ -739,6 +767,220 @@ function startCOTUpdater(): void {
   }, COT_CHECK_INTERVAL);
 
   console.log(`[COT] Scheduled COT updates (every 6 hours, first run in 3 minutes)`);
+}
+
+/**
+ * Start FVG fill tracker on 5-minute schedule.
+ * Updates fill percentages for active FVGs across all pairs/timeframes.
+ */
+function startFVGFillTracker(): void {
+  const FVG_FILL_INTERVAL = 5 * 60 * 1000; // 5 minutes
+
+  // Run after 4 minutes (let candle syncs complete first)
+  setTimeout(() => {
+    console.log("\n[FVGFillTracker] Running initial FVG fill check...");
+    runFVGFillTracker().catch((err) => {
+      console.error("[FVGFillTracker] Initial run failed:", err);
+    });
+  }, 4 * 60 * 1000);
+
+  // Then run every 5 minutes
+  setInterval(async () => {
+    try {
+      await runFVGFillTracker();
+    } catch (err) {
+      console.error("[FVGFillTracker] Update failed:", err);
+    }
+  }, FVG_FILL_INTERVAL);
+
+  console.log(`[FVGFillTracker] Scheduled FVG fill tracking (every 5 minutes, first run in 4 minutes)`);
+}
+
+/**
+ * Start macro range updater on daily schedule.
+ * Computes all-time high/low from ClickHouse for Premium/Discount.
+ */
+function startMacroRangeUpdater(): void {
+  const MACRO_RANGE_INTERVAL = 24 * 60 * 60 * 1000; // 24 hours
+
+  // Run after 6 minutes (let other syncs complete first)
+  setTimeout(() => {
+    console.log("\n[MacroRange] Running initial macro range computation...");
+    runMacroRangeUpdater().catch((err) => {
+      console.error("[MacroRange] Initial run failed:", err);
+    });
+  }, 6 * 60 * 1000);
+
+  // Then run daily
+  setInterval(async () => {
+    console.log("\n[MacroRange] Running daily macro range update...");
+    try {
+      await runMacroRangeUpdater();
+    } catch (err) {
+      console.error("[MacroRange] Update failed:", err);
+    }
+  }, MACRO_RANGE_INTERVAL);
+
+  console.log(`[MacroRange] Scheduled macro range updates (daily, first run in 6 minutes)`);
+}
+
+/**
+ * Start HTF structure pre-computation on 4-hour schedule.
+ * Computes D/W/M CurrentStructure for fast MTF scoring lookups.
+ */
+function startHTFStructurePrecompute(): void {
+  const HTF_INTERVAL = 4 * 60 * 60 * 1000; // 4 hours
+
+  // Run after 5 minutes (let candle syncs complete first)
+  setTimeout(() => {
+    console.log("\n[HTFStructure] Running initial structure pre-computation...");
+    runHTFStructurePrecompute().catch((err) => {
+      console.error("[HTFStructure] Initial run failed:", err);
+    });
+  }, 5 * 60 * 1000);
+
+  // Then run every 4 hours
+  setInterval(async () => {
+    console.log("\n[HTFStructure] Running scheduled structure pre-computation...");
+    try {
+      await runHTFStructurePrecompute();
+    } catch (err) {
+      console.error("[HTFStructure] Pre-computation failed:", err);
+    }
+  }, HTF_INTERVAL);
+
+  console.log(`[HTFStructure] Scheduled structure pre-computation (every 4 hours, first run in 5 minutes)`);
+}
+
+/**
+ * Start structure backfill on daily schedule.
+ * Processes current month's candle data through structure engine.
+ */
+function startStructureBackfill(): void {
+  const BACKFILL_INTERVAL = 24 * 60 * 60 * 1000; // 24 hours
+
+  // Run after 8 minutes (let candle syncs complete first)
+  setTimeout(() => {
+    console.log("\n[StructureBackfill] Running initial incremental backfill...");
+    runIncrementalBackfill().catch((err) => {
+      console.error("[StructureBackfill] Initial run failed:", err);
+    });
+  }, 8 * 60 * 1000);
+
+  // Then run daily
+  setInterval(async () => {
+    console.log("\n[StructureBackfill] Running daily incremental backfill...");
+    try {
+      await runIncrementalBackfill();
+    } catch (err) {
+      console.error("[StructureBackfill] Daily run failed:", err);
+    }
+  }, BACKFILL_INTERVAL);
+
+  console.log(`[StructureBackfill] Scheduled incremental backfill (daily, first run in 8 minutes)`);
+}
+
+/**
+ * Start structure archival on daily schedule.
+ * Moves expired TimescaleDB structure data (>30d) to ClickHouse.
+ */
+function startStructureArchiver(): void {
+  const ARCHIVAL_INTERVAL = 24 * 60 * 60 * 1000; // 24 hours
+
+  // Run after 10 minutes (let other jobs settle first)
+  setTimeout(() => {
+    console.log("\n[StructureArchiver] Running initial archival...");
+    runStructureArchival().catch((err) => {
+      console.error("[StructureArchiver] Initial run failed:", err);
+    });
+  }, 10 * 60 * 1000);
+
+  // Then run daily
+  setInterval(async () => {
+    console.log("\n[StructureArchiver] Running daily archival...");
+    try {
+      await runStructureArchival();
+    } catch (err) {
+      console.error("[StructureArchiver] Daily run failed:", err);
+    }
+  }, ARCHIVAL_INTERVAL);
+
+  console.log(`[StructureArchiver] Scheduled structure archival (daily, first run in 10 minutes)`);
+}
+
+/**
+ * Start structure alert job on 60-second schedule.
+ * Detects BOS, FVG fill, counter-trend changes → Convex alerts.
+ */
+function startStructureAlertJob(): void {
+  const INTERVAL = 60 * 1000; // 60 seconds
+
+  setTimeout(() => {
+    console.log("\n[StructureAlerts] Running initial structure alert check...");
+    runStructureAlerts().catch((err) => {
+      console.error("[StructureAlerts] Initial run failed:", err);
+    });
+  }, 2 * 60 * 1000);
+
+  setInterval(async () => {
+    try {
+      await runStructureAlerts();
+    } catch (err) {
+      console.error("[StructureAlerts] Check failed:", err);
+    }
+  }, INTERVAL);
+
+  console.log(`[StructureAlerts] Scheduled structure alerts (every 60s, first run in 2 minutes)`);
+}
+
+/**
+ * Start news alert job on 60-second schedule.
+ * 15-min warnings for high-impact events.
+ */
+function startNewsAlertJob(): void {
+  const INTERVAL = 60 * 1000; // 60 seconds
+
+  setTimeout(() => {
+    console.log("\n[NewsAlerts] Running initial news alert check...");
+    runNewsAlerts().catch((err) => {
+      console.error("[NewsAlerts] Initial run failed:", err);
+    });
+  }, 3 * 60 * 1000);
+
+  setInterval(async () => {
+    try {
+      await runNewsAlerts();
+    } catch (err) {
+      console.error("[NewsAlerts] Check failed:", err);
+    }
+  }, INTERVAL);
+
+  console.log(`[NewsAlerts] Scheduled news alerts (every 60s, first run in 3 minutes)`);
+}
+
+/**
+ * Start price alert job on 30-second schedule.
+ * Checks price level crossings and TP/SL proximity.
+ */
+function startPriceAlertJob(): void {
+  const INTERVAL = 30 * 1000; // 30 seconds
+
+  setTimeout(() => {
+    console.log("\n[PriceAlerts] Running initial price alert check...");
+    runPriceAlerts(latestPrices).catch((err) => {
+      console.error("[PriceAlerts] Initial run failed:", err);
+    });
+  }, 1 * 60 * 1000);
+
+  setInterval(async () => {
+    try {
+      await runPriceAlerts(latestPrices);
+    } catch (err) {
+      console.error("[PriceAlerts] Check failed:", err);
+    }
+  }, INTERVAL);
+
+  console.log(`[PriceAlerts] Scheduled price alerts (every 30s, first run in 1 minute)`);
 }
 
 // Graceful shutdown

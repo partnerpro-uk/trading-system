@@ -460,6 +460,87 @@ const getTradeStats: Tool = {
   },
 };
 
+// ─── Structure Tools (Server-Side) ───────────────────────────────────────────
+
+const getStructure: Tool = {
+  name: "get_structure",
+  description: "Get the full market structure analysis for a pair/timeframe. Returns swing points, BOS events, FVGs, key levels, current trend, MTF score, and premium/discount zones.",
+  input_schema: {
+    type: "object" as const,
+    properties: {
+      pair: { type: "string", description: "Currency pair (e.g. 'EUR_USD'). Defaults to current chart pair." },
+      timeframe: { type: "string", description: "Timeframe (e.g. 'H4', 'D', 'M15'). Defaults to current chart timeframe." },
+    },
+    required: [],
+  },
+};
+
+const getActiveFvgs: Tool = {
+  name: "get_active_fvgs",
+  description: "Get all active (fresh/partial) Fair Value Gaps for a pair. Returns FVG zones with fill %, tier, direction, midline, displacement info, and confluence data.",
+  input_schema: {
+    type: "object" as const,
+    properties: {
+      pair: { type: "string", description: "Currency pair (e.g. 'EUR_USD'). Defaults to current chart pair." },
+      timeframe: { type: "string", description: "Filter by timeframe. If omitted, returns FVGs across H1/H4/D." },
+      minTier: { type: "number", enum: [1, 2, 3], description: "Minimum volume tier (1=highest volume, 3=all). Default 3." },
+    },
+    required: [],
+  },
+};
+
+const getBosHistory: Tool = {
+  name: "get_bos_history",
+  description: "Get recent Break of Structure events with enrichment data (significance score, key levels broken, COT alignment, session context). Use to understand structural shifts.",
+  input_schema: {
+    type: "object" as const,
+    properties: {
+      pair: { type: "string", description: "Currency pair (e.g. 'EUR_USD'). Defaults to current chart pair." },
+      timeframe: { type: "string", description: "Timeframe (e.g. 'H4'). Defaults to current chart timeframe." },
+      limit: { type: "number", description: "Max events to return (default 20, max 50)" },
+      minSignificance: { type: "number", description: "Filter by minimum significance score 0-100 (default 0)" },
+      direction: { type: "string", enum: ["bullish", "bearish"], description: "Filter by direction" },
+    },
+    required: [],
+  },
+};
+
+const getMtfScore: Tool = {
+  name: "get_mtf_score",
+  description: "Get the multi-timeframe composite direction score for a pair. Returns -100 (strong bearish) to +100 (strong bullish) with per-timeframe breakdown and reasoning.",
+  input_schema: {
+    type: "object" as const,
+    properties: {
+      pair: { type: "string", description: "Currency pair (e.g. 'EUR_USD'). Defaults to current chart pair." },
+    },
+    required: [],
+  },
+};
+
+const getPremiumDiscount: Tool = {
+  name: "get_premium_discount",
+  description: "Get premium/discount zone analysis for a pair. Returns dealing ranges across H4/D1/W1/yearly/macro tiers, equilibrium levels, depth percentages, and alignment count.",
+  input_schema: {
+    type: "object" as const,
+    properties: {
+      pair: { type: "string", description: "Currency pair (e.g. 'EUR_USD'). Defaults to current chart pair." },
+    },
+    required: [],
+  },
+};
+
+const getKeyLevels: Tool = {
+  name: "get_key_levels",
+  description: "Get key price levels (PDH/PDL, PWH/PWL, PMH/PML, YH/YL) with distance from current price. Useful for identifying nearby support/resistance.",
+  input_schema: {
+    type: "object" as const,
+    properties: {
+      pair: { type: "string", description: "Currency pair (e.g. 'EUR_USD'). Defaults to current chart pair." },
+    },
+    required: [],
+  },
+};
+
 // ─── Exports ─────────────────────────────────────────────────────────────────
 
 export const DRAWING_TOOLS: Tool[] = [
@@ -487,6 +568,12 @@ export const DATA_TOOLS: Tool[] = [
   getCOTHistory,
   getTradeHistory,
   getTradeStats,
+  getStructure,
+  getActiveFvgs,
+  getBosHistory,
+  getMtfScore,
+  getPremiumDiscount,
+  getKeyLevels,
 ];
 
 export const ALL_TOOLS: Tool[] = [...DRAWING_TOOLS, ...DATA_TOOLS];

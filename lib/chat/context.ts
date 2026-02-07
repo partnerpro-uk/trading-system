@@ -11,6 +11,7 @@ import { getUpcomingEvents } from "@/lib/db/news";
 import { getLatestCOTForPair, generateCOTSummary } from "@/lib/db/cot";
 import { getHeadlinesForPair } from "@/lib/db/headlines";
 import { getLatestCandles } from "@/lib/db/candles";
+import type { StructureResponse } from "@/lib/structure/types";
 
 // ─── System Prompt ───────────────────────────────────────────────────────────
 
@@ -23,6 +24,7 @@ Your capabilities:
 - Draw on the chart: horizontal lines, horizontal rays (anchored to specific candles), fibonacci retracements, trendlines (with ray/arrow/extended variants), rectangles (zones), circles (pattern highlights), trade ideas (long/short with entry/TP/SL), and markers
 - Query market data: candles, current price, news events, event statistics, news headlines
 - Query institutional data: CFTC COT positioning and history
+- Query market structure: swing labels (HH/HL/LH/LL), BOS events with enrichment (significance, key levels broken, COT/MTF alignment), FVGs (fill %, tier, displacement), MTF alignment score (-100 to +100), premium/discount zones, key levels (PDH/PDL, PWH/PWL, PMH/PML, YH/YL)
 - Query trade history: user's past trades and statistics
 
 Drawing guidelines:
@@ -112,11 +114,12 @@ export async function buildDynamicContext(
   }
 
   // Fetch additional context in parallel (with error handling)
-  const [events, cotData, headlines, recentCandles] = await Promise.all([
+  const [events, cotData, headlines, recentCandles, structureData] = await Promise.all([
     getUpcomingEvents(pairToCurrency(pair), 24, "high").catch(() => []),
     getLatestCOTForPair(pair).catch(() => null),
     getHeadlinesForPair(pair, 24).catch(() => []),
     getLatestCandles(pair, timeframe, 5).catch(() => []),
+    fetchStructureSummary(pair, timeframe),
   ]);
 
   // Upcoming high-impact events
@@ -149,6 +152,11 @@ export async function buildDynamicContext(
     parts.push(`Recent headlines:\n${headlinesList.join("\n")}`);
   }
 
+  // Market structure summary
+  if (structureData) {
+    parts.push(formatStructureSummary(structureData, timeframe));
+  }
+
   // Recent candles context
   if (recentCandles.length > 0) {
     const last = recentCandles[recentCandles.length - 1];
@@ -170,4 +178,71 @@ function pairToCurrency(pair: string): string {
   // Extract the base currency from the pair for event filtering
   // EUR_USD → EUR, GBP_USD → GBP, USD_JPY → USD
   return pair.split("_")[0];
+}
+
+/**
+ * Fetch structure data via internal API call (lightweight, uses cache).
+ */
+async function fetchStructureSummary(
+  pair: string,
+  timeframe: string
+): Promise<StructureResponse | null> {
+  try {
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL
+      ? `https://${process.env.VERCEL_URL}`
+      : "http://localhost:3000";
+    const url = `${baseUrl}/api/structure/${pair}?timeframe=${timeframe}`;
+    const res = await fetch(url, { next: { revalidate: 120 } });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Format structure data into a concise context string.
+ */
+function formatStructureSummary(
+  data: StructureResponse,
+  timeframe: string
+): string {
+  const lines: string[] = [`Market structure (${timeframe}):`];
+
+  // Current trend + swing sequence
+  const cs = data.currentStructure;
+  const seq = cs.swingSequence.slice(-6).join(" → ");
+  lines.push(`  Trend: ${cs.direction}${seq ? ` (${seq})` : ""}`);
+
+  // Last BOS
+  if (cs.lastBOS) {
+    const bos = cs.lastBOS;
+    lines.push(`  Last BOS: ${bos.direction} at ${bos.brokenLevel} (${bos.status}, ${bos.magnitudePips.toFixed(1)} pips)`);
+  }
+
+  // MTF score
+  if (data.mtfScore) {
+    lines.push(`  MTF Score: ${data.mtfScore.composite > 0 ? "+" : ""}${data.mtfScore.composite} (${data.mtfScore.interpretation})`);
+  }
+
+  // Active FVGs
+  const activeFVGs = data.fvgEvents.filter(
+    (f) => f.status === "fresh" || f.status === "partial"
+  );
+  if (activeFVGs.length > 0) {
+    const bullish = activeFVGs.filter((f) => f.direction === "bullish");
+    const bearish = activeFVGs.filter((f) => f.direction === "bearish");
+    const parts: string[] = [];
+    if (bullish.length > 0) parts.push(`${bullish.length} bullish`);
+    if (bearish.length > 0) parts.push(`${bearish.length} bearish`);
+    lines.push(`  Active FVGs: ${activeFVGs.length} (${parts.join(", ")})`);
+  }
+
+  // Premium/Discount
+  if (data.premiumDiscount) {
+    const pd = data.premiumDiscount;
+    lines.push(`  Zone: ${pd.h4Zone} (H4, depth ${Math.round(pd.h4DepthPercent)}%), ${pd.d1Zone} (D1)`);
+  }
+
+  return lines.join("\n");
 }

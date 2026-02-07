@@ -75,7 +75,7 @@ export function ChatMessage({ message }: ChatMessageProps) {
           {formattedTime}
           {message.model && !isUser && (
             <span className="ml-1.5 text-gray-700">
-              {message.model === "sonnet" ? "Sonnet" : "Haiku"}
+              {message.model === "sonnet" ? "Sonnet" : message.model === "opus" ? "Opus" : "Haiku"}
             </span>
           )}
         </div>

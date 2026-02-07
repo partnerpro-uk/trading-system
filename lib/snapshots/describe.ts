@@ -29,7 +29,15 @@ export function generateSnapshotDescription(
   tradeContext: SnapshotTradeContext,
   momentLabel: string,
   pair?: string,
-  timeframe?: string
+  timeframe?: string,
+  structureContext?: {
+    mtfScore: { composite: number; interpretation: string } | null;
+    currentStructure: { direction: string; swingSequence: string[] };
+    activeFVGs: { direction: string; topPrice: number; bottomPrice: number; tier: number; fillPercent: number }[];
+    recentBOS: { direction: string; brokenLevel: number; timestamp: number; status: string; magnitudePips: number }[];
+    premiumDiscount: { h4Zone: string; d1Zone: string; alignmentCount: number; isDeepPremium: boolean; isDeepDiscount: boolean } | null;
+    keyLevels: { label: string; price: number }[];
+  }
 ): string {
   const lines: string[] = [];
 
@@ -72,6 +80,45 @@ export function generateSnapshotDescription(
         `  ${formatPrice(level.price, pairLabel)} - ${level.description} (${distancePips} pips ${direction})`
       );
     });
+  }
+
+  // Structure context (from market structure engine)
+  if (structureContext) {
+    lines.push("");
+    lines.push("Structure Context:");
+
+    if (structureContext.mtfScore) {
+      lines.push(
+        `  MTF Score: ${structureContext.mtfScore.composite > 0 ? "+" : ""}${structureContext.mtfScore.composite} (${structureContext.mtfScore.interpretation})`
+      );
+    }
+
+    if (structureContext.currentStructure) {
+      const seq = structureContext.currentStructure.swingSequence.join(", ");
+      lines.push(
+        `  Trend: ${structureContext.currentStructure.direction} (${seq})`
+      );
+    }
+
+    if (structureContext.premiumDiscount) {
+      const pd = structureContext.premiumDiscount;
+      lines.push(
+        `  Zone: ${pd.h4Zone} (H4), ${pd.d1Zone} (D1), ${pd.alignmentCount}/5 tiers aligned${pd.isDeepPremium ? " [DEEP PREMIUM]" : ""}${pd.isDeepDiscount ? " [DEEP DISCOUNT]" : ""}`
+      );
+    }
+
+    if (structureContext.activeFVGs.length > 0) {
+      const bullish = structureContext.activeFVGs.filter((f) => f.direction === "bullish").length;
+      const bearish = structureContext.activeFVGs.filter((f) => f.direction === "bearish").length;
+      lines.push(`  Active FVGs: ${bullish} bullish, ${bearish} bearish`);
+    }
+
+    if (structureContext.recentBOS.length > 0) {
+      const last = structureContext.recentBOS[0];
+      lines.push(
+        `  Last BOS: ${last.direction} at ${formatPrice(last.brokenLevel, pairLabel)}, ${last.magnitudePips.toFixed(0)} pips magnitude`
+      );
+    }
   }
 
   return lines.join("\n");

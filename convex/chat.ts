@@ -39,6 +39,7 @@ export const createConversation = mutation({
       },
       lastMessageAt: now,
       createdAt: now,
+      status: "active",
     });
   },
 });
@@ -225,5 +226,109 @@ export const getMessages = query({
       )
       .order("asc")
       .collect();
+  },
+});
+
+// ─── Context Management ─────────────────────────────────────────────────────
+
+/**
+ * Rename a conversation
+ */
+export const updateConversationTitle = mutation({
+  args: {
+    conversationId: v.id("conversations"),
+    title: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const user = await getAuthenticatedUser(ctx);
+    const conversation = await ctx.db.get(args.conversationId);
+
+    if (!conversation || conversation.userId !== user.clerkId) {
+      throw new Error("Conversation not found");
+    }
+
+    await ctx.db.patch(args.conversationId, { title: args.title });
+  },
+});
+
+/**
+ * Store compacted summary of older messages
+ */
+export const compactConversation = mutation({
+  args: {
+    conversationId: v.id("conversations"),
+    summary: v.string(),
+    summaryUpToMessage: v.id("chatMessages"),
+    summaryTokenEstimate: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const user = await getAuthenticatedUser(ctx);
+    const conversation = await ctx.db.get(args.conversationId);
+
+    if (!conversation || conversation.userId !== user.clerkId) {
+      throw new Error("Conversation not found");
+    }
+
+    await ctx.db.patch(args.conversationId, {
+      summary: args.summary,
+      summaryUpToMessage: args.summaryUpToMessage,
+      summaryTokenEstimate: args.summaryTokenEstimate,
+    });
+  },
+});
+
+/**
+ * Split a conversation: mark current as completed, create continuation
+ */
+export const splitConversation = mutation({
+  args: {
+    conversationId: v.id("conversations"),
+  },
+  handler: async (ctx, args) => {
+    const user = await getAuthenticatedUser(ctx);
+    const old = await ctx.db.get(args.conversationId);
+
+    if (!old || old.userId !== user.clerkId) {
+      throw new Error("Conversation not found");
+    }
+
+    // Mark old as completed
+    await ctx.db.patch(args.conversationId, { status: "completed" });
+
+    // Create continuation
+    const now = Date.now();
+    return await ctx.db.insert("conversations", {
+      userId: user.clerkId,
+      pair: old.pair,
+      timeframe: old.timeframe,
+      model: old.model,
+      title: old.title ? `${old.title} (continued)` : "Continued conversation",
+      summary: old.summary,
+      parentConversationId: args.conversationId,
+      status: "active",
+      messageCount: 0,
+      tokenUsage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0 },
+      lastMessageAt: now,
+      createdAt: now,
+    });
+  },
+});
+
+/**
+ * Get a single conversation by ID
+ */
+export const getConversation = query({
+  args: {
+    conversationId: v.id("conversations"),
+  },
+  handler: async (ctx, args) => {
+    const user = await getAuthenticatedUser(ctx);
+    const conversation = await ctx.db.get(args.conversationId);
+
+    if (!conversation || conversation.userId !== user.clerkId) {
+      throw new Error("Conversation not found");
+    }
+
+    return conversation;
   },
 });

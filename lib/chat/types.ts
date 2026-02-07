@@ -8,11 +8,12 @@ import type { Drawing } from "@/lib/drawings/types";
 
 // ─── Models ──────────────────────────────────────────────────────────────────
 
-export type ChatModel = "haiku" | "sonnet";
+export type ChatModel = "haiku" | "sonnet" | "opus";
 
 export const MODEL_IDS: Record<ChatModel, string> = {
   haiku: "claude-haiku-4-5-20251001",
   sonnet: "claude-sonnet-4-5-20250929",
+  opus: "claude-opus-4-6",
 };
 
 // ─── Messages ────────────────────────────────────────────────────────────────
@@ -61,6 +62,7 @@ export interface ChatContext {
   currentPrice: number | null;
   drawings: Drawing[];
   convexToken?: string | null;
+  summary?: string;
 }
 
 // ─── SSE Events ──────────────────────────────────────────────────────────────
@@ -126,6 +128,7 @@ export interface ChatRequest {
   model?: ChatModel;
   conversationId?: string;
   convexToken?: string;
+  summary?: string;
 }
 
 // ─── Drawing Metadata (shared across all drawing tools) ─────────────────────

@@ -9,6 +9,7 @@ import {
   CandlestickSeries,
   LineSeries,
   CrosshairMode,
+  LineStyle,
 } from "lightweight-charts";
 // Convex imports removed - data now lives in TimescaleDB/ClickHouse
 import type { LivePrice } from "@/hooks/useOandaStream";
@@ -16,6 +17,15 @@ import { useCandles } from "@/hooks/useCandles";
 import { SessionLabelsPrimitive, SessionData } from "./SessionLabelsPrimitive";
 import { NewsMarkersPrimitive, NewsEventData, HistoricalEventHistory } from "./NewsMarkersPrimitive";
 import { LivePricePrimitive } from "./LivePricePrimitive";
+import { SwingLabelsPrimitive } from "./SwingLabelsPrimitive";
+import type { SwingLabelData } from "./SwingLabelsPrimitive";
+import { BOSLinesPrimitive } from "./BOSLinesPrimitive";
+import type { BOSLineData } from "./BOSLinesPrimitive";
+import { FVGZonesPrimitive } from "./FVGZonesPrimitive";
+import type { FVGZoneData } from "./FVGZonesPrimitive";
+import { PremiumDiscountPrimitive } from "./PremiumDiscountPrimitive";
+import type { PDZoneData } from "./PremiumDiscountPrimitive";
+import type { StructureResponse } from "@/lib/structure/types";
 import type { IndicatorSeries, IndicatorConfig } from "@/lib/indicators";
 import type { ChartMarker, ChartZone } from "@/hooks/useStrategyVisuals";
 import type { Drawing, DrawingType, DrawingAnchor, PositionDrawing } from "@/lib/drawings/types";
@@ -148,6 +158,16 @@ interface ChartProps {
   }>;
   // Visible range change callback (timestamps in ms) for snapshot capture
   onVisibleRangeChange?: (range: { from: number; to: number } | null) => void;
+  // Market structure overlays
+  structureData?: StructureResponse | null;
+  showSwingLabels?: boolean;
+  showBOSLines?: boolean;
+  showKeyLevels?: boolean;
+  showSweeps?: boolean;
+  // Phase 2: FVGs + Premium/Discount
+  showFVGs?: boolean;
+  fvgTierFilter?: 1 | 2 | 3;
+  showPremiumDiscount?: boolean;
 }
 
 // Drag/hover part types
@@ -211,6 +231,15 @@ export function Chart({
   onDrawingDelete,
   tradesMap,
   onVisibleRangeChange,
+  // Market structure overlays
+  structureData,
+  showSwingLabels,
+  showBOSLines,
+  showKeyLevels,
+  showSweeps,
+  showFVGs,
+  fvgTierFilter = 3,
+  showPremiumDiscount,
 }: ChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -229,6 +258,13 @@ export function Chart({
   const livePricePrimitiveRef = useRef<LivePricePrimitive | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const indicatorLineSeriesRef = useRef<Map<string, any>>(new Map());
+  // Market structure refs
+  const swingLabelsPrimitiveRef = useRef<SwingLabelsPrimitive | null>(null);
+  const bosLinesPrimitiveRef = useRef<BOSLinesPrimitive | null>(null);
+  const fvgZonesPrimitiveRef = useRef<FVGZonesPrimitive | null>(null);
+  const pdPrimitiveRef = useRef<PremiumDiscountPrimitive | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const keyLevelLineSeriesRef = useRef<Map<string, any>>(new Map());
 
   // Drawing canvas and state
   const drawingCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -536,6 +572,23 @@ export function Chart({
     series.attachPrimitive(livePricePrimitive);
     livePricePrimitiveRef.current = livePricePrimitive;
 
+    // Create and attach market structure primitives
+    const swingPrimitive = new SwingLabelsPrimitive();
+    series.attachPrimitive(swingPrimitive);
+    swingLabelsPrimitiveRef.current = swingPrimitive;
+
+    const bosPrimitive = new BOSLinesPrimitive();
+    series.attachPrimitive(bosPrimitive);
+    bosLinesPrimitiveRef.current = bosPrimitive;
+
+    const fvgPrimitive = new FVGZonesPrimitive();
+    series.attachPrimitive(fvgPrimitive);
+    fvgZonesPrimitiveRef.current = fvgPrimitive;
+
+    const pdPrimitive = new PremiumDiscountPrimitive();
+    series.attachPrimitive(pdPrimitive);
+    pdPrimitiveRef.current = pdPrimitive;
+
     // Subscribe to crosshair move for OHLC display
     chart.subscribeCrosshairMove((param) => {
       if (param.time && param.seriesData.size > 0) {
@@ -582,6 +635,11 @@ export function Chart({
       seriesRef.current = null;
       futureSeriesRef.current = null;
       livePricePrimitiveRef.current = null;
+      swingLabelsPrimitiveRef.current = null;
+      bosLinesPrimitiveRef.current = null;
+      fvgZonesPrimitiveRef.current = null;
+      pdPrimitiveRef.current = null;
+      keyLevelLineSeriesRef.current.clear();
     };
   }, []);
 
@@ -837,6 +895,156 @@ export function Chart({
       sessionLineSeriesRef.current.clear();
     };
   }, [candles, showSessionLines]);
+
+  // Render market structure overlays
+  useEffect(() => {
+    const chart = chartRef.current;
+    const series = seriesRef.current;
+    if (!chart || !series) return;
+
+    // --- Swing Labels ---
+    if (swingLabelsPrimitiveRef.current) {
+      if (showSwingLabels && structureData?.swings) {
+        const swingData: SwingLabelData[] = structureData.swings
+          .filter((s) => s.label)
+          .map((s) => ({
+            timestamp: s.timestamp,
+            price: s.price,
+            label: s.label!,
+            type: s.type,
+          }));
+        swingLabelsPrimitiveRef.current.updateSwings(swingData);
+      } else {
+        swingLabelsPrimitiveRef.current.updateSwings([]);
+      }
+    }
+
+    // --- BOS Lines ---
+    if (bosLinesPrimitiveRef.current) {
+      if (showBOSLines && structureData?.bosEvents) {
+        const bosData: BOSLineData[] = structureData.bosEvents.map((e) => ({
+          brokenLevel: e.brokenLevel,
+          brokenSwingTimestamp: e.brokenSwingTimestamp,
+          direction: e.direction,
+          status: e.status,
+          confirmingTimestamp: e.timestamp,
+          magnitudePips: e.magnitudePips,
+        }));
+        bosLinesPrimitiveRef.current.updateBOSEvents(bosData);
+      } else {
+        bosLinesPrimitiveRef.current.updateBOSEvents([]);
+      }
+    }
+
+    // --- Key Level Lines ---
+    // Remove existing key level series
+    for (const [, s] of keyLevelLineSeriesRef.current) {
+      try {
+        chart.removeSeries(s);
+      } catch {
+        // Series may already be removed
+      }
+    }
+    keyLevelLineSeriesRef.current.clear();
+
+    if (showKeyLevels && structureData?.keyLevelEntries && candles && candles.length > 1) {
+      const firstTime = (candles[0].timestamp / 1000) as Time;
+      const lastTime = (candles[candles.length - 1].timestamp / 1000) as Time;
+
+      const KEY_LEVEL_COLORS: Record<string, string> = {
+        PDH: "#6b7280", PDL: "#6b7280",   // gray-500
+        PWH: "#f97316", PWL: "#f97316",   // orange-500
+        PMH: "#3b82f6", PML: "#3b82f6",   // blue-500
+        YH: "#eab308",  YL: "#eab308",    // yellow-500
+      };
+
+      for (const entry of structureData.keyLevelEntries) {
+        const color = KEY_LEVEL_COLORS[entry.label] || "#6b7280";
+        const levelSeries = chart.addSeries(LineSeries, {
+          color,
+          lineWidth: 1,
+          lineStyle: LineStyle.Dashed,
+          priceLineVisible: false,
+          lastValueVisible: false,
+          crosshairMarkerVisible: false,
+          title: entry.label,
+        });
+        levelSeries.setData([
+          { time: firstTime, value: entry.price },
+          { time: lastTime, value: entry.price },
+        ]);
+        keyLevelLineSeriesRef.current.set(entry.label, levelSeries);
+      }
+    }
+
+    // --- Sweep Markers ---
+    if (showSweeps && structureData?.sweepEvents && seriesRef.current) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const chartAny = chart as any;
+      const sweepMarkers = structureData.sweepEvents.map((s) => ({
+        time: (s.timestamp / 1000) as Time,
+        position: s.direction === "bullish" ? "belowBar" as const : "aboveBar" as const,
+        color: s.direction === "bullish" ? "#22c55e" : "#ef4444",
+        shape: s.direction === "bullish" ? "arrowUp" as const : "arrowDown" as const,
+        text: s.followedByBOS ? "S+" : "S",
+      }));
+      sweepMarkers.sort((a, b) => (a.time as number) - (b.time as number));
+
+      // Merge with existing strategy markers if any
+      if (chartAny.setMarkers) {
+        chartAny.setMarkers(series, sweepMarkers);
+      }
+    }
+
+    // --- FVG Zones ---
+    if (fvgZonesPrimitiveRef.current) {
+      fvgZonesPrimitiveRef.current.setTierFilter(fvgTierFilter as 1 | 2 | 3);
+      if (showFVGs && structureData?.fvgEvents) {
+        const fvgData: FVGZoneData[] = structureData.fvgEvents
+          .filter((f) => f.status === "fresh" || f.status === "partial")
+          .map((f) => ({
+            topPrice: f.topPrice,
+            bottomPrice: f.bottomPrice,
+            midline: f.midline,
+            direction: f.direction,
+            status: f.status,
+            tier: f.tier,
+            createdAt: f.createdAt,
+            fillPercent: f.fillPercent,
+          }));
+        fvgZonesPrimitiveRef.current.updateFVGs(fvgData);
+      } else {
+        fvgZonesPrimitiveRef.current.updateFVGs([]);
+      }
+    }
+
+    // --- Premium/Discount ---
+    if (pdPrimitiveRef.current) {
+      if (showPremiumDiscount && structureData?.premiumDiscount) {
+        const pd = structureData.premiumDiscount;
+        // Use H4 dealing range by default
+        const pdData: PDZoneData = {
+          equilibrium: pd.h4Equilibrium,
+          swingHigh: pd.h4SwingRange.high,
+          swingLow: pd.h4SwingRange.low,
+        };
+        pdPrimitiveRef.current.updateZone(pdData);
+      } else {
+        pdPrimitiveRef.current.updateZone(null);
+      }
+    }
+
+    return () => {
+      for (const [, s] of keyLevelLineSeriesRef.current) {
+        try {
+          chart.removeSeries(s);
+        } catch {
+          // Series may already be removed
+        }
+      }
+      keyLevelLineSeriesRef.current.clear();
+    };
+  }, [structureData, showSwingLabels, showBOSLines, showKeyLevels, showSweeps, showFVGs, fvgTierFilter, showPremiumDiscount, candles]);
 
   // Render strategy indicator line series
   useEffect(() => {

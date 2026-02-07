@@ -3,16 +3,40 @@
 import { useChatStore } from "@/lib/chat/store";
 import { ChatMessages } from "./ChatMessages";
 import { ChatInput } from "./ChatInput";
-import { Bot, Plus, X } from "lucide-react";
-import type { ChatContext } from "@/lib/chat/types";
+import { ConversationList } from "./ConversationList";
+import type { ConversationItem } from "./ConversationList";
+import { TokenBar } from "./TokenBar";
+import { Bot, Plus, X, ChevronDown, ChevronUp } from "lucide-react";
+import type { ChatContext, ChatModel } from "@/lib/chat/types";
 
 interface ChatPanelProps {
   context: ChatContext;
   onClose: () => void;
+  conversations: ConversationItem[];
+  onSwitchConversation: (id: string) => void;
+  onDeleteConversation: (id: string) => void;
+  onRenameConversation: (id: string, title: string) => void;
+  onNewConversation: () => void;
+  onSendMessage: (content: string) => Promise<void>;
 }
 
-export function ChatPanel({ context, onClose }: ChatPanelProps) {
-  const { messages, newConversation, isStreaming } = useChatStore();
+export function ChatPanel({
+  context,
+  onClose,
+  conversations,
+  onSwitchConversation,
+  onDeleteConversation,
+  onRenameConversation,
+  onNewConversation,
+  onSendMessage,
+}: ChatPanelProps) {
+  const messages = useChatStore((s) => s.messages);
+  const isStreaming = useChatStore((s) => s.isStreaming);
+  const model = useChatStore((s) => s.model);
+  const conversationId = useChatStore((s) => s.conversationId);
+  const showConversationList = useChatStore((s) => s.showConversationList);
+  const toggleConversationList = useChatStore((s) => s.toggleConversationList);
+  const cumulativeTokens = useChatStore((s) => s.cumulativeTokens);
   const messageCount = messages.length;
 
   return (
@@ -28,9 +52,15 @@ export function ChatPanel({ context, onClose }: ChatPanelProps) {
             </span>
           )}
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-2">
+          {cumulativeTokens.inputTokens > 0 && (
+            <TokenBar
+              inputTokens={cumulativeTokens.inputTokens}
+              model={model}
+            />
+          )}
           <button
-            onClick={newConversation}
+            onClick={onNewConversation}
             disabled={isStreaming || messageCount === 0}
             className="p-1 rounded hover:bg-gray-800 text-gray-500 hover:text-gray-300 transition-colors disabled:opacity-30"
             title="New conversation"
@@ -47,11 +77,44 @@ export function ChatPanel({ context, onClose }: ChatPanelProps) {
         </div>
       </div>
 
-      {/* Messages */}
-      <ChatMessages />
+      {/* Conversation switcher row */}
+      <button
+        onClick={toggleConversationList}
+        className="w-full flex items-center gap-2 px-3 py-1.5 text-[11px] text-gray-400 hover:text-gray-200 hover:bg-gray-800/30 border-b border-gray-800 transition-colors"
+      >
+        {showConversationList ? (
+          <ChevronUp className="w-3 h-3 shrink-0" />
+        ) : (
+          <ChevronDown className="w-3 h-3 shrink-0" />
+        )}
+        <span className="truncate">
+          {conversationId
+            ? `${context.pair.replace("_", "/")} ${context.timeframe}`
+            : "New conversation"}
+        </span>
+        {conversations.length > 0 && (
+          <span className="text-gray-600 ml-auto shrink-0">
+            {conversations.length}
+          </span>
+        )}
+      </button>
 
-      {/* Input */}
-      <ChatInput context={context} />
+      {/* Conditional body: conversation list or chat messages */}
+      {showConversationList ? (
+        <ConversationList
+          conversations={conversations}
+          activeConversationId={conversationId}
+          onSelect={onSwitchConversation}
+          onDelete={onDeleteConversation}
+          onRename={onRenameConversation}
+          onCollapse={toggleConversationList}
+        />
+      ) : (
+        <>
+          <ChatMessages />
+          <ChatInput context={context} onSendMessage={onSendMessage} />
+        </>
+      )}
     </div>
   );
 }

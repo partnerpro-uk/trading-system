@@ -28,6 +28,13 @@ import { ArrowLeft, ArrowRight, MessageSquare } from "lucide-react";
 import { UserButton, SignedIn, SignedOut, SignInButton, useAuth } from "@clerk/nextjs";
 import { ChatPanel } from "@/components/chat/ChatPanel";
 import { useChatStore } from "@/lib/chat/store";
+import { useChat } from "@/hooks/useChat";
+import { useStructure } from "@/hooks/useStructure";
+import { useStructurePrefs } from "@/hooks/useStructurePrefs";
+import { useAlerts } from "@/hooks/useAlerts";
+import { ToastContainer } from "@/components/alerts/ToastContainer";
+import { AlertBell } from "@/components/alerts/AlertBell";
+import { AlertPreferencesModal } from "@/components/alerts/AlertPreferencesModal";
 
 const TIMEFRAMES = ["M1", "M5", "M15", "M30", "H1", "H4", "D", "W", "M"] as const;
 
@@ -74,6 +81,104 @@ export default function ChartPage() {
   const [showSessionLabels, setShowSessionLabels] = useState<boolean>(false); // Off by default (less clutter)
   const [showNews, setShowNews] = useState<boolean>(true);
 
+  // Market structure overlay states
+  const [showSwingLabels, setShowSwingLabels] = useState<boolean>(true);
+  const [showBOSLines, setShowBOSLines] = useState<boolean>(true);
+  const [showKeyLevels, setShowKeyLevels] = useState<boolean>(false);
+  const [showSweeps, setShowSweeps] = useState<boolean>(false);
+  const [showFVGs, setShowFVGs] = useState<boolean>(false);
+  const [fvgTierFilter, setFVGTierFilter] = useState<1 | 2 | 3>(3);
+  const [showPremiumDiscount, setShowPremiumDiscount] = useState<boolean>(false);
+
+  // Structure preferences persistence
+  const { prefs: structurePrefs, save: saveStructurePrefs } = useStructurePrefs();
+  const prefsSeededRef = useRef(false);
+
+  // Seed local state from saved prefs once on first load
+  useEffect(() => {
+    if (structurePrefs && !prefsSeededRef.current) {
+      prefsSeededRef.current = true;
+      const t = structurePrefs.overlayToggles;
+      setShowSwingLabels(t.swings);
+      setShowBOSLines(t.bos);
+      setShowFVGs(t.fvgs);
+      setShowKeyLevels(t.levels);
+      setShowPremiumDiscount(t.premiumDiscount);
+      setShowSweeps(t.sweeps);
+      setFVGTierFilter(structurePrefs.fvgMinTier as 1 | 2 | 3);
+    }
+  }, [structurePrefs]);
+
+  // Persist overlay toggles on change (debounced)
+  const persistStructurePrefs = useCallback(
+    (overrides?: Partial<{
+      swings: boolean; bos: boolean; fvgs: boolean;
+      levels: boolean; premiumDiscount: boolean; sweeps: boolean;
+      fvgMinTier: number;
+    }>) => {
+      saveStructurePrefs({
+        overlayToggles: {
+          swings: overrides?.swings ?? showSwingLabels,
+          bos: overrides?.bos ?? showBOSLines,
+          fvgs: overrides?.fvgs ?? showFVGs,
+          levels: overrides?.levels ?? showKeyLevels,
+          premiumDiscount: overrides?.premiumDiscount ?? showPremiumDiscount,
+          sweeps: overrides?.sweeps ?? showSweeps,
+        },
+        fvgMinTier: overrides?.fvgMinTier ?? fvgTierFilter,
+        showRecentOnly: false,
+      });
+    },
+    [saveStructurePrefs, showSwingLabels, showBOSLines, showFVGs, showKeyLevels, showPremiumDiscount, showSweeps, fvgTierFilter]
+  );
+
+  // Wrapped setters that also persist
+  const handleSetShowSwingLabels = useCallback((v: boolean) => {
+    setShowSwingLabels(v);
+    persistStructurePrefs({ swings: v });
+  }, [persistStructurePrefs]);
+
+  const handleSetShowBOSLines = useCallback((v: boolean) => {
+    setShowBOSLines(v);
+    persistStructurePrefs({ bos: v });
+  }, [persistStructurePrefs]);
+
+  const handleSetShowFVGs = useCallback((v: boolean) => {
+    setShowFVGs(v);
+    persistStructurePrefs({ fvgs: v });
+  }, [persistStructurePrefs]);
+
+  const handleSetShowKeyLevels = useCallback((v: boolean) => {
+    setShowKeyLevels(v);
+    persistStructurePrefs({ levels: v });
+  }, [persistStructurePrefs]);
+
+  const handleSetShowPremiumDiscount = useCallback((v: boolean) => {
+    setShowPremiumDiscount(v);
+    persistStructurePrefs({ premiumDiscount: v });
+  }, [persistStructurePrefs]);
+
+  const handleSetShowSweeps = useCallback((v: boolean) => {
+    setShowSweeps(v);
+    persistStructurePrefs({ sweeps: v });
+  }, [persistStructurePrefs]);
+
+  const handleSetFVGTierFilter = useCallback((v: 1 | 2 | 3) => {
+    setFVGTierFilter(v);
+    persistStructurePrefs({ fvgMinTier: v });
+  }, [persistStructurePrefs]);
+
+  // Structure: always load data (sidebar structure tab needs it regardless of chart overlays)
+  const { structure: structureData } = useStructure({ pair, timeframe, enabled: true });
+
+  // Ref for structure data (used by snapshot capture + position sync without causing re-renders)
+  const structureDataRef = useRef(structureData);
+  structureDataRef.current = structureData;
+
+  // Alerts
+  const { unreadCount, recentAlerts, preferences: alertPrefs, markRead, markAllRead } = useAlerts();
+  const [alertPrefsOpen, setAlertPrefsOpen] = useState(false);
+
   // Chat panel state
   const chatOpen = useChatStore((s) => s.isOpen);
   const toggleChat = useChatStore((s) => s.toggle);
@@ -90,6 +195,10 @@ export default function ChartPage() {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [toggleChat]);
+
+  // Chat context for useChat hook (memoized to avoid re-renders)
+  // NOTE: filteredDrawings and livePrice are defined later in the component,
+  // so chatContext is defined after them (see below where useChat is called)
 
   // Selected event for sidebar panel
   const [selectedEvent, setSelectedEvent] = useState<NewsEventData | null>(null);
@@ -162,12 +271,12 @@ export default function ChartPage() {
     visibleRangeRef.current = range;
   }, []);
 
-  // Snapshot capture hook
-  const { capture: captureSnapshot } = useCaptureSnapshot(pair, timeframe, visibleRangeRef);
+  // Snapshot capture hook (pass structureDataRef for structure context in snapshots)
+  const { capture: captureSnapshot } = useCaptureSnapshot(pair, timeframe, visibleRangeRef, structureDataRef);
 
   // Sync position drawings to Convex trades and auto-detect TP/SL hits
   // Trade log (Convex) is source of truth for exits - manual edits override auto-detection
-  usePositionSync(pair, timeframe, candles, captureSnapshot, livePrice);
+  usePositionSync(pair, timeframe, candles, captureSnapshot, livePrice, structureDataRef);
 
   // Fetch trades for this chart to display exit lines on positions
   const { tradesMap } = useTradesForChart(pair, timeframe);
@@ -530,6 +639,24 @@ export default function ChartPage() {
     });
   }, [drawings, selectedStrategy]);
 
+  // Chat persistence hook — must be after filteredDrawings and livePrice are defined
+  const chatContext = useMemo(() => ({
+    pair,
+    timeframe,
+    currentPrice: livePrice?.mid ?? null,
+    drawings: filteredDrawings,
+    convexToken,
+  }), [pair, timeframe, livePrice?.mid, filteredDrawings, convexToken]);
+
+  const {
+    sendMessage: chatSendMessage,
+    switchConversation,
+    deleteConversation: chatDeleteConversation,
+    renameConversation,
+    newConversation: chatNewConversation,
+    conversations,
+  } = useChat(chatContext);
+
   // Format pair for display (EUR_USD -> EUR/USD)
   const displayPair = pair.replace("_", "/");
 
@@ -558,6 +685,15 @@ export default function ChartPage() {
           >
             <MessageSquare className="w-4 h-4" />
           </button>
+
+          {/* Alert bell */}
+          <AlertBell
+            unreadCount={unreadCount}
+            recentAlerts={recentAlerts}
+            onMarkRead={markRead}
+            onMarkAllRead={markAllRead}
+            onOpenPreferences={() => setAlertPrefsOpen(true)}
+          />
 
           <h1 className="text-xl font-semibold">{displayPair}</h1>
           {livePrice && (
@@ -652,21 +788,22 @@ export default function ChartPage() {
         {chatOpen && (
           <div className="h-full flex-shrink-0 w-[350px] min-w-[280px] max-w-[500px] resize-x overflow-hidden border-r border-gray-700">
             <ChatPanel
-              context={{
-                pair,
-                timeframe,
-                currentPrice: livePrice?.mid ?? null,
-                drawings: filteredDrawings,
-                convexToken,
-              }}
+              context={chatContext}
               onClose={closeChat}
+              conversations={conversations}
+              onSwitchConversation={switchConversation}
+              onDeleteConversation={chatDeleteConversation}
+              onRenameConversation={renameConversation}
+              onNewConversation={chatNewConversation}
+              onSendMessage={chatSendMessage}
             />
           </div>
         )}
 
-        <PanelGroup orientation="horizontal" className="h-full flex-1">
+        <div className="flex-1 min-w-0 h-full">
+        <PanelGroup orientation="horizontal" className="h-full">
           {/* Chart Panel */}
-          <Panel id="chart" defaultSize={80} minSize={40}>
+          <Panel id="chart" defaultSize="80%" minSize="40%">
             <div className="h-full w-full relative flex">
               {/* Drawing Toolbar - Left Sidebar */}
               <DrawingToolbar
@@ -721,6 +858,15 @@ export default function ChartPage() {
                 tradesMap={tradesMap}
                 // Visible range for snapshot capture
                 onVisibleRangeChange={handleVisibleRangeChange}
+                // Market structure overlays
+                structureData={structureData}
+                showSwingLabels={showSwingLabels}
+                showBOSLines={showBOSLines}
+                showKeyLevels={showKeyLevels}
+                showSweeps={showSweeps}
+                showFVGs={showFVGs}
+                fvgTierFilter={fvgTierFilter}
+                showPremiumDiscount={showPremiumDiscount}
               />
               </div>
             </div>
@@ -730,7 +876,7 @@ export default function ChartPage() {
           <PanelResizeHandle className="w-2 bg-gray-700 hover:bg-blue-500 transition-colors cursor-col-resize" />
 
           {/* Sidebar Panel */}
-          <Panel id="sidebar" defaultSize={20} minSize={15} maxSize={40}>
+          <Panel id="sidebar" defaultSize="20%" minSize="15%" maxSize="40%">
             <div className="h-full w-full">
               {selectedEvent ? (
                 <NewsEventPanel
@@ -761,11 +907,29 @@ export default function ChartPage() {
                   onIndicatorToggle={handleIndicatorToggle}
                   onDrawingSelect={selectDrawing}
                   onScrollToTimestamp={scrollToTimestampFn || undefined}
+                  // Market structure toggles (wrapped to persist prefs)
+                  showSwingLabels={showSwingLabels}
+                  onShowSwingLabelsChange={handleSetShowSwingLabels}
+                  showBOSLines={showBOSLines}
+                  onShowBOSLinesChange={handleSetShowBOSLines}
+                  showKeyLevels={showKeyLevels}
+                  onShowKeyLevelsChange={handleSetShowKeyLevels}
+                  showSweeps={showSweeps}
+                  onShowSweepsChange={handleSetShowSweeps}
+                  showFVGs={showFVGs}
+                  onShowFVGsChange={handleSetShowFVGs}
+                  fvgTierFilter={fvgTierFilter}
+                  onFVGTierFilterChange={handleSetFVGTierFilter}
+                  showPremiumDiscount={showPremiumDiscount}
+                  onShowPremiumDiscountChange={handleSetShowPremiumDiscount}
+                  structureData={structureData}
+                  currentPrice={livePrice?.mid ?? null}
                 />
               )}
             </div>
           </Panel>
         </PanelGroup>
+        </div>
       </main>
 
       {/* Close Trade Modal */}
@@ -778,6 +942,16 @@ export default function ChartPage() {
           onClose={() => setClosingPosition(null)}
         />
       )}
+
+      {/* Toast notifications */}
+      <ToastContainer />
+
+      {/* Alert preferences modal */}
+      <AlertPreferencesModal
+        open={alertPrefsOpen}
+        onClose={() => setAlertPrefsOpen(false)}
+        preferences={alertPrefs ?? null}
+      />
     </div>
   );
 }

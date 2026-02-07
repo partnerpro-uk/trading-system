@@ -6,6 +6,7 @@ import { api } from "../../convex/_generated/api";
 import { Id } from "../../convex/_generated/dataModel";
 import { useDrawingStore } from "@/lib/drawings/store";
 import { buildSnapshotData, MomentLabel } from "@/lib/snapshots/capture";
+import type { StructureResponse } from "@/lib/structure/types";
 
 /**
  * Hook for fetching snapshots for a specific trade
@@ -36,7 +37,8 @@ export function useSnapshots(tradeId: Id<"trades"> | null) {
 export function useCaptureSnapshot(
   pair: string,
   timeframe: string,
-  visibleRangeRef: React.RefObject<{ from: number; to: number } | null>
+  visibleRangeRef: React.RefObject<{ from: number; to: number } | null>,
+  structureDataRef?: React.RefObject<StructureResponse | null>
 ) {
   const createSnapshot = useMutation(api.snapshots.createSnapshot);
   const drawingsKeyRef = useRef(`${pair}:${timeframe}`);
@@ -68,13 +70,14 @@ export function useCaptureSnapshot(
       const allDrawings =
         useDrawingStore.getState().drawings[drawingsKeyRef.current] || [];
 
-      // Build the snapshot data
+      // Build the snapshot data (include structure context if available)
       const snapshotData = buildSnapshotData({
         ...params,
         pair,
         timeframe,
         visibleRange,
         allDrawings,
+        structureData: structureDataRef?.current ?? null,
       });
 
       try {

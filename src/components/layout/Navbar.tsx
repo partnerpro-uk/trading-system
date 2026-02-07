@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BarChart3, LayoutDashboard, LineChart, ChevronDown, BookOpen } from "lucide-react";
+import { BarChart3, LayoutDashboard, LineChart, ChevronDown, BookOpen, FlaskConical } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { UserButton, SignedIn, SignedOut, SignInButton } from "@clerk/nextjs";
 import { PAIRS } from "@/lib/pairs";
@@ -118,9 +118,10 @@ export function Navbar() {
   const isDashboard = pathname === "/";
   const isCharts = pathname.startsWith("/chart");
   const isTrades = pathname.startsWith("/trades");
+  const isBacktesting = pathname.startsWith("/backtesting");
 
-  // Hide navbar on chart and trades pages - they have their own header
-  if (isCharts || isTrades) {
+  // Hide navbar on chart, trades, and backtesting pages - they have their own header
+  if (isCharts || isTrades || isBacktesting) {
     return null;
   }
 
@@ -150,6 +151,12 @@ export function Navbar() {
                 icon={<BookOpen className="w-4 h-4" />}
                 label="Trade Journal"
                 isActive={isTrades}
+              />
+              <NavLink
+                href="/backtesting"
+                icon={<FlaskConical className="w-4 h-4" />}
+                label="Backtesting"
+                isActive={isBacktesting}
               />
             </div>
 

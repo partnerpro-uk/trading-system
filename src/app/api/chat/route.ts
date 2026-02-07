@@ -51,6 +51,7 @@ export async function POST(request: NextRequest) {
     drawings,
     model = "sonnet",
     convexToken,
+    summary,
   } = body;
 
   if (!messages || !Array.isArray(messages) || !pair || !timeframe) {
@@ -61,18 +62,38 @@ export async function POST(request: NextRequest) {
   const systemPrompt = buildSystemPrompt(pair, timeframe);
   const dynamicContext = await buildDynamicContext(pair, timeframe, currentPrice, drawings || []);
 
-  // Build Anthropic messages — inject context as a prefixed system-like user message
+  // Build Anthropic messages — inject context (and optional summary) as a prefixed user message
   const anthropicMessages: Anthropic.MessageParam[] = [];
 
-  // Add context as the first user turn if this is a fresh conversation
-  if (messages.length === 1) {
-    // First message — inject context before the user's message
+  if (summary && messages.length === 1) {
+    // Compacted conversation, first message: summary + context + user message
+    anthropicMessages.push({
+      role: "user",
+      content: `[Previous conversation summary]\n${summary}\n\n[Chart Context]\n${dynamicContext}\n\n[User Message]\n${messages[0].content}`,
+    });
+  } else if (summary && messages.length > 1) {
+    // Compacted conversation, multi-turn: inject summary into first user message
+    const firstMsg = messages[0];
+    anthropicMessages.push({
+      role: firstMsg.role,
+      content: firstMsg.role === "user"
+        ? `[Previous conversation summary]\n${summary}\n\n${firstMsg.content}`
+        : firstMsg.content,
+    });
+    for (let i = 1; i < messages.length; i++) {
+      anthropicMessages.push({
+        role: messages[i].role,
+        content: messages[i].content,
+      });
+    }
+  } else if (messages.length === 1) {
+    // Fresh conversation, first message — inject context
     anthropicMessages.push({
       role: "user",
       content: `[Chart Context]\n${dynamicContext}\n\n[User Message]\n${messages[0].content}`,
     });
   } else {
-    // Multi-turn — context was in first message, just pass conversation history
+    // Multi-turn without summary — context was in first message
     for (const msg of messages) {
       anthropicMessages.push({
         role: msg.role,

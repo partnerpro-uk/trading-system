@@ -74,6 +74,7 @@ export const createSnapshot = mutation({
     strategy: v.optional(v.string()),
     analysisNotes: v.optional(v.string()),
     aiDescription: v.optional(v.string()),
+    structureContext: v.optional(v.string()),
     createdBy: v.union(v.literal("auto"), v.literal("manual")),
   },
   handler: async (ctx, args) => {

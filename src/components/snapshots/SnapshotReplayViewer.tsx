@@ -22,6 +22,15 @@ import {
 } from "@/lib/drawings/types";
 import { SnapshotTradeContext } from "@/lib/snapshots/describe";
 
+interface SnapshotStructureContext {
+  mtfScore: { composite: number; interpretation: string } | null;
+  currentStructure: { direction: string; swingSequence: string[] };
+  activeFVGs: { direction: string; topPrice: number; bottomPrice: number; tier: number; fillPercent: number }[];
+  recentBOS: { direction: string; brokenLevel: number; timestamp: number; status: string; magnitudePips: number }[];
+  premiumDiscount: { h4Zone: string; d1Zone: string; alignmentCount: number; isDeepPremium: boolean; isDeepDiscount: boolean } | null;
+  keyLevels: { label: string; price: number }[];
+}
+
 interface SnapshotReplayViewerProps {
   snapshot: {
     pair: string;
@@ -32,6 +41,7 @@ interface SnapshotReplayViewerProps {
     drawings: string;
     tradeContext: string;
     aiDescription?: string;
+    structureContext?: string;
   };
   width?: number;
   height?: number;
@@ -67,6 +77,14 @@ export function SnapshotReplayViewer({
   const tradeContext: SnapshotTradeContext | null = (() => {
     try {
       return JSON.parse(snapshot.tradeContext);
+    } catch {
+      return null;
+    }
+  })();
+
+  const structureContext: SnapshotStructureContext | null = (() => {
+    try {
+      return snapshot.structureContext ? JSON.parse(snapshot.structureContext) : null;
     } catch {
       return null;
     }
@@ -453,6 +471,78 @@ export function SnapshotReplayViewer({
           ctx.setLineDash([]);
         }
       }
+
+      // Structure overlay (FVG zones, BOS lines, key levels)
+      if (structureContext) {
+        // FVG zones — semi-transparent rectangles spanning full chart width
+        for (const fvg of structureContext.activeFVGs) {
+          const yTop = series.priceToCoordinate(fvg.topPrice);
+          const yBottom = series.priceToCoordinate(fvg.bottomPrice);
+          if (yTop === null || yBottom === null) continue;
+
+          const isBullish = fvg.direction === "bullish";
+          ctx.fillStyle = isBullish
+            ? "rgba(34, 197, 94, 0.06)"
+            : "rgba(239, 68, 68, 0.06)";
+          ctx.fillRect(0, Math.min(yTop, yBottom), rect.width, Math.abs(yBottom - yTop));
+
+          // Border
+          ctx.strokeStyle = isBullish
+            ? "rgba(34, 197, 94, 0.25)"
+            : "rgba(239, 68, 68, 0.25)";
+          ctx.lineWidth = 1;
+          ctx.setLineDash([]);
+          ctx.strokeRect(0, Math.min(yTop, yBottom), rect.width, Math.abs(yBottom - yTop));
+
+          // Label
+          ctx.fillStyle = isBullish ? "rgba(34, 197, 94, 0.5)" : "rgba(239, 68, 68, 0.5)";
+          ctx.font = "9px sans-serif";
+          ctx.fillText(`FVG T${fvg.tier}`, 4, Math.min(yTop, yBottom) + 10);
+        }
+
+        // BOS lines — horizontal dashed lines at brokenLevel
+        for (const bos of structureContext.recentBOS) {
+          const y = series.priceToCoordinate(bos.brokenLevel);
+          if (y === null) continue;
+
+          const isBullish = bos.direction === "bullish";
+          ctx.beginPath();
+          ctx.moveTo(0, y);
+          ctx.lineTo(rect.width, y);
+          ctx.strokeStyle = isBullish
+            ? "rgba(34, 197, 94, 0.5)"
+            : "rgba(239, 68, 68, 0.5)";
+          ctx.lineWidth = 1;
+          ctx.setLineDash([6, 4]);
+          ctx.stroke();
+          ctx.setLineDash([]);
+
+          // Label
+          ctx.fillStyle = isBullish ? "rgba(34, 197, 94, 0.6)" : "rgba(239, 68, 68, 0.6)";
+          ctx.font = "9px sans-serif";
+          ctx.fillText("BOS", rect.width - 28, y - 3);
+        }
+
+        // Key levels — horizontal dotted gray lines
+        for (const level of structureContext.keyLevels) {
+          const y = series.priceToCoordinate(level.price);
+          if (y === null) continue;
+
+          ctx.beginPath();
+          ctx.moveTo(0, y);
+          ctx.lineTo(rect.width, y);
+          ctx.strokeStyle = "rgba(156, 163, 175, 0.3)";
+          ctx.lineWidth = 1;
+          ctx.setLineDash([2, 3]);
+          ctx.stroke();
+          ctx.setLineDash([]);
+
+          // Label
+          ctx.fillStyle = "rgba(156, 163, 175, 0.5)";
+          ctx.font = "9px sans-serif";
+          ctx.fillText(level.label, 4, y - 3);
+        }
+      }
     };
 
     // Draw after a small delay to let chart settle
@@ -468,7 +558,7 @@ export function SnapshotReplayViewer({
       chart.remove();
       chartRef.current = null;
     };
-  }, [candles, drawings, tradeContext, snapshot, height, width, precision, minMove]);
+  }, [candles, drawings, tradeContext, structureContext, snapshot, height, width, precision, minMove]);
 
   // Moment label colors
   const momentColors: Record<string, string> = {
@@ -500,16 +590,48 @@ export function SnapshotReplayViewer({
             {new Date(snapshot.timestamp).toLocaleString()}
           </span>
         </div>
-        {tradeContext && (
-          <div className="flex items-center gap-3 text-xs">
-            <span className="text-gray-400">
-              {tradeContext.direction}
+        <div className="flex items-center gap-3 text-xs">
+          {structureContext?.mtfScore && (
+            <span
+              className={`font-mono font-bold px-1.5 py-0.5 rounded ${
+                structureContext.mtfScore.composite > 30
+                  ? "bg-green-500/20 text-green-400"
+                  : structureContext.mtfScore.composite < -30
+                    ? "bg-red-500/20 text-red-400"
+                    : "bg-yellow-500/20 text-yellow-400"
+              }`}
+            >
+              MTF {structureContext.mtfScore.composite > 0 ? "+" : ""}{structureContext.mtfScore.composite}
             </span>
-            <span className={`font-mono font-bold ${pnlColor}`}>
-              {pnlSign}{tradeContext.pnlPips.toFixed(1)} pips
+          )}
+          {structureContext?.premiumDiscount && (
+            <span
+              className={`font-bold px-1.5 py-0.5 rounded uppercase ${
+                structureContext.premiumDiscount.h4Zone.includes("premium")
+                  ? "bg-red-500/20 text-red-400"
+                  : structureContext.premiumDiscount.h4Zone.includes("discount")
+                    ? "bg-green-500/20 text-green-400"
+                    : "bg-gray-500/20 text-gray-400"
+              }`}
+            >
+              {structureContext.premiumDiscount.h4Zone.includes("premium")
+                ? "PREM"
+                : structureContext.premiumDiscount.h4Zone.includes("discount")
+                  ? "DISC"
+                  : "EQ"}
             </span>
-          </div>
-        )}
+          )}
+          {tradeContext && (
+            <>
+              <span className="text-gray-400">
+                {tradeContext.direction}
+              </span>
+              <span className={`font-mono font-bold ${pnlColor}`}>
+                {pnlSign}{tradeContext.pnlPips.toFixed(1)} pips
+              </span>
+            </>
+          )}
+        </div>
       </div>
 
       {/* Chart container */}

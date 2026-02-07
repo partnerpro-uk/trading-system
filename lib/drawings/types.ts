@@ -134,6 +134,8 @@ export interface HorizontalLineDrawing extends BaseDrawing {
   showLabel: boolean;
   labelText?: string;
   labelPosition?: "above" | "below" | "middle";  // Default: "middle"
+  alertEnabled?: boolean;    // Worker checks price crossing
+  alertTriggered?: boolean;  // Set true after alert fires (one-shot)
 }
 
 /**

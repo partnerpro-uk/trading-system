@@ -152,6 +152,9 @@ export const createTrade = mutation({
       v.literal("limit"), v.literal("market"), v.literal("late"),
       v.literal("partial"), v.literal("spread"), v.literal("other")
     )),
+    // Structure context at entry
+    mtfScoreAtEntry: v.optional(v.number()),
+    zoneAtEntry: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const user = await getAuthenticatedUser(ctx);
@@ -383,6 +386,50 @@ export const deleteTrade = mutation({
     }
 
     await ctx.db.delete(args.id);
+  },
+});
+
+/**
+ * Get today's trade stats (for dashboard widget)
+ */
+export const getTodayStats = query({
+  args: {},
+  handler: async (ctx) => {
+    const user = await getAuthenticatedUser(ctx);
+
+    const now = new Date();
+    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+
+    const trades = await ctx.db
+      .query("trades")
+      .withIndex("by_user", (q) => q.eq("userId", user.clerkId))
+      .collect();
+
+    // Closed today
+    const closedToday = trades.filter(
+      (t) => t.status === "closed" && t.exitTime && t.exitTime >= startOfDay
+    );
+
+    const wins = closedToday.filter((t) => ["TP", "MW", "BE"].includes(t.outcome || ""));
+    const losses = closedToday.filter((t) => ["SL", "ML"].includes(t.outcome || ""));
+    const totalPnlPips = closedToday.reduce((s, t) => s + (t.pnlPips || 0), 0);
+
+    const pnlValues = closedToday.map((t) => t.pnlPips || 0);
+    const bestTrade = pnlValues.length > 0 ? Math.max(...pnlValues) : 0;
+    const worstTrade = pnlValues.length > 0 ? Math.min(...pnlValues) : 0;
+
+    const openCount = trades.filter((t) => t.status === "open").length;
+
+    return {
+      total: closedToday.length,
+      wins: wins.length,
+      losses: losses.length,
+      winRate: closedToday.length > 0 ? Math.round((wins.length / closedToday.length) * 100) : 0,
+      totalPnlPips: Math.round(totalPnlPips * 10) / 10,
+      bestTrade: Math.round(bestTrade * 10) / 10,
+      worstTrade: Math.round(worstTrade * 10) / 10,
+      openCount,
+    };
   },
 });
 

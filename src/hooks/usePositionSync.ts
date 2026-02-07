@@ -8,6 +8,8 @@ import { isPositionDrawing, PositionDrawing } from "@/lib/drawings/types";
 import { CandleData } from "./useCandles";
 import { Id } from "../../convex/_generated/dataModel";
 import { MomentLabel } from "@/lib/snapshots/capture";
+import type { StructureResponse } from "@/lib/structure/types";
+import { computeStructureLinks } from "@/lib/structure/link-builder";
 
 /**
  * Hook that syncs position drawings to Convex trades table.
@@ -40,12 +42,14 @@ export function usePositionSync(
     };
     notes?: string;
   }) => Promise<string | null>,
-  livePrice?: { mid?: number; bid?: number; ask?: number } | null
+  livePrice?: { mid?: number; bid?: number; ask?: number } | null,
+  structureDataRef?: React.RefObject<StructureResponse | null>
 ) {
   const { isAuthenticated } = useConvexAuth();
   const createTrade = useMutation(api.trades.createTrade);
   const closeTrade = useMutation(api.trades.closeTrade);
   const updateTrade = useMutation(api.trades.updateTrade);
+  const createBulkLinks = useMutation(api.structureLinks.createBulkLinks);
   const updateDrawing = useDrawingStore((state) => state.updateDrawing);
 
   // Query open trades for this pair (skip when not authenticated)
@@ -99,6 +103,11 @@ export function usePositionSync(
         syncingIds.current.add(position.id);
         const direction = position.type === "longPosition" ? "LONG" : "SHORT";
 
+        // Extract MTF score and zone from current structure data
+        const structNow = structureDataRef?.current;
+        const mtfScoreAtEntry = structNow?.mtfScore?.composite;
+        const zoneAtEntry = structNow?.premiumDiscount?.h4Zone ?? undefined;
+
         createTrade({
           strategyId: position.strategyId || "manual",
           pair,
@@ -115,6 +124,9 @@ export function usePositionSync(
           actualEntryPrice: position.actualEntryPrice,
           actualEntryTime: position.actualEntryTimestamp,
           entryReason: position.entryReason,
+          // Structure context at entry
+          mtfScoreAtEntry,
+          zoneAtEntry,
         })
           .then((tradeId) => {
             updateDrawing(pair, timeframe, position.id, {
@@ -146,6 +158,31 @@ export function usePositionSync(
                 snapshotted.current.delete(`entry:${tradeId}`);
               });
             }
+
+            // Auto-create structure links (fire-and-forget)
+            if (structNow) {
+              try {
+                const linkCandidates = computeStructureLinks(
+                  structNow,
+                  position.entry.price,
+                  position.stopLoss,
+                  position.takeProfit,
+                  direction,
+                  pair,
+                  timeframe
+                );
+                if (linkCandidates.length > 0) {
+                  createBulkLinks({
+                    tradeId: tradeId as Id<"trades">,
+                    links: linkCandidates,
+                  }).catch((err) => {
+                    console.error("Failed to create structure links:", err);
+                  });
+                }
+              } catch (err) {
+                console.error("Failed to compute structure links:", err);
+              }
+            }
           })
           .catch((error) => {
             console.error("Failed to sync position to Convex:", error);
@@ -153,7 +190,7 @@ export function usePositionSync(
           });
       }
     }
-  }, [drawings, pair, timeframe, createTrade, updateDrawing]);
+  }, [drawings, pair, timeframe, createTrade, updateDrawing, createBulkLinks]);
 
   // Effect 2: Auto-detect TP/SL hits from candle data
   useEffect(() => {

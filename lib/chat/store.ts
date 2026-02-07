@@ -55,6 +55,18 @@ interface ChatState {
   // Abort controller for cancelling streams
   abortController: AbortController | null;
 
+  // Conversation management
+  showConversationList: boolean;
+  isLoadingConversation: boolean;
+  cumulativeTokens: {
+    inputTokens: number;
+    outputTokens: number;
+    cacheReadTokens: number;
+  };
+
+  // Persistence callback — called when assistant message is finalized
+  onAssistantMessageComplete: ((message: ChatMessage, usage: { inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheCreationTokens: number }) => void) | null;
+
   // Actions
   toggle: () => void;
   open: () => void;
@@ -64,6 +76,10 @@ interface ChatState {
   stopStreaming: () => void;
   clearConversation: () => void;
   newConversation: () => void;
+  toggleConversationList: () => void;
+  setConversationId: (id: string | null) => void;
+  loadMessages: (messages: ChatMessage[]) => void;
+  setOnAssistantMessageComplete: (callback: ChatState["onAssistantMessageComplete"]) => void;
 }
 
 // ─── Client Tool Executor ────────────────────────────────────────────────────
@@ -270,6 +286,10 @@ export const useChatStore = create<ChatState>()((set, get) => ({
   streamingDrawingActions: [],
   model: "sonnet",
   abortController: null,
+  showConversationList: false,
+  isLoadingConversation: false,
+  cumulativeTokens: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0 },
+  onAssistantMessageComplete: null,
 
   // Panel actions
   toggle: () => set((s) => ({ isOpen: !s.isOpen })),
@@ -295,12 +315,20 @@ export const useChatStore = create<ChatState>()((set, get) => ({
     streamingContent: "",
     streamingToolCalls: [],
     streamingDrawingActions: [],
+    showConversationList: false,
+    cumulativeTokens: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0 },
   }),
 
   // New conversation
   newConversation: () => {
     get().clearConversation();
   },
+
+  // Conversation management
+  toggleConversationList: () => set((s) => ({ showConversationList: !s.showConversationList })),
+  setConversationId: (id) => set({ conversationId: id }),
+  loadMessages: (messages) => set({ messages, isLoadingConversation: false }),
+  setOnAssistantMessageComplete: (callback) => set({ onAssistantMessageComplete: callback }),
 
   // Send message
   sendMessage: async (content: string, context: ChatContext) => {
@@ -340,6 +368,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
         drawings: context.drawings,
         model,
         convexToken: context.convexToken ?? undefined,
+        summary: context.summary,
       };
 
       const response = await fetch("/api/chat", {
@@ -427,7 +456,18 @@ export const useChatStore = create<ChatState>()((set, get) => ({
             streamingToolCalls: [],
             streamingDrawingActions: [],
             abortController: null,
+            cumulativeTokens: {
+              inputTokens: s.cumulativeTokens.inputTokens + usage.inputTokens,
+              outputTokens: s.cumulativeTokens.outputTokens + usage.outputTokens,
+              cacheReadTokens: s.cumulativeTokens.cacheReadTokens + usage.cacheReadTokens,
+            },
           }));
+
+          // Notify persistence layer
+          const { onAssistantMessageComplete } = get();
+          if (onAssistantMessageComplete) {
+            onAssistantMessageComplete(assistantMessage, usage);
+          }
         },
         onError: (message) => {
           // On error, still save partial content as message if any

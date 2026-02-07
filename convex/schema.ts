@@ -149,6 +149,11 @@ export default defineSchema({
     conditionsMet: v.optional(v.array(v.string())),  // Which strategy conditions triggered
     notes: v.optional(v.string()),
 
+    // Structure context at entry (auto-populated from structure engine)
+    mtfScoreAtEntry: v.optional(v.number()),          // Composite MTF score (-100 to +100)
+    zoneAtEntry: v.optional(v.string()),              // "premium" | "discount" | "equilibrium"
+    structureLinkCount: v.optional(v.number()),       // Denormalized count of linked structure entities
+
     // Plan vs Reality — Entry
     actualEntryPrice: v.optional(v.number()),    // What trader actually got filled at
     actualEntryTime: v.optional(v.number()),     // When entry actually filled (Unix ms)
@@ -254,6 +259,9 @@ export default defineSchema({
     analysisNotes: v.optional(v.string()),
     aiDescription: v.optional(v.string()),
 
+    // Structure context at capture time (JSON string)
+    structureContext: v.optional(v.string()),
+
     // Auto vs manual
     createdBy: v.union(v.literal("auto"), v.literal("manual")),
 
@@ -262,6 +270,53 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_trade", ["tradeId"])
+    .index("by_user", ["userId"]),
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // STRUCTURE LINKS
+  // Links trades to structure entities (BOS, FVG, key levels, sweeps)
+  // ═══════════════════════════════════════════════════════════════════════════
+  structureLinks: defineTable({
+    userId: v.string(),
+    tradeId: v.id("trades"),
+    entityType: v.union(
+      v.literal("bos"),
+      v.literal("fvg"),
+      v.literal("key_level"),
+      v.literal("sweep")
+    ),
+    entityId: v.string(),           // TimescaleDB entity ID: "${pair}-${timeframe}-${timestamp}"
+    role: v.union(
+      v.literal("entry_reason"),
+      v.literal("exit_target"),
+      v.literal("invalidation"),
+      v.literal("confluence")
+    ),
+    note: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_trade", ["tradeId"])
+    .index("by_entity", ["entityId"])
+    .index("by_user", ["userId"]),
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // STRUCTURE PREFERENCES
+  // Per-user chart structure overlay preferences
+  // ═══════════════════════════════════════════════════════════════════════════
+  structurePrefs: defineTable({
+    userId: v.string(),
+    overlayToggles: v.object({
+      swings: v.boolean(),
+      bos: v.boolean(),
+      fvgs: v.boolean(),
+      levels: v.boolean(),
+      premiumDiscount: v.boolean(),
+      sweeps: v.boolean(),
+    }),
+    fvgMinTier: v.number(),         // 1, 2, or 3
+    showRecentOnly: v.boolean(),
+    updatedAt: v.number(),
+  })
     .index("by_user", ["userId"]),
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -300,7 +355,7 @@ export default defineSchema({
     pair: v.string(),                // Chart pair at conversation start
     timeframe: v.string(),           // Chart timeframe at start
     title: v.optional(v.string()),   // Auto-generated from first message
-    model: v.string(),               // "haiku" | "sonnet"
+    model: v.string(),               // "haiku" | "sonnet" | "opus"
     messageCount: v.number(),
     tokenUsage: v.object({
       inputTokens: v.number(),
@@ -309,9 +364,67 @@ export default defineSchema({
     }),
     lastMessageAt: v.number(),
     createdAt: v.number(),
+    // Context management
+    summary: v.optional(v.string()),                        // Compacted older messages
+    summaryUpToMessage: v.optional(v.id("chatMessages")),   // Last message included in summary
+    summaryTokenEstimate: v.optional(v.number()),           // Token count of the summary text
+    status: v.optional(v.string()),                          // "active" | "completed"
+    parentConversationId: v.optional(v.id("conversations")), // Link to previous conversation (splitting)
   })
     .index("by_user", ["userId", "lastMessageAt"])
     .index("by_pair", ["pair", "lastMessageAt"]),
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // SAVED BACKTESTING QUERIES
+  // User-saved query configurations for the backtesting page
+  // ═══════════════════════════════════════════════════════════════════════════
+  savedQueries: defineTable({
+    userId: v.string(),
+    name: v.string(),
+    config: v.string(),     // JSON: { pairs, timeframes, dateRange, entityType, filters }
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_user", ["userId", "updatedAt"]),
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // CHAT MESSAGES
+  // Individual messages within conversations
+  // ═══════════════════════════════════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════════════════════
+  // ALERTS
+  // Real-time notifications: structure events, price crossings, news, trades
+  // ═══════════════════════════════════════════════════════════════════════════
+  alerts: defineTable({
+    userId: v.string(),
+    type: v.string(),
+    title: v.string(),
+    message: v.string(),
+    pair: v.optional(v.string()),
+    timeframe: v.optional(v.string()),
+    severity: v.string(),
+    read: v.boolean(),
+    metadata: v.optional(v.string()),
+    expiresAt: v.optional(v.number()),
+    createdAt: v.number(),
+  })
+    .index("by_user_unread", ["userId", "read", "createdAt"])
+    .index("by_user_created", ["userId", "createdAt"]),
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // ALERT PREFERENCES
+  // Per-user alert type toggles
+  // ═══════════════════════════════════════════════════════════════════════════
+  alertPreferences: defineTable({
+    userId: v.string(),
+    structureAlerts: v.boolean(),
+    priceAlerts: v.boolean(),
+    newsAlerts: v.boolean(),
+    tradeAlerts: v.boolean(),
+    browserNotifications: v.boolean(),
+    updatedAt: v.number(),
+  })
+    .index("by_user", ["userId"]),
 
   // ═══════════════════════════════════════════════════════════════════════════
   // CHAT MESSAGES

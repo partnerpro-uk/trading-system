@@ -57,6 +57,10 @@ export interface Trade {
   status: TradeStatus;
   createdAt: number;
   updatedAt: number;
+  // Structure context at entry
+  mtfScoreAtEntry?: number;
+  zoneAtEntry?: string;
+  structureLinkCount?: number;
 }
 
 export interface SessionStats {

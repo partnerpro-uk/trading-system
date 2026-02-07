@@ -591,6 +591,46 @@ function TradeRow({
           </div>
         )}
       </td>
+      {/* MTF Score */}
+      <td className="px-2 py-2 text-center">
+        {trade.mtfScoreAtEntry != null ? (
+          <span
+            className={`text-xs font-mono font-bold ${
+              trade.mtfScoreAtEntry > 30
+                ? "text-green-400"
+                : trade.mtfScoreAtEntry < -30
+                  ? "text-red-400"
+                  : "text-yellow-400"
+            }`}
+          >
+            {trade.mtfScoreAtEntry > 0 ? "+" : ""}{trade.mtfScoreAtEntry}
+          </span>
+        ) : (
+          <span className="text-gray-600">-</span>
+        )}
+      </td>
+      {/* Zone */}
+      <td className="px-2 py-2 text-center">
+        {trade.zoneAtEntry ? (
+          <span
+            className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+              trade.zoneAtEntry.includes("premium")
+                ? "bg-red-500/20 text-red-400"
+                : trade.zoneAtEntry.includes("discount")
+                  ? "bg-green-500/20 text-green-400"
+                  : "bg-gray-500/20 text-gray-400"
+            }`}
+          >
+            {trade.zoneAtEntry.includes("premium")
+              ? "PREM"
+              : trade.zoneAtEntry.includes("discount")
+                ? "DISC"
+                : "EQ"}
+          </span>
+        ) : (
+          <span className="text-gray-600">-</span>
+        )}
+      </td>
       <td className="px-2 py-2">
         <div className="flex items-center gap-1">
           {isEditing ? (
@@ -939,6 +979,8 @@ export default function TradesPage() {
                     <th className="px-2 py-2 font-medium">DD</th>
                     <th className="px-2 py-2 font-medium">Dur</th>
                     <th className="px-2 py-2 font-medium">Status</th>
+                    <th className="px-2 py-2 font-medium text-center">MTF</th>
+                    <th className="px-2 py-2 font-medium text-center">Zone</th>
                     <th className="px-2 py-2 font-medium w-24"></th>
                   </tr>
                 </thead>

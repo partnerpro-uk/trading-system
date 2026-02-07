@@ -7,15 +7,16 @@ import type { ChatModel, ChatContext } from "@/lib/chat/types";
 
 interface ChatInputProps {
   context: ChatContext;
+  onSendMessage: (content: string) => Promise<void>;
 }
 
-export function ChatInput({ context }: ChatInputProps) {
+export function ChatInput({ context, onSendMessage }: ChatInputProps) {
   const [input, setInput] = useState("");
   const [showModelPicker, setShowModelPicker] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const modelPickerRef = useRef<HTMLDivElement>(null);
 
-  const { sendMessage, isStreaming, stopStreaming, model, setModel } = useChatStore();
+  const { isStreaming, stopStreaming, model, setModel } = useChatStore();
 
   // Auto-resize textarea
   useEffect(() => {
@@ -44,13 +45,13 @@ export function ChatInput({ context }: ChatInputProps) {
     if (!trimmed || isStreaming) return;
 
     setInput("");
-    sendMessage(trimmed, context);
+    onSendMessage(trimmed);
 
     // Reset textarea height
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
     }
-  }, [input, isStreaming, sendMessage, context]);
+  }, [input, isStreaming, onSendMessage]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -65,6 +66,7 @@ export function ChatInput({ context }: ChatInputProps) {
   const models: { id: ChatModel; label: string; description: string }[] = [
     { id: "sonnet", label: "Sonnet", description: "Best for analysis" },
     { id: "haiku", label: "Haiku", description: "Fast & cheap" },
+    { id: "opus", label: "Opus", description: "Deepest reasoning" },
   ];
 
   return (
