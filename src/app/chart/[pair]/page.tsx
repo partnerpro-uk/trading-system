@@ -19,6 +19,7 @@ import { useCaptureSnapshot } from "@/hooks/useSnapshots";
 import { hydrateDrawingStore, useDrawingStore } from "@/lib/drawings/store";
 import { PositionDrawing, HorizontalRayDrawing, isPositionDrawing } from "@/lib/drawings/types";
 import { LivePositionsContainer } from "@/components/chart/LivePositionPanel";
+import { StructureHUD } from "@/components/chart/StructureHUD";
 import { CloseTradeModal, CloseTradeResult } from "@/components/chart/CloseTradeModal";
 import { useMutation } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
@@ -89,6 +90,7 @@ export default function ChartPage() {
   const [showFVGs, setShowFVGs] = useState<boolean>(false);
   const [fvgTierFilter, setFVGTierFilter] = useState<1 | 2 | 3>(3);
   const [showPremiumDiscount, setShowPremiumDiscount] = useState<boolean>(false);
+  const [showStructureHUD, setShowStructureHUD] = useState<boolean>(true);
 
   // Structure preferences persistence
   const { prefs: structurePrefs, save: saveStructurePrefs } = useStructurePrefs();
@@ -105,6 +107,7 @@ export default function ChartPage() {
       setShowKeyLevels(t.levels);
       setShowPremiumDiscount(t.premiumDiscount);
       setShowSweeps(t.sweeps);
+      if (t.hud !== undefined) setShowStructureHUD(t.hud);
       setFVGTierFilter(structurePrefs.fvgMinTier as 1 | 2 | 3);
     }
   }, [structurePrefs]);
@@ -114,7 +117,7 @@ export default function ChartPage() {
     (overrides?: Partial<{
       swings: boolean; bos: boolean; fvgs: boolean;
       levels: boolean; premiumDiscount: boolean; sweeps: boolean;
-      fvgMinTier: number;
+      hud: boolean; fvgMinTier: number;
     }>) => {
       saveStructurePrefs({
         overlayToggles: {
@@ -124,12 +127,13 @@ export default function ChartPage() {
           levels: overrides?.levels ?? showKeyLevels,
           premiumDiscount: overrides?.premiumDiscount ?? showPremiumDiscount,
           sweeps: overrides?.sweeps ?? showSweeps,
+          hud: overrides?.hud ?? showStructureHUD,
         },
         fvgMinTier: overrides?.fvgMinTier ?? fvgTierFilter,
         showRecentOnly: false,
       });
     },
-    [saveStructurePrefs, showSwingLabels, showBOSLines, showFVGs, showKeyLevels, showPremiumDiscount, showSweeps, fvgTierFilter]
+    [saveStructurePrefs, showSwingLabels, showBOSLines, showFVGs, showKeyLevels, showPremiumDiscount, showSweeps, showStructureHUD, fvgTierFilter]
   );
 
   // Wrapped setters that also persist
@@ -168,8 +172,16 @@ export default function ChartPage() {
     persistStructurePrefs({ fvgMinTier: v });
   }, [persistStructurePrefs]);
 
+  const handleSetShowStructureHUD = useCallback((v: boolean) => {
+    setShowStructureHUD(v);
+    persistStructurePrefs({ hud: v });
+  }, [persistStructurePrefs]);
+
+  // Visible range state for structure range queries (updated by Chart component)
+  const [visibleRange, setVisibleRange] = useState<{ from: number; to: number } | null>(null);
+
   // Structure: always load data (sidebar structure tab needs it regardless of chart overlays)
-  const { structure: structureData } = useStructure({ pair, timeframe, enabled: true });
+  const { structure: structureData } = useStructure({ pair, timeframe, enabled: true, visibleRange });
 
   // Ref for structure data (used by snapshot capture + position sync without causing re-renders)
   const structureDataRef = useRef(structureData);
@@ -269,6 +281,7 @@ export default function ChartPage() {
   const visibleRangeRef = useRef<{ from: number; to: number } | null>(null);
   const handleVisibleRangeChange = useCallback((range: { from: number; to: number } | null) => {
     visibleRangeRef.current = range;
+    setVisibleRange(range);
   }, []);
 
   // Snapshot capture hook (pass structureDataRef for structure context in snapshots)
@@ -815,13 +828,25 @@ export default function ChartPage() {
               {/* Chart with left padding for toolbar */}
               <div className="flex-1 h-full pl-11 relative">
               {/* Live Position Overlay */}
-              <LivePositionsContainer
-                positions={openPositions}
-                pair={pair}
-                currentPrice={livePrice?.mid ?? null}
-                onClose={handleClosePosition}
-                onSnapshot={handlePositionSnapshot}
-              />
+              {/* Overlay stack: Live Positions + Structure HUD */}
+              <div className="absolute top-4 right-20 z-30 flex flex-col items-end gap-2">
+                <LivePositionsContainer
+                  className="space-y-2"
+                  positions={openPositions}
+                  pair={pair}
+                  currentPrice={livePrice?.mid ?? null}
+                  onClose={handleClosePosition}
+                  onSnapshot={handlePositionSnapshot}
+                />
+                {showStructureHUD && (
+                  <StructureHUD
+                    structureData={structureData}
+                    currentPrice={livePrice?.mid ?? null}
+                    pair={pair}
+                    timeframe={timeframe}
+                  />
+                )}
+              </div>
               <Chart
                 pair={pair}
                 timeframe={timeframe}
@@ -922,6 +947,8 @@ export default function ChartPage() {
                   onFVGTierFilterChange={handleSetFVGTierFilter}
                   showPremiumDiscount={showPremiumDiscount}
                   onShowPremiumDiscountChange={handleSetShowPremiumDiscount}
+                  showStructureHUD={showStructureHUD}
+                  onShowStructureHUDChange={handleSetShowStructureHUD}
                   structureData={structureData}
                   currentPrice={livePrice?.mid ?? null}
                 />

@@ -2,34 +2,43 @@
  * Market Structure API
  *
  * GET /api/structure/[pair]?timeframe=H4&depth=100
+ * GET /api/structure/[pair]?timeframe=H4&from=<unixMs>&to=<unixMs>
  *
- * Computes market structure on-demand: swing points, BOS events,
- * sweep events, key levels, and current trend state.
+ * Two modes:
+ * 1. Legacy (no from/to): computes structure on-demand from candles
+ * 2. Pre-computed (with from/to): reads from DB + live tail merge
+ *
  * Results are cached in-memory with timeframe-scaled TTL and
- * persisted to TimescaleDB in the background.
+ * persisted to TimescaleDB in the background (legacy mode only).
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { getLatestCandles } from "@/lib/db/candles";
 import {
   computeStructure,
-  detectSwings,
+  detectFilteredSwings,
   labelSwings,
   detectBOS,
   deriveCurrentStructure,
+  computeKeyLevels,
+  keyLevelGridToEntries,
   REQUIRED_DEPTH,
 } from "@/lib/structure";
-import type { CurrentStructure } from "@/lib/structure";
+import type { CurrentStructure, StructureResponse } from "@/lib/structure";
 import {
   upsertSwingPoints,
   upsertBOSEvents,
   upsertSweepEvents,
   upsertKeyLevels,
   upsertFVGEvents,
+  getStructureInRange,
+  getHTFStructures,
 } from "@/lib/db/structure";
 import { getMacroRange } from "@/lib/db/clickhouse-structure";
 import { getLatestCOTForPair } from "@/lib/db/cot";
 import { getUpcomingEvents } from "@/lib/db/news";
+import { computeLiveTail, getLiveTailDepth } from "@/lib/structure/live-tail";
+import { computePremiumDiscount } from "@/lib/structure/premium-discount";
 import type { Candle } from "@/lib/db/candles";
 
 // In-memory cache with TTL
@@ -65,6 +74,124 @@ export async function GET(
     return NextResponse.json(cached.data);
   }
 
+  // --- Pre-computed path: read from DB + live tail ---
+  const fromParam = searchParams.get("from");
+  const toParam = searchParams.get("to");
+
+  if (fromParam && toParam) {
+    const from = parseInt(fromParam, 10);
+    const to = parseInt(toParam, 10);
+
+    if (isNaN(from) || isNaN(to)) {
+      return NextResponse.json(
+        { error: "Invalid from/to parameters (expected unix ms)" },
+        { status: 400 }
+      );
+    }
+
+    try {
+      // 1. Read confirmed structure from DB
+      const dbStructure = await getStructureInRange(pair, timeframe, from, to);
+
+      // 2. Compute live tail: recent candles for unconfirmed leading edge
+      const tailDepth = getLiveTailDepth(timeframe);
+      const tailCandles = await getLatestCandles(pair, timeframe, tailDepth);
+      const tail = tailCandles && tailCandles.length > 0
+        ? computeLiveTail(tailCandles as Candle[], timeframe, pair)
+        : { swings: [], bosEvents: [], sweepEvents: [], fvgEvents: [] };
+
+      // 3. Merge confirmed + tail (dedupe by timestamp)
+      const mergedSwings = dedupeByTimestamp([...dbStructure.swings, ...tail.swings]);
+      const mergedBOS = dedupeByTimestamp([...dbStructure.bosEvents, ...tail.bosEvents]);
+      const mergedSweeps = dedupeByTimestamp([...dbStructure.sweepEvents, ...tail.sweepEvents]);
+      const mergedFVGs = dedupeByCreatedAt([...dbStructure.fvgEvents, ...tail.fvgEvents]);
+
+      // 4. Key levels (always fresh from D/W/M candles)
+      const [dailyCandles, weeklyCandles, monthlyCandles] = await Promise.all([
+        getLatestCandles(pair, "D", 60),
+        getLatestCandles(pair, "W", 20),
+        getLatestCandles(pair, "M", 13),
+      ]);
+      const keyLevels = computeKeyLevels(
+        pair,
+        (dailyCandles || []) as Candle[],
+        (weeklyCandles || []) as Candle[],
+        (monthlyCandles || []) as Candle[]
+      );
+      const keyLevelEntries = keyLevelGridToEntries(keyLevels);
+
+      // 5. Current structure from merged data
+      const currentStructure = deriveCurrentStructure(mergedSwings, mergedBOS);
+
+      // 6. Premium/Discount (optional — use stored HTF swings)
+      let premiumDiscount = null;
+      const currentPrice = tailCandles && tailCandles.length > 0
+        ? tailCandles[tailCandles.length - 1].close
+        : undefined;
+
+      if (currentPrice) {
+        const h4Swings = timeframe === "H4"
+          ? mergedSwings
+          : await getLatestCandles(pair, "H4", 200).then((c) =>
+              c && c.length > 0
+                ? labelSwings(detectFilteredSwings(c as Candle[], "H4"), c as Candle[])
+                : []
+            );
+        const d1Swings = dailyCandles && dailyCandles.length > 0
+          ? labelSwings(detectFilteredSwings(dailyCandles as Candle[], "D"), dailyCandles as Candle[])
+          : [];
+        const w1Swings = weeklyCandles && weeklyCandles.length > 0
+          ? labelSwings(detectFilteredSwings(weeklyCandles as Candle[], "W"), weeklyCandles as Candle[])
+          : [];
+        const macroRange = await getMacroRange(pair).catch(() => null);
+
+        if (h4Swings.length > 0) {
+          premiumDiscount = computePremiumDiscount(
+            currentPrice,
+            h4Swings,
+            d1Swings,
+            w1Swings,
+            keyLevels,
+            macroRange
+          );
+        }
+      }
+
+      // 7. MTF score (from stored HTF structures)
+      const htfStructures = await getHTFStructures(pair).catch(() => ({}));
+
+      const result: StructureResponse = {
+        pair,
+        timeframe,
+        computedAt: Date.now(),
+        swings: mergedSwings,
+        bosEvents: mergedBOS,
+        sweepEvents: mergedSweeps,
+        keyLevels,
+        keyLevelEntries,
+        currentStructure,
+        fvgEvents: mergedFVGs,
+        premiumDiscount,
+        mtfScore: Object.keys(htfStructures).length > 0
+          ? undefined // MTF scoring can be added here when needed
+          : undefined,
+      };
+
+      // Cache the result
+      const ttl = TTL_MAP[timeframe] || 300_000;
+      cache.set(cacheKey, { data: result, expiresAt: Date.now() + ttl });
+
+      return NextResponse.json(result);
+    } catch (error) {
+      console.error("[Structure API] DB-read path error:", error);
+      return NextResponse.json(
+        { error: "Failed to read pre-computed structure", details: String(error) },
+        { status: 500 }
+      );
+    }
+  }
+
+  // --- Legacy path: compute on-demand ---
   try {
     // Fetch candles: requested TF + D/W/M for key levels + H4 for P/D (parallel)
     const candleDepth = depth || REQUIRED_DEPTH[timeframe] || 500;
@@ -89,13 +216,13 @@ export async function GET(
 
     // Compute D1/W1 swings for Premium/Discount (sub-ms, pure functions)
     const d1Swings = dailyCandles && dailyCandles.length > 0
-      ? labelSwings(detectSwings(dailyCandles as Candle[], "D"), dailyCandles as Candle[])
+      ? labelSwings(detectFilteredSwings(dailyCandles as Candle[], "D"), dailyCandles as Candle[])
       : [];
     const w1Swings = weeklyCandles && weeklyCandles.length > 0
-      ? labelSwings(detectSwings(weeklyCandles as Candle[], "W"), weeklyCandles as Candle[])
+      ? labelSwings(detectFilteredSwings(weeklyCandles as Candle[], "W"), weeklyCandles as Candle[])
       : [];
     const h4Swings = needH4 && h4Candles && h4Candles.length > 0
-      ? labelSwings(detectSwings(h4Candles as Candle[], "H4"), h4Candles as Candle[])
+      ? labelSwings(detectFilteredSwings(h4Candles as Candle[], "H4"), h4Candles as Candle[])
       : undefined; // undefined = use current TF swings if H4
 
     // Enrichment: compute HTF structures + fetch COT/events (when enrich=true)
@@ -109,7 +236,7 @@ export async function GET(
 
       // Monthly structure
       if (monthlyCandles && monthlyCandles.length > 20) {
-        const mSwings = labelSwings(detectSwings(monthlyCandles as Candle[], "M"), monthlyCandles as Candle[]);
+        const mSwings = labelSwings(detectFilteredSwings(monthlyCandles as Candle[], "M"), monthlyCandles as Candle[]);
         const mBos = detectBOS(monthlyCandles as Candle[], mSwings, pair);
         htfStructures["M"] = deriveCurrentStructure(mSwings, mBos);
       }
@@ -207,4 +334,30 @@ export async function GET(
       { status: 500 }
     );
   }
+}
+
+// --- Dedup helpers for merging DB + live tail ---
+
+function dedupeByTimestamp<T extends { timestamp: number }>(items: T[]): T[] {
+  const seen = new Set<number>();
+  const result: T[] = [];
+  for (const item of items) {
+    if (!seen.has(item.timestamp)) {
+      seen.add(item.timestamp);
+      result.push(item);
+    }
+  }
+  return result.sort((a, b) => a.timestamp - b.timestamp);
+}
+
+function dedupeByCreatedAt<T extends { createdAt: number }>(items: T[]): T[] {
+  const seen = new Set<number>();
+  const result: T[] = [];
+  for (const item of items) {
+    if (!seen.has(item.createdAt)) {
+      seen.add(item.createdAt);
+      result.push(item);
+    }
+  }
+  return result.sort((a, b) => a.createdAt - b.createdAt);
 }

@@ -6,6 +6,12 @@
  */
 
 import { getTimescalePool } from "./index";
+import {
+  getSwingPointsFromCH,
+  getBOSEventsFromCH,
+  getSweepEventsFromCH,
+  getFVGEventsFromCH,
+} from "./clickhouse-structure";
 import type {
   SwingPoint,
   BOSEvent,
@@ -14,6 +20,7 @@ import type {
   FVGEvent,
   CurrentStructure,
   StructureLabel,
+  BOSType,
 } from "../structure/types";
 
 // --- Upsert Functions ---
@@ -60,16 +67,17 @@ export async function upsertBOSEvents(
     await pool.query(
       `INSERT INTO bos_events (time, pair, timeframe, direction, status, broken_level, broken_swing_time,
          confirming_close, magnitude_pips, is_displacement, is_counter_trend,
-         reclaimed_at, reclaimed_by_close, time_til_reclaim_ms)
+         reclaimed_at, reclaimed_by_close, time_til_reclaim_ms, bos_type)
        VALUES (to_timestamp($1::double precision / 1000), $2, $3, $4, $5, $6,
          to_timestamp($7::double precision / 1000), $8, $9, $10, $11,
          ${e.reclaimedAt ? "to_timestamp($12::double precision / 1000)" : "NULL"},
-         $13, $14)
+         $13, $14, $15)
        ON CONFLICT (time, pair, timeframe)
        DO UPDATE SET status = EXCLUDED.status,
          reclaimed_at = EXCLUDED.reclaimed_at,
          reclaimed_by_close = EXCLUDED.reclaimed_by_close,
-         time_til_reclaim_ms = EXCLUDED.time_til_reclaim_ms`,
+         time_til_reclaim_ms = EXCLUDED.time_til_reclaim_ms,
+         bos_type = EXCLUDED.bos_type`,
       [
         e.timestamp,
         pair,
@@ -85,6 +93,7 @@ export async function upsertBOSEvents(
         e.reclaimedAt ?? null,
         e.reclaimedByClose ?? null,
         e.timeTilReclaim ?? null,
+        e.bosType,
       ]
     );
   }
@@ -186,7 +195,7 @@ export async function getActiveBOSEvents(
   const result = await pool.query(
     `SELECT time, direction, status, broken_level, broken_swing_time,
        confirming_close, magnitude_pips, is_displacement, is_counter_trend,
-       reclaimed_at, reclaimed_by_close, time_til_reclaim_ms
+       reclaimed_at, reclaimed_by_close, time_til_reclaim_ms, bos_type
      FROM bos_events
      WHERE pair = $1 AND timeframe = $2
      ORDER BY time DESC
@@ -211,6 +220,7 @@ export async function getActiveBOSEvents(
     timeTilReclaim: row.time_til_reclaim_ms
       ? parseInt(row.time_til_reclaim_ms)
       : undefined,
+    bosType: row.bos_type || "bos",
   }));
 }
 
@@ -388,6 +398,329 @@ export async function getActiveFVGs(
   }));
 }
 
+// --- Time-Range Query Functions (for pre-computed structure) ---
+
+export async function getSwingsInRange(
+  pair: string,
+  timeframe: string,
+  from: number,
+  to: number,
+  limit: number = 500
+): Promise<SwingPoint[]> {
+  const pool = getTimescalePool();
+  const result = await pool.query(
+    `SELECT time, price, swing_type, label, lookback_used, true_range
+     FROM swing_points
+     WHERE pair = $1 AND timeframe = $2
+       AND time >= to_timestamp($3::double precision / 1000)
+       AND time <= to_timestamp($4::double precision / 1000)
+     ORDER BY time ASC
+     LIMIT $5`,
+    [pair, timeframe, from, to, limit]
+  );
+
+  return result.rows.map((row) => ({
+    timestamp: new Date(row.time).getTime(),
+    price: parseFloat(row.price),
+    type: row.swing_type as "high" | "low",
+    label: row.label,
+    candleIndex: -1,
+    lookbackUsed: row.lookback_used,
+    trueRange: parseFloat(row.true_range),
+  }));
+}
+
+export async function getBOSEventsInRange(
+  pair: string,
+  timeframe: string,
+  from: number,
+  to: number,
+  limit: number = 200
+): Promise<BOSEvent[]> {
+  const pool = getTimescalePool();
+  const result = await pool.query(
+    `SELECT time, direction, status, broken_level, broken_swing_time,
+       confirming_close, magnitude_pips, is_displacement, is_counter_trend,
+       reclaimed_at, reclaimed_by_close, time_til_reclaim_ms, bos_type
+     FROM bos_events
+     WHERE pair = $1 AND timeframe = $2
+       AND time >= to_timestamp($3::double precision / 1000)
+       AND time <= to_timestamp($4::double precision / 1000)
+     ORDER BY time ASC
+     LIMIT $5`,
+    [pair, timeframe, from, to, limit]
+  );
+
+  return result.rows.map((row) => ({
+    timestamp: new Date(row.time).getTime(),
+    direction: row.direction,
+    status: row.status,
+    brokenLevel: parseFloat(row.broken_level),
+    brokenSwingTimestamp: new Date(row.broken_swing_time).getTime(),
+    confirmingClose: parseFloat(row.confirming_close),
+    magnitudePips: parseFloat(row.magnitude_pips),
+    isDisplacement: row.is_displacement,
+    isCounterTrend: row.is_counter_trend,
+    reclaimedAt: row.reclaimed_at ? new Date(row.reclaimed_at).getTime() : undefined,
+    reclaimedByClose: row.reclaimed_by_close
+      ? parseFloat(row.reclaimed_by_close)
+      : undefined,
+    timeTilReclaim: row.time_til_reclaim_ms
+      ? parseInt(row.time_til_reclaim_ms)
+      : undefined,
+    bosType: row.bos_type || "bos",
+  }));
+}
+
+export async function getSweepEventsInRange(
+  pair: string,
+  timeframe: string,
+  from: number,
+  to: number,
+  limit: number = 200
+): Promise<SweepEvent[]> {
+  const pool = getTimescalePool();
+  const result = await pool.query(
+    `SELECT time, direction, swept_level, wick_extreme, swept_level_type, followed_by_bos
+     FROM sweep_events
+     WHERE pair = $1 AND timeframe = $2
+       AND time >= to_timestamp($3::double precision / 1000)
+       AND time <= to_timestamp($4::double precision / 1000)
+     ORDER BY time ASC
+     LIMIT $5`,
+    [pair, timeframe, from, to, limit]
+  );
+
+  return result.rows.map((row) => ({
+    timestamp: new Date(row.time).getTime(),
+    direction: row.direction,
+    sweptLevel: parseFloat(row.swept_level),
+    wickExtreme: parseFloat(row.wick_extreme),
+    sweptLevelType: row.swept_level_type,
+    followedByBOS: row.followed_by_bos,
+  }));
+}
+
+export async function getFVGsInRange(
+  pair: string,
+  timeframe: string,
+  from: number,
+  to: number,
+  limit: number = 200
+): Promise<FVGEvent[]> {
+  const pool = getTimescalePool();
+  // Include FVGs created within range OR still-active FVGs created before range
+  const result = await pool.query(
+    `SELECT time, direction, status, top_price, bottom_price, midline,
+       gap_size_pips, displacement_body, displacement_range, gap_to_body_ratio,
+       is_displacement, relative_volume, tier,
+       fill_percent, max_fill_percent, body_filled, wick_touched,
+       first_touch_at, first_touch_bars_after,
+       retest_count, midline_respected, midline_touch_count,
+       filled_at, bars_to_fill, inverted_at, bars_to_inversion,
+       parent_bos, contained_by, confluence_with, trade_id
+     FROM fvg_events
+     WHERE pair = $1 AND timeframe = $2
+       AND (
+         (time >= to_timestamp($3::double precision / 1000) AND time <= to_timestamp($4::double precision / 1000))
+         OR (status IN ('fresh', 'partial') AND time < to_timestamp($3::double precision / 1000))
+       )
+     ORDER BY time ASC
+     LIMIT $5`,
+    [pair, timeframe, from, to, limit]
+  );
+
+  return result.rows.map((row) => ({
+    id: `${pair}-${timeframe}-${new Date(row.time).getTime()}`,
+    pair,
+    timeframe,
+    direction: row.direction,
+    status: row.status,
+    topPrice: parseFloat(row.top_price),
+    bottomPrice: parseFloat(row.bottom_price),
+    midline: parseFloat(row.midline),
+    gapSizePips: parseFloat(row.gap_size_pips),
+    createdAt: new Date(row.time).getTime(),
+    displacementBody: parseFloat(row.displacement_body),
+    displacementRange: parseFloat(row.displacement_range),
+    gapToBodyRatio: parseFloat(row.gap_to_body_ratio),
+    isDisplacement: row.is_displacement,
+    relativeVolume: parseFloat(row.relative_volume),
+    tier: row.tier,
+    fillPercent: parseFloat(row.fill_percent),
+    maxFillPercent: parseFloat(row.max_fill_percent),
+    bodyFilled: row.body_filled,
+    wickTouched: row.wick_touched,
+    firstTouchAt: row.first_touch_at ? new Date(row.first_touch_at).getTime() : undefined,
+    firstTouchBarsAfter: row.first_touch_bars_after ?? undefined,
+    retestCount: row.retest_count,
+    midlineRespected: row.midline_respected,
+    midlineTouchCount: row.midline_touch_count,
+    filledAt: row.filled_at ? new Date(row.filled_at).getTime() : undefined,
+    barsToFill: row.bars_to_fill ?? undefined,
+    invertedAt: row.inverted_at ? new Date(row.inverted_at).getTime() : undefined,
+    barsToInversion: row.bars_to_inversion ?? undefined,
+    parentBOS: row.parent_bos ?? undefined,
+    containedBy: row.contained_by ?? undefined,
+    confluenceWith: row.confluence_with ?? undefined,
+    tradeId: row.trade_id ?? undefined,
+    candleIndex: -1,
+  }));
+}
+
+/** TimescaleDB hot window (30 days in ms). Data older than this lives in ClickHouse. */
+const HOT_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
+
+/**
+ * Composite query: get all structure entities in a time range.
+ *
+ * Dual-source routing:
+ * - If the range is within the last 30 days → TimescaleDB only
+ * - If the range extends beyond 30 days → ClickHouse for old portion + TimescaleDB for recent
+ * - Results are merged and deduped by timestamp
+ */
+export async function getStructureInRange(
+  pair: string,
+  timeframe: string,
+  from: number,
+  to: number
+): Promise<{
+  swings: SwingPoint[];
+  bosEvents: BOSEvent[];
+  sweepEvents: SweepEvent[];
+  fvgEvents: FVGEvent[];
+}> {
+  const hotCutoff = Date.now() - HOT_WINDOW_MS;
+  const needsClickHouse = from < hotCutoff;
+
+  // Always query TimescaleDB for the recent portion
+  const tsPromise = Promise.all([
+    getSwingsInRange(pair, timeframe, Math.max(from, hotCutoff), to),
+    getBOSEventsInRange(pair, timeframe, Math.max(from, hotCutoff), to),
+    getSweepEventsInRange(pair, timeframe, Math.max(from, hotCutoff), to),
+    getFVGsInRange(pair, timeframe, Math.max(from, hotCutoff), to),
+  ]);
+
+  if (!needsClickHouse) {
+    const [swings, bosEvents, sweepEvents, fvgEvents] = await tsPromise;
+    return { swings, bosEvents, sweepEvents, fvgEvents };
+  }
+
+  // Query ClickHouse for the old portion (up to hot cutoff)
+  const chFilter = { pair, timeframe, startTime: from, endTime: Math.min(to, hotCutoff), limit: 2000 };
+
+  const [tsResults, chSwings, chBOS, chSweeps, chFVGs] = await Promise.all([
+    tsPromise,
+    getSwingPointsFromCH(chFilter).catch(() => []),
+    getBOSEventsFromCH(chFilter).catch(() => []),
+    getSweepEventsFromCH(chFilter).catch(() => []),
+    getFVGEventsFromCH(chFilter).catch(() => []),
+  ]);
+
+  const [tsSwings, tsBOS, tsSweeps, tsFVGs] = tsResults;
+
+  // Convert CH rows → app types and merge with TimescaleDB results
+  const swings = dedupeByTs([
+    ...chSwings.map((r): SwingPoint => ({
+      timestamp: new Date(r.time).getTime(),
+      price: r.price,
+      type: r.swing_type as "high" | "low",
+      label: r.label as SwingPoint["label"],
+      candleIndex: -1,
+      lookbackUsed: r.lookback_used,
+      trueRange: r.true_range,
+    })),
+    ...tsSwings,
+  ]);
+
+  const bosEvents = dedupeByTs([
+    ...chBOS.map((r): BOSEvent => ({
+      timestamp: new Date(r.time).getTime(),
+      direction: r.direction as BOSEvent["direction"],
+      status: r.status as BOSEvent["status"],
+      brokenLevel: r.broken_level,
+      brokenSwingTimestamp: new Date(r.broken_swing_time).getTime(),
+      confirmingClose: r.confirming_close,
+      magnitudePips: r.magnitude_pips,
+      isDisplacement: !!r.is_displacement,
+      isCounterTrend: !!r.is_counter_trend,
+      reclaimedAt: r.reclaimed_at ? new Date(r.reclaimed_at).getTime() : undefined,
+      reclaimedByClose: r.reclaimed_by_close ?? undefined,
+      timeTilReclaim: r.time_til_reclaim_ms ?? undefined,
+      bosType: (r.bos_type || "bos") as BOSType,
+    })),
+    ...tsBOS,
+  ]);
+
+  const sweepEvents = dedupeByTs([
+    ...chSweeps.map((r): SweepEvent => ({
+      timestamp: new Date(r.time).getTime(),
+      direction: r.direction as SweepEvent["direction"],
+      sweptLevel: r.swept_level,
+      wickExtreme: r.wick_extreme,
+      sweptLevelType: r.swept_level_type as SweepEvent["sweptLevelType"],
+      followedByBOS: !!r.followed_by_bos,
+    })),
+    ...tsSweeps,
+  ]);
+
+  const fvgEvents = dedupeByField("createdAt", [
+    ...chFVGs.map((r): FVGEvent => ({
+      id: `${pair}-${timeframe}-${new Date(r.time).getTime()}`,
+      pair,
+      timeframe,
+      direction: r.direction as FVGEvent["direction"],
+      status: r.status as FVGEvent["status"],
+      topPrice: r.top_price,
+      bottomPrice: r.bottom_price,
+      midline: r.midline,
+      gapSizePips: r.gap_size_pips,
+      createdAt: new Date(r.time).getTime(),
+      displacementBody: r.displacement_body,
+      displacementRange: r.displacement_range,
+      gapToBodyRatio: r.gap_to_body_ratio,
+      isDisplacement: !!r.is_displacement,
+      relativeVolume: r.relative_volume,
+      tier: r.tier as FVGEvent["tier"],
+      fillPercent: r.fill_percent,
+      maxFillPercent: r.max_fill_percent,
+      bodyFilled: !!r.body_filled,
+      wickTouched: !!r.wick_touched,
+      firstTouchAt: r.first_touch_at ? new Date(r.first_touch_at).getTime() : undefined,
+      firstTouchBarsAfter: r.first_touch_bars_after ?? undefined,
+      retestCount: r.retest_count,
+      midlineRespected: !!r.midline_respected,
+      midlineTouchCount: r.midline_touch_count,
+      filledAt: r.filled_at ? new Date(r.filled_at).getTime() : undefined,
+      barsToFill: r.bars_to_fill ?? undefined,
+      invertedAt: r.inverted_at ? new Date(r.inverted_at).getTime() : undefined,
+      barsToInversion: r.bars_to_inversion ?? undefined,
+      parentBOS: r.parent_bos ?? undefined,
+      containedBy: r.contained_by ?? undefined,
+      confluenceWith: r.confluence_with ?? undefined,
+      tradeId: r.trade_id ?? undefined,
+      candleIndex: -1,
+    })),
+    ...tsFVGs,
+  ]);
+
+  return { swings, bosEvents, sweepEvents, fvgEvents };
+}
+
+/** Dedupe by timestamp, keep latest (TimescaleDB wins over ClickHouse). Sort ASC. */
+function dedupeByTs<T extends { timestamp: number }>(items: T[]): T[] {
+  const map = new Map<number, T>();
+  for (const item of items) map.set(item.timestamp, item);
+  return Array.from(map.values()).sort((a, b) => a.timestamp - b.timestamp);
+}
+
+/** Dedupe by a numeric field, keep latest. Sort ASC by that field. */
+function dedupeByField<T>(field: keyof T, items: T[]): T[] {
+  const map = new Map<unknown, T>();
+  for (const item of items) map.set(item[field], item);
+  return Array.from(map.values()).sort((a, b) => (a[field] as number) - (b[field] as number));
+}
+
 // --- HTF Current Structure ---
 
 export async function upsertHTFStructure(
@@ -447,6 +780,7 @@ export async function getHTFStructures(
             magnitudePips: 0,
             isDisplacement: false,
             isCounterTrend: false,
+            bosType: "bos" as const,
           }
         : null,
       swingSequence: (row.swing_sequence || []) as StructureLabel[],

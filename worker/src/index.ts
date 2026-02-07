@@ -27,6 +27,7 @@ import { runStructureArchival } from "./structure-archiver";
 import { runStructureAlerts } from "./structure-alerts";
 import { runNewsAlerts } from "./news-alerts";
 import { runPriceAlerts } from "./price-alerts";
+import { runStructureComputeForTimeframe, STRUCTURE_TIMEFRAMES } from "./structure-compute";
 
 // Load env from parent .env.local
 config({ path: resolve(process.cwd(), "../.env.local") });
@@ -460,14 +461,20 @@ function startSyncLoops(): void {
     // Start at the next boundary, then repeat on interval
     setTimeout(() => {
       // Immediate sync at boundary
-      syncTimeframe(timeframe).then(() => {
+      syncTimeframe(timeframe).then(async () => {
         lastSyncTime.set(timeframe, new Date());
+        if (STRUCTURE_TIMEFRAMES.includes(timeframe)) {
+          await runStructureComputeForTimeframe(timeframe).catch(console.error);
+        }
       });
 
       // Then repeat on interval
       setInterval(async () => {
         await syncTimeframe(timeframe);
         lastSyncTime.set(timeframe, new Date());
+        if (STRUCTURE_TIMEFRAMES.includes(timeframe)) {
+          await runStructureComputeForTimeframe(timeframe).catch(console.error);
+        }
       }, config.intervalMs);
     }, msUntilNext);
 
