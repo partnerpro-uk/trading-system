@@ -5,7 +5,7 @@
     "dockerfilePath": "worker/Dockerfile"
   },
   "deploy": {
-    "startCommand": "cd /app/worker && npm start",
+    "startCommand": "npm start",
     "restartPolicyType": "ALWAYS",
     "restartPolicyMaxRetries": 10,
     "healthcheckPath": "/health",
