@@ -16,7 +16,7 @@ export function ChatPanel({ context, onClose }: ChatPanelProps) {
   const messageCount = messages.length;
 
   return (
-    <div className="h-full flex flex-col bg-gray-900 border-r border-gray-700">
+    <div className="h-full flex flex-col bg-gray-900 border-r border-gray-700 min-w-[280px]">
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2 border-b border-gray-700">
         <div className="flex items-center gap-2">

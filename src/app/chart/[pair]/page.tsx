@@ -652,7 +652,7 @@ export default function ChartPage() {
           {/* Chat Panel */}
           {chatOpen && (
             <>
-              <Panel id="chat" defaultSize={25} minSize={15} maxSize={35}>
+              <Panel id="chat" defaultSize={28} minSize={22} maxSize={40}>
                 <ChatPanel
                   context={{
                     pair,
@@ -669,7 +669,7 @@ export default function ChartPage() {
           )}
 
           {/* Chart Panel */}
-          <Panel id="chart" defaultSize={chatOpen ? 55 : 80} minSize={40}>
+          <Panel id="chart" defaultSize={chatOpen ? 52 : 80} minSize={35}>
             <div className="h-full w-full relative flex">
               {/* Drawing Toolbar - Left Sidebar */}
               <DrawingToolbar
