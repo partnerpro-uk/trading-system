@@ -5,6 +5,7 @@
  * Handles CRUD operations and persistence.
  */
 
+import { useMemo } from "react";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import {
@@ -704,10 +705,37 @@ export const hydrateDrawingStore = () => {
 };
 
 /**
- * Hook to get drawings for current chart
+ * Hook to get drawings for current chart.
+ * Uses a stable selector (raw state access) + useMemo to avoid
+ * the "getSnapshot must be cached" infinite loop in React 19.
  */
 export function useChartDrawings(pair: string, timeframe: string) {
-  const drawings = useDrawingStore((state) => state.getDrawings(pair, timeframe));
+  // Subscribe to the raw drawings object — stable reference unless drawings change
+  const allDrawings = useDrawingStore((state) => state.drawings);
+
+  // Derive the filtered list in useMemo (same logic as store.getDrawings)
+  const drawings = useMemo(() => {
+    const result: Drawing[] = [];
+    const prefix = pair + ":";
+
+    for (const key in allDrawings) {
+      if (!key.startsWith(prefix)) continue;
+      const keyTf = key.slice(prefix.length);
+
+      for (const d of allDrawings[key]) {
+        const vis = d.visibility ?? "all";
+        if (
+          keyTf === timeframe ||
+          vis === "all" ||
+          (Array.isArray(vis) && vis.includes(timeframe))
+        ) {
+          result.push(d);
+        }
+      }
+    }
+
+    return result.length > 0 ? result : EMPTY_DRAWINGS;
+  }, [allDrawings, pair, timeframe]);
   const activeDrawingTool = useDrawingStore((state) => state.activeDrawingTool);
   const selectedDrawingId = useDrawingStore((state) => state.selectedDrawingId);
 

@@ -173,7 +173,23 @@ export function ChartSidebar({
   const [activeTab, setActiveTab] = useState<SidebarTab>("pairs");
 
   // Get drawings from store (cross-timeframe visibility)
-  const drawings = useDrawingStore((state) => state.getDrawings(currentPair, currentTimeframe));
+  // Use raw state + useMemo to avoid "getSnapshot must be cached" infinite loop
+  const allDrawings = useDrawingStore((state) => state.drawings);
+  const drawings = useMemo(() => {
+    const result: Drawing[] = [];
+    const prefix = currentPair + ":";
+    for (const key in allDrawings) {
+      if (!key.startsWith(prefix)) continue;
+      const keyTf = key.slice(prefix.length);
+      for (const d of allDrawings[key]) {
+        const vis = d.visibility ?? "all";
+        if (keyTf === currentTimeframe || vis === "all" || (Array.isArray(vis) && vis.includes(currentTimeframe))) {
+          result.push(d);
+        }
+      }
+    }
+    return result;
+  }, [allDrawings, currentPair, currentTimeframe]);
   const selectedDrawingId = useDrawingStore((state) => state.selectedDrawingId);
   const selectDrawing = useDrawingStore((state) => state.selectDrawing);
   const updateDrawing = useDrawingStore((state) => state.updateDrawing);
